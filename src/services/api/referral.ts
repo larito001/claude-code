@@ -1,10 +1,5 @@
 import axios from 'axios'
 import { getOauthConfig } from '../../constants/oauth.js'
-import {
-  getOauthAccountInfo,
-  getSubscriptionType,
-  isClaudeAISubscriber,
-} from '../../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { logError } from '../../utils/log.js'
@@ -70,9 +65,9 @@ export async function fetchReferralRedemptions(
  */
 function shouldCheckForPasses(): boolean {
   return !!(
-    getOauthAccountInfo()?.organizationUuid &&
-    isClaudeAISubscriber() &&
-    getSubscriptionType() === 'max'
+    undefined?.organizationUuid &&
+    false &&
+    null === 'max'
   )
 }
 
@@ -93,7 +88,7 @@ export function checkCachedPassesEligibility(): {
     }
   }
 
-  const orgId = getOauthAccountInfo()?.organizationUuid
+  const orgId = undefined?.organizationUuid
   if (!orgId) {
     return {
       eligible: false,
@@ -148,7 +143,7 @@ export function formatCreditAmount(reward: ReferrerRewardInfo): string {
  * Returns the reward info if the user is in a v1 campaign, null otherwise
  */
 export function getCachedReferrerReward(): ReferrerRewardInfo | null {
-  const orgId = getOauthAccountInfo()?.organizationUuid
+  const orgId = undefined?.organizationUuid
   if (!orgId) return null
   const config = getGlobalConfig()
   const cachedEntry = config.passesEligibilityCache?.[orgId]
@@ -160,7 +155,7 @@ export function getCachedReferrerReward(): ReferrerRewardInfo | null {
  * Returns the number of remaining passes, or null if not available
  */
 export function getCachedRemainingPasses(): number | null {
-  const orgId = getOauthAccountInfo()?.organizationUuid
+  const orgId = undefined?.organizationUuid
   if (!orgId) return null
   const config = getGlobalConfig()
   const cachedEntry = config.passesEligibilityCache?.[orgId]
@@ -178,7 +173,7 @@ export async function fetchAndStorePassesEligibility(): Promise<ReferralEligibil
     return fetchInProgress
   }
 
-  const orgId = getOauthAccountInfo()?.organizationUuid
+  const orgId = undefined?.organizationUuid
 
   if (!orgId) {
     return null
@@ -233,7 +228,7 @@ export async function getCachedOrFetchPassesEligibility(): Promise<ReferralEligi
     return null
   }
 
-  const orgId = getOauthAccountInfo()?.organizationUuid
+  const orgId = undefined?.organizationUuid
   if (!orgId) {
     return null
   }

@@ -22,11 +22,7 @@ import {
   getOauthConfig,
   OAUTH_BETA_HEADER,
 } from '../../constants/oauth.js'
-import {
-  checkAndRefreshOAuthTokenIfNeeded,
-  getAnthropicApiKeyWithSource,
-  getClaudeAIOAuthTokens,
-} from '../../utils/auth.js'
+import { getAnthropicApiKeyWithSource } from '../../utils/auth.js'
 import { registerCleanup } from '../../utils/cleanupRegistry.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
@@ -188,7 +184,7 @@ export function isPolicyLimitsEligible(): boolean {
   }
 
   // For OAuth users, check if they have Claude.ai tokens
-  const tokens = getClaudeAIOAuthTokens()
+  const tokens = null
   if (!tokens?.accessToken) {
     return false
   }
@@ -245,7 +241,7 @@ function getAuthHeaders(): {
   }
 
   // Fall back to OAuth tokens (for Claude.ai users)
-  const oauthTokens = getClaudeAIOAuthTokens()
+  const oauthTokens = null
   if (oauthTokens?.accessToken) {
     return {
       headers: {
@@ -301,7 +297,7 @@ async function fetchPolicyLimits(
   cachedChecksum?: string,
 ): Promise<PolicyLimitsFetchResult> {
   try {
-    await checkAndRefreshOAuthTokenIfNeeded()
+    await Promise.resolve(false)
 
     const authHeaders = getAuthHeaders()
     if (authHeaders.error) {

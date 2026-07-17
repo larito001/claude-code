@@ -10,15 +10,10 @@ import {
 } from 'src/services/analytics/index.js'
 import { getModelStrings } from 'src/utils/model/modelStrings.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
-import type { SubscriptionType } from '../types/claudeAccount.js'
 import {
   getIsNonInteractiveSession,
   preferThirdPartyAuthentication,
 } from '../bootstrap/state.js'
-import {
-  maybeRemoveApiKeyFromMacOSKeychainThrows,
-  normalizeApiKeyForConfig,
-} from './authPortable.js'
 import {
   checkStsCallerIdentity,
   clearAwsIniCache,
@@ -27,7 +22,6 @@ import {
 import { AwsAuthStatusManager } from './awsAuthStatusManager.js'
 import { clearBetasCaches } from './betas.js'
 import {
-  type AccountInfo,
   checkHasTrustDialogAccepted,
   getGlobalConfig,
   saveGlobalConfig,
@@ -44,16 +38,6 @@ import { execSyncWithDefaults_DEPRECATED } from './execFileNoThrow.js'
 import * as lockfile from './lockfile.js'
 import { logError } from './log.js'
 import { memoizeWithTTLAsync } from './memoize.js'
-import { getSecureStorage } from './secureStorage/index.js'
-import {
-  clearLegacyApiKeyPrefetch,
-  getLegacyApiKeyPrefetchResult,
-} from './secureStorage/keychainPrefetch.js'
-import {
-  clearKeychainCache,
-  getMacOsKeychainStorageServiceName,
-  getUsername,
-} from './secureStorage/macOsKeychainHelpers.js'
 import {
   getSettings_DEPRECATED,
   getSettingsForSource,
@@ -64,26 +48,6 @@ import { clearToolSchemaCache } from './toolSchemaCache.js'
 
 /** Default TTL for API key helper cache in milliseconds (5 minutes) */
 const DEFAULT_API_KEY_HELPER_TTL = 5 * 60 * 1000
-
-/**
- * CCR and Claude Desktop spawn the CLI with OAuth and should never fall back
- * to the user's ~/.claude/settings.json API-key config (apiKeyHelper,
- * env.ANTHROPIC_API_KEY, env.ANTHROPIC_AUTH_TOKEN). Those settings exist for
- * the user's terminal CLI, not managed sessions. Without this guard, a user
- * who runs `claude` in their terminal with an API key sees every CCD session
- * also use that key — and fail if it's stale/wrong-org.
- */
-/** Whether we are supporting direct 1P auth. */
-// this code is closely related to getAuthTokenSource
-export function isAnthropicAuthEnabled(): boolean {
-  return false
-}
-
-/** Where the auth token is being sourced from, if any. */
-// this code is closely related to isAnthropicAuthEnabled
-export function getAuthTokenSource() {
-  return { source: 'none' as const, hasToken: false }
-}
 
 export type ApiKeySource = 'ANTHROPIC_API_KEY' | 'none'
 
@@ -799,97 +763,12 @@ export function prefetchAwsCredentialsAndBedRockInfoIfSafe(): void {
   getModelStrings()
 }
 
-/** @private Use {@link getAnthropicApiKey} instead. */
-export const getApiKeyFromConfigOrMacOSKeychain = memoize(
-  (): { key: string; source: ApiKeySource } | null => {
-    const key = process.env.ANTHROPIC_API_KEY
-    return key ? { key, source: 'ANTHROPIC_API_KEY' } : null
-  },
-)
-/** Claude account authentication is intentionally unavailable in this API-key-only build. */
-type DisabledClaudeAccountTokens = {
-  accessToken: string
-  refreshToken: string | null
-  expiresAt: number | null
-  scopes: string[]
-  subscriptionType: SubscriptionType | null
-  rateLimitTier: string | null
-}
-
-export function getClaudeAIOAuthTokens(): DisabledClaudeAccountTokens | null {
-  return null
-}
-
-export async function getClaudeAIOAuthTokensAsync(): Promise<DisabledClaudeAccountTokens | null> {
-  return null
-}
-
-export function clearOAuthTokenCache(): void {}
-
-export async function handleOAuth401Error(
-  _failedAccessToken: string,
-): Promise<boolean> {
-  return false
-}
-
-export async function checkAndRefreshOAuthTokenIfNeeded(): Promise<boolean> {
-  return false
-}
-
-export function isClaudeAISubscriber(): boolean {
-  return false
-}
-
-export function hasProfileScope(): boolean {
-  return false
-}
-
 export function is1PApiCustomer(): boolean {
   return !(
     isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
     isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
     isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)
   )
-}
-
-export function getOauthAccountInfo(): AccountInfo | undefined {
-  return undefined
-}
-
-export function isOverageProvisioningAllowed(): boolean {
-  return false
-}
-
-export function hasOpusAccess(): boolean {
-  return true
-}
-
-export function getSubscriptionType(): SubscriptionType | null {
-  return null
-}
-
-export function isMaxSubscriber(): boolean {
-  return false
-}
-
-export function isTeamSubscriber(): boolean {
-  return false
-}
-
-export function isTeamPremiumSubscriber(): boolean {
-  return false
-}
-
-export function isEnterpriseSubscriber(): boolean {
-  return false
-}
-
-export function isProSubscriber(): boolean {
-  return false
-}
-
-export function getRateLimitTier(): string | null {
-  return null
 }
 
 export function getSubscriptionName(): string {
@@ -1006,19 +885,6 @@ export function getOtelHeadersFromHelper(): Record<string, string> {
   }
 }
 
-function isConsumerPlan(plan: SubscriptionType): plan is 'max' | 'pro' {
-  return plan === 'max' || plan === 'pro'
-}
-
-export function isConsumerSubscriber(): boolean {
-  const subscriptionType = getSubscriptionType()
-  return (
-    isClaudeAISubscriber() &&
-    subscriptionType !== null &&
-    isConsumerPlan(subscriptionType)
-  )
-}
-
 export type UserAccountInfo = {
   subscription?: string
   tokenSource?: string
@@ -1031,20 +897,5 @@ export function getAccountInformation(): UserAccountInfo | undefined {
   if (getAPIProvider() !== 'firstParty') return undefined
   const { key, source } = getAnthropicApiKeyWithSource()
   return key ? { apiKeySource: source } : {}
-}
-export type OrgValidationResult =
-  | { valid: true }
-  | { valid: false; message: string }
-
-/**
- * Validate that the active OAuth token belongs to the organization required
- * by `forceLoginOrgUUID` in managed settings. Returns a result object
- * rather than throwing so callers can choose how to surface the error.
- *
- * Fails closed: if `forceLoginOrgUUID` is set and we cannot determine the
- * token's org (network error, missing profile data), validation fails.
- */
-export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
-  return { valid: true }
 }
 class GcpCredentialsTimeoutError extends Error {}

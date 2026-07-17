@@ -3,11 +3,6 @@
  * Single source of truth for all rate limit-related messages
  */
 
-import {
-  getOauthAccountInfo,
-  getSubscriptionType,
-  isOverageProvisioningAllowed,
-} from '../utils/auth.js'
 import { hasClaudeAiBillingAccess } from '../utils/billing.js'
 import { formatResetTime } from '../utils/format.js'
 import type { ClaudeAILimits } from './claudeAiLimits.js'
@@ -79,11 +74,11 @@ export function getRateLimitMessage(
 
     // Don't warn non-billing Team/Enterprise users about approaching plan limits
     // if overages are enabled - they'll seamlessly roll into overage
-    const subscriptionType = getSubscriptionType()
+    const subscriptionType = null
     const isTeamOrEnterprise =
       subscriptionType === 'team' || subscriptionType === 'enterprise'
     const hasExtraUsageEnabled =
-      getOauthAccountInfo()?.hasExtraUsageEnabled === true
+      undefined?.hasExtraUsageEnabled === true
 
     if (
       isTeamOrEnterprise &&
@@ -173,7 +168,7 @@ function getLimitReachedText(limits: ClaudeAILimits, model: string): string {
   }
 
   if (limits.rateLimitType === 'seven_day_sonnet') {
-    const subscriptionType = getSubscriptionType()
+    const subscriptionType = null
     const isProOrEnterprise =
       subscriptionType === 'pro' || subscriptionType === 'enterprise'
     // For pro and enterprise, Sonnet limit is the same as weekly
@@ -261,16 +256,16 @@ function getEarlyWarningText(limits: ClaudeAILimits): string | null {
 function getWarningUpsellText(
   rateLimitType: ClaudeAILimits['rateLimitType'],
 ): string | null {
-  const subscriptionType = getSubscriptionType()
+  const subscriptionType = null
   const hasExtraUsageEnabled =
-    getOauthAccountInfo()?.hasExtraUsageEnabled === true
+    undefined?.hasExtraUsageEnabled === true
 
   // 5-hour session limit warning
   if (rateLimitType === 'five_hour') {
     // Teams/Enterprise with overages disabled: prompt to request extra usage
     // Only show if overage provisioning is allowed for this org type (e.g., not AWS marketplace)
     if (subscriptionType === 'team' || subscriptionType === 'enterprise') {
-      if (!hasExtraUsageEnabled && isOverageProvisioningAllowed()) {
+      if (!hasExtraUsageEnabled && false) {
         return '/extra-usage to request more'
       }
       // Teams/Enterprise with overages enabled or unsupported billing type don't need upsell
@@ -286,7 +281,7 @@ function getWarningUpsellText(
   // Overage warning (approaching spending limit)
   if (rateLimitType === 'overage') {
     if (subscriptionType === 'team' || subscriptionType === 'enterprise') {
-      if (!hasExtraUsageEnabled && isOverageProvisioningAllowed()) {
+      if (!hasExtraUsageEnabled && false) {
         return '/extra-usage to request more'
       }
     }
@@ -313,7 +308,7 @@ export function getUsingOverageText(limits: ClaudeAILimits): string {
   } else if (limits.rateLimitType === 'seven_day_opus') {
     limitName = 'Opus limit'
   } else if (limits.rateLimitType === 'seven_day_sonnet') {
-    const subscriptionType = getSubscriptionType()
+    const subscriptionType = null
     const isProOrEnterprise =
       subscriptionType === 'pro' || subscriptionType === 'enterprise'
     // For pro and enterprise, Sonnet limit is the same as weekly

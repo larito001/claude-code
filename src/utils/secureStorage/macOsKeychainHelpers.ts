@@ -1,18 +1,4 @@
-/**
- * Lightweight helpers shared between keychainPrefetch.ts and
- * macOsKeychainStorage.ts.
- *
- * This module MUST NOT import execa, execFileNoThrow, or
- * execFileNoThrowPortable. keychainPrefetch.ts fires at the very top of
- * main.tsx (before the ~65ms of module evaluation it parallelizes), and Bun's
- * __esm wrapper evaluates the ENTIRE module when any symbol is accessed —
- * so a heavy transitive import here defeats the prefetch. The execa →
- * human-signals → cross-spawn chain alone is ~58ms of synchronous init.
- *
- * The imports below (envUtils, oauth constants, crypto, os) are already
- * evaluated by startupProfiler.ts at main.tsx:5, so they add no module-init
- * cost when keychainPrefetch.ts pulls this file in.
- */
+/** Lightweight helpers shared by the macOS secure-storage implementation. */
 
 import { createHash } from 'crypto'
 import { userInfo } from 'os'
@@ -62,10 +48,6 @@ export function getUsername(): string {
 // OAuth tokens expire in hours, and the only cross-process writer is another
 // CC instance's /login or refresh.
 //
-// Lives here (not in macOsKeychainStorage.ts) so keychainPrefetch.ts can
-// prime it without pulling in execa. Wrapped in an object because ES module
-// `let` bindings aren't writable across module boundaries — both this file
-// and macOsKeychainStorage.ts need to mutate all three fields.
 export const KEYCHAIN_CACHE_TTL_MS = 30_000
 
 export const keychainCacheState: {
@@ -88,24 +70,4 @@ export function clearKeychainCache(): void {
   keychainCacheState.cache = { data: null, cachedAt: 0 }
   keychainCacheState.generation++
   keychainCacheState.readInFlight = null
-}
-
-/**
- * Prime the keychain cache from a prefetch result (keychainPrefetch.ts).
- * Only writes if the cache hasn't been touched yet — if sync read() or
- * update() already ran, their result is authoritative and we discard this.
- */
-export function primeKeychainCacheFromPrefetch(stdout: string | null): void {
-  if (keychainCacheState.cache.cachedAt !== 0) return
-  let data: SecureStorageData | null = null
-  if (stdout) {
-    try {
-      // eslint-disable-next-line custom-rules/no-direct-json-operations -- jsonParse() pulls slowOperations (lodash-es/cloneDeep) into the early-startup import chain; see file header
-      data = JSON.parse(stdout)
-    } catch {
-      // malformed prefetch result — let sync read() re-fetch
-      return
-    }
-  }
-  keychainCacheState.cache = { data, cachedAt: Date.now() }
 }

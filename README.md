@@ -21,7 +21,7 @@
 ### 前置条件
 
 - [Bun](https://bun.sh) >= 1.3.x
-- 有效的 Anthropic 认证（通过 `claude login` 使用 OAuth，或设置 `ANTHROPIC_API_KEY`）
+- 有效的 `ANTHROPIC_API_KEY`
 
 ### 安装与运行
 
@@ -56,10 +56,7 @@ bun src/entrypoints/cli.tsx -p "your prompt here" --output-format json
 bun src/entrypoints/cli.tsx
 ```
 
-> **注意**：如果环境中设置了 `ANTHROPIC_API_KEY`，其必须有效。若要改用 OAuth，请取消设置它：
-> ```bash
-> unset ANTHROPIC_API_KEY
-> ```
+> **注意**：此裁剪版仅支持 `ANTHROPIC_API_KEY`，不包含 Claude/Anthropic 网页登录、订阅认证或登出流程。
 
 ---
 

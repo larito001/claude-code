@@ -40,10 +40,6 @@ import {
   validateTeamMemKey,
 } from '../../memdir/teamMemPaths.js'
 import { count } from '../../utils/array.js'
-import {
-  checkAndRefreshOAuthTokenIfNeeded,
-  getClaudeAIOAuthTokens,
-} from '../../utils/auth.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { classifyAxiosError } from '../../utils/errors.js'
 import { getGithubRepo } from '../../utils/git.js'
@@ -152,7 +148,7 @@ function isUsingOAuth(): boolean {
   if (getAPIProvider() !== 'firstParty' || !isFirstPartyAnthropicBaseUrl()) {
     return false
   }
-  const tokens = getClaudeAIOAuthTokens()
+  const tokens = null
   return Boolean(
     tokens?.accessToken &&
       tokens.scopes?.includes(CLAUDE_AI_INFERENCE_SCOPE) &&
@@ -170,7 +166,7 @@ function getAuthHeaders(): {
   headers?: Record<string, string>
   error?: string
 } {
-  const oauthTokens = getClaudeAIOAuthTokens()
+  const oauthTokens = null
   if (oauthTokens?.accessToken) {
     return {
       headers: {
@@ -191,7 +187,7 @@ async function fetchTeamMemoryOnce(
   etag?: string | null,
 ): Promise<TeamMemorySyncFetchResult> {
   try {
-    await checkAndRefreshOAuthTokenIfNeeded()
+    await Promise.resolve(false)
 
     const auth = getAuthHeaders()
     if (auth.error) {
@@ -317,7 +313,7 @@ async function fetchTeamMemoryHashes(
   repoSlug: string,
 ): Promise<TeamMemoryHashesResult> {
   try {
-    await checkAndRefreshOAuthTokenIfNeeded()
+    await Promise.resolve(false)
     const auth = getAuthHeaders()
     if (auth.error) {
       return { success: false, error: auth.error, errorType: 'auth' }
@@ -466,7 +462,7 @@ async function uploadTeamMemory(
   ifMatchChecksum?: string | null,
 ): Promise<TeamMemorySyncUploadResult> {
   try {
-    await checkAndRefreshOAuthTokenIfNeeded()
+    await Promise.resolve(false)
 
     const auth = getAuthHeaders()
     if (auth.error) {

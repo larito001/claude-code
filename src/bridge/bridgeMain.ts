@@ -37,7 +37,7 @@ import { toCompatSessionId, toInfraSessionId } from './sessionIdCompat.js'
 import { createSessionSpawner, safeFilenameId } from './sessionRunner.js'
 import { getTrustedDeviceToken } from './trustedDevice.js'
 import {
-  BRIDGE_LOGIN_ERROR,
+  BRIDGE_UNAVAILABLE_ERROR,
   type BridgeApiClient,
   type BridgeConfig,
   type BridgeLogger,
@@ -2092,9 +2092,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     process.exit(1)
   }
 
-  // Resolve auth
-  const { clearOAuthTokenCache, checkAndRefreshOAuthTokenIfNeeded } =
-    await import('../utils/auth.js')
+  // Resolve explicitly supplied bridge credentials.
   const { getBridgeAccessToken, getBridgeBaseUrl } = await import(
     './bridgeConfig.js'
   )
@@ -2102,7 +2100,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
   const bridgeToken = getBridgeAccessToken()
   if (!bridgeToken) {
     // biome-ignore lint/suspicious/noConsole:: intentional console output
-    console.error(BRIDGE_LOGIN_ERROR)
+    console.error(BRIDGE_UNAVAILABLE_ERROR)
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1)
   }
@@ -2342,13 +2340,11 @@ export async function bridgeMain(args: string[]): Promise<void> {
   const machineName = hostname()
   const bridgeId = randomUUID()
 
-  const { handleOAuth401Error } = await import('../utils/auth.js')
   const api = createBridgeApiClient({
     baseUrl,
     getAccessToken: getBridgeAccessToken,
     runnerVersion: MACRO.VERSION,
     onDebug: logForDebugging,
-    onAuth401: handleOAuth401Error,
     getTrustedDeviceToken,
   })
 
@@ -2374,8 +2370,6 @@ export async function bridgeMain(args: string[]): Promise<void> {
     // Proactively refresh the OAuth token — getBridgeSession uses raw axios
     // without the withOAuthRetry 401-refresh logic. An expired-but-present
     // token would otherwise produce a misleading "not found" error.
-    await checkAndRefreshOAuthTokenIfNeeded()
-    clearOAuthTokenCache()
     const { getBridgeSession } = await import('./createSession.js')
     const session = await getBridgeSession(resumeSessionId, {
       baseUrl,
@@ -2392,7 +2386,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
       }
       // biome-ignore lint/suspicious/noConsole: intentional error output
       console.error(
-        `Error: Session ${resumeSessionId} not found. It may have been archived or expired, or your login may have lapsed (run \`claude /login\`).`,
+        `Error: Session ${resumeSessionId} not found. It may have been archived or expired.`,
       )
       // eslint-disable-next-line custom-rules/no-process-exit
       process.exit(1)
@@ -2742,9 +2736,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
       async () => {
         // Clear the memoized OAuth token cache so we re-read from secure
         // storage, picking up tokens refreshed by child processes.
-        clearOAuthTokenCache()
         // Proactively refresh the token if it's expired on disk too.
-        await checkAndRefreshOAuthTokenIfNeeded()
         return getBridgeAccessToken()
       },
     )
@@ -2836,7 +2828,7 @@ export async function runBridgeHeadless(
 
   if (!opts.getAccessToken()) {
     // Transient — supervisor's AuthManager may pick up a token on next cycle.
-    throw new Error(BRIDGE_LOGIN_ERROR)
+    throw new Error(BRIDGE_UNAVAILABLE_ERROR)
   }
 
   const { getBridgeBaseUrl } = await import('./bridgeConfig.js')

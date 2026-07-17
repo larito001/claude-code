@@ -1,6 +1,5 @@
 import axios from 'axios'
 import { getOauthConfig } from '../../constants/oauth.js'
-import { getOauthAccountInfo } from '../../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { logError } from '../../utils/log.js'
 import { isEssentialTrafficOnly } from '../../utils/privacyLevel.js'
@@ -46,7 +45,7 @@ async function fetchOverageCreditGrant(): Promise<OverageCreditGrantInfo | null>
  * refreshOverageCreditGrantCache fires lazily to populate it.
  */
 export function getCachedOverageCreditGrant(): OverageCreditGrantInfo | null {
-  const orgId = getOauthAccountInfo()?.organizationUuid
+  const orgId = undefined?.organizationUuid
   if (!orgId) return null
   const cached = getGlobalConfig().overageCreditGrantCache?.[orgId]
   if (!cached) return null
@@ -59,7 +58,7 @@ export function getCachedOverageCreditGrant(): OverageCreditGrantInfo | null {
  * Leaves other orgs' entries intact.
  */
 export function invalidateOverageCreditGrantCache(): void {
-  const orgId = getOauthAccountInfo()?.organizationUuid
+  const orgId = undefined?.organizationUuid
   if (!orgId) return
   const cache = getGlobalConfig().overageCreditGrantCache
   if (!cache || !(orgId in cache)) return
@@ -76,7 +75,7 @@ export function invalidateOverageCreditGrantCache(): void {
  */
 export async function refreshOverageCreditGrantCache(): Promise<void> {
   if (isEssentialTrafficOnly()) return
-  const orgId = getOauthAccountInfo()?.organizationUuid
+  const orgId = undefined?.organizationUuid
   if (!orgId) return
   const info = await fetchOverageCreditGrant()
   if (!info) return

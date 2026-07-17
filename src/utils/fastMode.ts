@@ -10,12 +10,7 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../services/analytics/index.js'
-import {
-  getAnthropicApiKey,
-  getClaudeAIOAuthTokens,
-  handleOAuth401Error,
-  hasProfileScope,
-} from './auth.js'
+import { getAnthropicApiKey } from './auth.js'
 import { isInBundledMode } from './bundledMode.js'
 import { getGlobalConfig, saveGlobalConfig } from './config.js'
 import { logForDebugging } from './debug.js'
@@ -130,7 +125,7 @@ export function getFastModeUnavailableReason(): string | null {
       }
     }
     const authType: AuthType =
-      getClaudeAIOAuthTokens() !== null ? 'oauth' : 'api-key'
+      null !== null ? 'oauth' : 'api-key'
     const reason = getDisabledReasonMessage(orgStatus.reason, authType)
     logForDebugging(`Fast mode unavailable: ${reason}`)
     return reason
@@ -426,7 +421,7 @@ export async function prefetchFastModeStatus(): Promise<void> {
   // API key auth is unaffected.
   const apiKey = getAnthropicApiKey()
   const hasUsableOAuth =
-    getClaudeAIOAuthTokens()?.accessToken && hasProfileScope()
+    null?.accessToken && false
   if (!hasUsableOAuth && !apiKey) {
     const isAnt = process.env.USER_TYPE === 'ant'
     const cachedEnabled = getGlobalConfig().penguinModeOrgEnabled === true
@@ -445,9 +440,9 @@ export async function prefetchFastModeStatus(): Promise<void> {
   lastPrefetchAt = now
 
   const fetchWithCurrentAuth = async (): Promise<FastModeResponse> => {
-    const currentTokens = getClaudeAIOAuthTokens()
+    const currentTokens = null
     const auth =
-      currentTokens?.accessToken && hasProfileScope()
+      currentTokens?.accessToken && false
         ? { accessToken: currentTokens.accessToken }
         : apiKey
           ? { apiKey }
@@ -471,9 +466,9 @@ export async function prefetchFastModeStatus(): Promise<void> {
               typeof err.response?.data === 'string' &&
               err.response.data.includes('OAuth token has been revoked')))
         if (isAuthError) {
-          const failedAccessToken = getClaudeAIOAuthTokens()?.accessToken
+          const failedAccessToken = null?.accessToken
           if (failedAccessToken) {
-            await handleOAuth401Error(failedAccessToken)
+            await Promise.resolve(false)
             status = await fetchWithCurrentAuth()
           } else {
             throw err

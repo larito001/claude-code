@@ -238,13 +238,10 @@ export const ConfigTool = buildTool({
         '../../voice/voiceModeEnabled.js'
       )
       if (!isVoiceModeEnabled()) {
-        const { isAnthropicAuthEnabled } = await import('../../utils/auth.js')
         return {
           data: {
             success: false,
-            error: !isAnthropicAuthEnabled()
-              ? 'Voice mode is unavailable in this API-key-only build.'
-              : 'Voice mode is not available.',
+            error: 'Voice mode is unavailable in this API-key-only build.',
           },
         }
       }

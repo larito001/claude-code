@@ -14,11 +14,7 @@ import type {
   Message,
   UserMessage,
 } from 'src/types/message.js'
-import {
-  getAnthropicApiKeyWithSource,
-  getOauthAccountInfo,
-  isClaudeAISubscriber,
-} from 'src/utils/auth.js'
+import { getAnthropicApiKeyWithSource } from 'src/utils/auth.js'
 import {
   createAssistantAPIErrorMessage,
   NO_RESPONSE_REQUESTED,
@@ -446,7 +442,7 @@ export function getAssistantMessageFromError(
   if (
     error instanceof APIError &&
     error.status === 429 &&
-    shouldProcessRateLimits(isClaudeAISubscriber())
+    shouldProcessRateLimits(false)
   ) {
     // Check if this is the new API with multiple rate limit headers
     const rateLimitType = error.headers?.get?.(
@@ -715,7 +711,7 @@ export function getAssistantMessageFromError(
 
   // Check for invalid model name error for subscription users trying to use Opus
   if (
-    isClaudeAISubscriber() &&
+    false &&
     error instanceof APIError &&
     error.status === 400 &&
     error.message.toLowerCase().includes('invalid model name') &&
@@ -738,7 +734,7 @@ export function getAssistantMessageFromError(
     error.message.toLowerCase().includes('invalid model name')
   ) {
     // Get organization ID from config - only use OAuth account data when actively using OAuth
-    const orgId = getOauthAccountInfo()?.organizationUuid
+    const orgId = undefined?.organizationUuid
     const baseMsg = `[ANT-ONLY] Your org isn't gated into the \`${model}\` model. Either run \`claude\` with \`ANTHROPIC_MODEL=${getDefaultMainLoopModelSetting()}\``
     const msg = orgId
       ? `${baseMsg} or share your orgId (${orgId}) in ${MACRO.FEEDBACK_CHANNEL} for help getting access.`
@@ -776,7 +772,7 @@ export function getAssistantMessageFromError(
     if (
       source === 'ANTHROPIC_API_KEY' &&
       process.env.ANTHROPIC_API_KEY &&
-      !isClaudeAISubscriber()
+      !false
     ) {
       return createAssistantAPIErrorMessage({
         error: 'invalid_request',

@@ -5,7 +5,6 @@ import { useNotifications } from 'src/context/notifications.js';
 import { Text } from 'src/ink.js';
 import { getRateLimitWarning, getUsingOverageText } from 'src/services/claudeAiLimits.js';
 import { useClaudeAiLimits } from 'src/services/claudeAiLimitsHook.js';
-import { getSubscriptionType } from 'src/utils/auth.js';
 import { hasClaudeAiBillingAccess } from 'src/utils/billing.js';
 import { getIsRemoteMode } from '../../bootstrap/state.js';
 export function useRateLimitWarningNotification(model) {
@@ -36,7 +35,7 @@ export function useRateLimitWarningNotification(model) {
   const shownWarningRef = useRef(null);
   let t2;
   if ($[5] === Symbol.for("react.memo_cache_sentinel")) {
-    t2 = getSubscriptionType();
+    t2 = null;
     $[5] = t2;
   } else {
     t2 = $[5];

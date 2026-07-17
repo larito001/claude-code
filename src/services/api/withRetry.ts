@@ -12,13 +12,7 @@ import { logForDebugging } from 'src/utils/debug.js'
 import { logError } from 'src/utils/log.js'
 import { createSystemAPIErrorMessage } from 'src/utils/messages.js'
 import { getAPIProviderForStatsig } from 'src/utils/model/providers.js'
-import {
-  clearApiKeyHelperCache,
-  clearAwsCredentialsCache,
-  clearGcpCredentialsCache,
-  isClaudeAISubscriber,
-  isEnterpriseSubscriber,
-} from '../../utils/auth.js'
+import { clearApiKeyHelperCache, clearAwsCredentialsCache, clearGcpCredentialsCache } from '../../utils/auth.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
 import {
@@ -316,7 +310,7 @@ export async function* withRetry<T>(
         // If FALLBACK_FOR_ALL_PRIMARY_MODELS is not set, fall through only if the primary model is a non-custom Opus model.
         // TODO: Revisit if the isNonCustomOpusModel check should still exist, or if isNonCustomOpusModel is a stale artifact of when Claude Code was hardcoded on Opus.
         (process.env.FALLBACK_FOR_ALL_PRIMARY_MODELS ||
-          (!isClaudeAISubscriber() && isNonCustomOpusModel(options.model)))
+          (!false && isNonCustomOpusModel(options.model)))
       ) {
         consecutive529Errors++
         if (consecutive529Errors >= MAX_529_RETRIES) {
@@ -715,7 +709,7 @@ function shouldRetry(error: APIError): boolean {
   // Enterprise users can retry because they typically use PAYG instead of rate limits.
   if (
     shouldRetryHeader === 'true' &&
-    (!isClaudeAISubscriber() || isEnterpriseSubscriber())
+    (!false || false)
   ) {
     return true
   }
@@ -744,7 +738,7 @@ function shouldRetry(error: APIError): boolean {
   // Retry on rate limits, but not for ClaudeAI Subscription users
   // Enterprise users can retry because they typically use PAYG instead of rate limits
   if (error.status === 429) {
-    return !isClaudeAISubscriber() || isEnterpriseSubscriber()
+    return !false || false
   }
 
   // Clear API key cache on 401 and allow retry.

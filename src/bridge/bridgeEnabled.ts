@@ -9,7 +9,7 @@ import {
 // call it, auth.js is fully loaded. Previously used require() for the same
 // deferral, but require() hits a CJS cache that diverges from the ESM
 // namespace after mock.module() (daemon/auth.test.ts), breaking spyOn.
-import * as authModule from '../utils/auth.js'
+import { getBridgeTokenOverride } from './bridgeConfig.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
 import { lt } from '../utils/semver.js'
 
@@ -30,7 +30,7 @@ export function isBridgeEnabled(): boolean {
   // Negative pattern (if (!feature(...)) return) does not eliminate
   // inline string literals from external builds.
   return feature('BRIDGE_MODE')
-    ? isClaudeAISubscriber() &&
+    ? Boolean(getBridgeTokenOverride()) &&
         getFeatureValue_CACHED_MAY_BE_STALE('tengu_ccr_bridge', false)
     : false
 }
@@ -49,7 +49,7 @@ export function isBridgeEnabled(): boolean {
  */
 export async function isBridgeEnabledBlocking(): Promise<boolean> {
   return feature('BRIDGE_MODE')
-    ? isClaudeAISubscriber() &&
+    ? Boolean(getBridgeTokenOverride()) &&
         (await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge'))
     : false
 }
@@ -59,60 +59,17 @@ export async function isBridgeEnabledBlocking(): Promise<boolean> {
  * it's enabled. Call this instead of a bare `isBridgeEnabledBlocking()`
  * check when you need to show the user an actionable error.
  *
- * The GrowthBook gate targets on organizationUUID, which comes from
- * config.oauthAccount — populated by /api/oauth/profile during login.
- * That endpoint requires the user:profile scope. Tokens without it
- * (legacy service tokens or pre-scope-expansion
- * logins) leave oauthAccount unpopulated, so the gate falls back to
- * false and users see a dead-end "not enabled" message with no hint
- * that re-login would fix it. See CC-1165 / gh-33105.
+ * The API-key-only build requires an explicit bridge token override.
  */
 export async function getBridgeDisabledReason(): Promise<string | null> {
   if (feature('BRIDGE_MODE')) {
-    if (!isClaudeAISubscriber()) {
-      return 'Remote Control is unavailable in this API-key-only build.'
-    }
-    if (!hasProfileScope()) {
-      return 'Remote Control is unavailable in this API-key-only build.'
-    }
-    if (!getOauthAccountInfo()?.organizationUuid) {
-      return 'Remote Control is unavailable in this API-key-only build.'
-    }
+    if (!getBridgeTokenOverride()) return 'Remote Control requires an explicit bridge token.'
     if (!(await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge'))) {
       return 'Remote Control is not yet enabled for your account.'
     }
     return null
   }
   return 'Remote Control is not available in this build.'
-}
-
-// try/catch: main.tsx:5698 calls isBridgeEnabled() while defining the Commander
-// program, before enableConfigs() runs. isClaudeAISubscriber() → getGlobalConfig()
-// throws "Config accessed before allowed" there. Pre-config, no OAuth token can
-// exist anyway — false is correct. Same swallow getFeatureValue_CACHED_MAY_BE_STALE
-// already does at growthbook.ts:775-780.
-function isClaudeAISubscriber(): boolean {
-  try {
-    return authModule.isClaudeAISubscriber()
-  } catch {
-    return false
-  }
-}
-function hasProfileScope(): boolean {
-  try {
-    return authModule.hasProfileScope()
-  } catch {
-    return false
-  }
-}
-function getOauthAccountInfo(): ReturnType<
-  typeof authModule.getOauthAccountInfo
-> {
-  try {
-    return authModule.getOauthAccountInfo()
-  } catch {
-    return undefined
-  }
 }
 
 /**

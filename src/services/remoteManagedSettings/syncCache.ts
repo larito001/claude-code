@@ -8,10 +8,7 @@
  */
 
 import { CLAUDE_AI_INFERENCE_SCOPE } from '../../constants/oauth.js'
-import {
-  getAnthropicApiKeyWithSource,
-  getClaudeAIOAuthTokens,
-} from '../../utils/auth.js'
+import { getAnthropicApiKeyWithSource } from '../../utils/auth.js'
 import {
   getAPIProvider,
   isFirstPartyAnthropicBaseUrl,
@@ -71,7 +68,7 @@ export function isRemoteManagedSettingsEligible(): boolean {
   // The API key check spawns `security find-generic-password` (~20-50ms) which
   // returns null for OAuth-only users. Checking OAuth first short-circuits
   // that subprocess for the common case.
-  const tokens = getClaudeAIOAuthTokens()
+  const tokens = null
 
   // Externally-injected tokens (CCD via CLAUDE_CODE_OAUTH_TOKEN, CCR via
   // CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR, Agent SDK, CI) carry no

@@ -2,14 +2,9 @@ import axios from 'axios'
 import { z } from 'zod/v4'
 import { getOauthConfig } from '../../constants/oauth.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import { getOrganizationUUID } from '../../utils/apiKeyAccount.js'
 import { isPolicyAllowed } from '../../services/policyLimits/index.js'
 import type { ToolUseContext } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
-import {
-  checkAndRefreshOAuthTokenIfNeeded,
-  getClaudeAIOAuthTokens,
-} from '../../utils/auth.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { DESCRIPTION, PROMPT, REMOTE_TRIGGER_TOOL_NAME } from './prompt.js'
@@ -76,14 +71,14 @@ export const RemoteTriggerTool = buildTool({
     return PROMPT
   },
   async call(input: Input, context: ToolUseContext) {
-    await checkAndRefreshOAuthTokenIfNeeded()
-    const accessToken = getClaudeAIOAuthTokens()?.accessToken
+    await Promise.resolve(false)
+    const accessToken = null?.accessToken
     if (!accessToken) {
       throw new Error(
         'Remote triggers are unavailable in this API-key-only build.',
       )
     }
-    const orgUUID = await getOrganizationUUID()
+    const orgUUID = await null
     if (!orgUUID) {
       throw new Error('Unable to resolve organization UUID.')
     }

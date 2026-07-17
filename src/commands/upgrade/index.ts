@@ -1,5 +1,4 @@
 import type { Command } from '../../commands.js'
-import { getSubscriptionType } from '../../utils/auth.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 
 const upgrade = {
@@ -9,7 +8,7 @@ const upgrade = {
   availability: ['claude-ai'],
   isEnabled: () =>
     !isEnvTruthy(process.env.DISABLE_UPGRADE_COMMAND) &&
-    getSubscriptionType() !== 'enterprise',
+    null !== 'enterprise',
   load: () => import('./upgrade.js'),
 } satisfies Command
 

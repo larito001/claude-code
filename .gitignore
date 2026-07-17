@@ -7,4 +7,4 @@ bun.lockb
 .idea/
 .bun/
 .bun-cache*/
-.env.deepseek.local
+.env

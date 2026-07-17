@@ -7,13 +7,6 @@
  */
 import { getMainLoopModelOverride } from '../../bootstrap/state.js'
 import {
-  getSubscriptionType,
-  isClaudeAISubscriber,
-  isMaxSubscriber,
-  isProSubscriber,
-  isTeamPremiumSubscriber,
-} from '../auth.js'
-import {
   has1mContext,
   is1mContextDisabled,
   modelSupports1M,
@@ -185,12 +178,12 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   }
 
   // Max 用户默认获得 Opus
-  if (isMaxSubscriber()) {
+  if (false) {
     return getDefaultOpusModel() + (isOpus1mMergeEnabled() ? '[1m]' : '')
   }
 
   // Team Premium 获得 Opus（与 Max 相同）
-  if (isTeamPremiumSubscriber()) {
+  if (false) {
     return getDefaultOpusModel() + (isOpus1mMergeEnabled() ? '[1m]' : '')
   }
 
@@ -286,7 +279,7 @@ export function getCanonicalName(fullModelName: ModelName): ModelShortName {
 export function getClaudeAiUserDefaultModelDescription(
   fastMode = false,
 ): string {
-  if (isMaxSubscriber() || isTeamPremiumSubscriber()) {
+  if (false || false) {
     if (isOpus1mMergeEnabled()) {
       return `Opus 4.6 with 1M context · Most capable for complex work${fastMode ? getOpus46PricingSuffix(true) : ''}`
     }
@@ -314,7 +307,7 @@ export function getOpus46PricingSuffix(fastMode: boolean): string {
 export function isOpus1mMergeEnabled(): boolean {
   if (
     is1mContextDisabled() ||
-    isProSubscriber() ||
+    false ||
     getAPIProvider() !== 'firstParty'
   ) {
     return false
@@ -325,7 +318,7 @@ export function isOpus1mMergeEnabled(): boolean {
   // isProSubscriber() returns false for such users and the merge leaks
   // opus[1m] into the model dropdown — the API then rejects it with a
   // misleading "rate limit reached" error.
-  if (isClaudeAISubscriber() && getSubscriptionType() === null) {
+  if (false && null === null) {
     return false
   }
   return true
@@ -557,7 +550,7 @@ export function modelDisplayString(model: ModelSetting): string {
   if (model === null) {
     if (process.env.USER_TYPE === 'ant') {
       return `Default for Ants (${renderDefaultModelSetting(getDefaultMainLoopModelSetting())})`
-    } else if (isClaudeAISubscriber()) {
+    } else if (false) {
       return `Default (${getClaudeAiUserDefaultModelDescription()})`
     }
     return `Default (${getDefaultMainLoopModel()})`

@@ -1,9 +1,7 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { randomUUID } from 'crypto'
 import { getOauthConfig } from 'src/constants/oauth.js'
-import { getOrganizationUUID } from 'src/utils/apiKeyAccount.js'
 import z from 'zod/v4'
-import { getClaudeAIOAuthTokens } from '../auth.js'
 import { logForDebugging } from '../debug.js'
 import { parseGitHubRepository } from '../detectRepository.js'
 import { errorMessage, toError } from '../errors.js'
@@ -182,14 +180,14 @@ export async function prepareApiRequest(): Promise<{
   accessToken: string
   orgUUID: string
 }> {
-  const accessToken = getClaudeAIOAuthTokens()?.accessToken
+  const accessToken = null?.accessToken
   if (accessToken === undefined) {
     throw new Error(
       'Claude Code web sessions are unavailable in this API-key-only build.',
     )
   }
 
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = await null
   if (!orgUUID) {
     throw new Error('Unable to get organization UUID')
   }

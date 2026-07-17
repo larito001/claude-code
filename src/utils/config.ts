@@ -9,7 +9,6 @@ import { getAutoMemEntrypoint } from '../memdir/paths.js'
 import { logEvent } from '../services/analytics/index.js'
 import type { McpServerConfig } from '../services/mcp/types.js'
 import type {
-  BillingType,
   ReferralEligibilityResponse,
 } from '../types/claudeAccount.js'
 import { getCwd } from '../utils/cwd.js'
@@ -158,21 +157,6 @@ import type { EDITOR_MODES, NOTIFICATION_CHANNELS } from './configConstants.js'
 
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number]
 
-export type AccountInfo = {
-  accountUuid: string
-  emailAddress: string
-  organizationUuid?: string
-  organizationName?: string | null // 添加于 2025 年 4 月 23 日，未填充现有用户
-  organizationRole?: string | null
-  workspaceRole?: string | null
-  // 由 /api/oauth/profile 填充
-  displayName?: string
-  hasExtraUsageEnabled?: boolean
-  billingType?: BillingType | null
-  accountCreatedAt?: string
-  subscriptionCreatedAt?: string
-}
-
 // TODO：保留“emacs”以实现向后兼容性 - 在几个版本后删除
 export type EditorMode = 'emacs' | (typeof EDITOR_MODES)[number]
 
@@ -226,7 +210,6 @@ export type GlobalConfig = {
   hasSeenUndercoverAutoNotice?: boolean // ant-only：是否显示一次性自动卧底解释器
   hasSeenUltraplanTerms?: boolean // ant-only：一次性 CCR 条款通知是否已显示在 ultraplan 启动对话框中
   hasResetAutoModeOptInForDefaultOffer?: boolean // ant-only：一次性迁移防护，重新提示流失的自动模式用户
-  oauthAccount?: AccountInfo
   iterm2KeyBindingInstalled?: boolean // 遗留 - 保留向后兼容性
   editorMode?: EditorMode
   bypassPermissionsModeAccepted?: boolean
@@ -780,18 +763,15 @@ export function isProjectConfigKey(key: string): key is ProjectConfigKey {
  * 并返回DEFAULT_GLOBAL_CONFIG。写回将永久
  * 擦除授权。参见 GH #3117。
  */
-function wouldLoseAuthState(fresh: {
-  oauthAccount?: unknown
+function wouldLoseOnboardingState(fresh: {
   hasCompletedOnboarding?: boolean
 }): boolean {
   const cached = globalConfigCache.config
   if (!cached) return false
-  const lostOauth =
-    cached.oauthAccount !== undefined && fresh.oauthAccount === undefined
   const lostOnboarding =
     cached.hasCompletedOnboarding === true &&
     fresh.hasCompletedOnboarding !== true
-  return lostOauth || lostOnboarding
+  return lostOnboarding
 }
 
 export function saveGlobalConfig(
@@ -843,7 +823,7 @@ export function saveGlobalConfig(
       getGlobalClaudeFile(),
       createDefaultGlobalConfig,
     )
-    if (wouldLoseAuthState(currentConfig)) {
+    if (wouldLoseOnboardingState(currentConfig)) {
       logForDebugging(
         'saveGlobalConfig fallback: re-read config is missing auth that cache has; refusing to write. See GH #3117.',
         { level: 'error' },
@@ -1214,7 +1194,7 @@ function saveConfigWithLock<A extends object>(
     // momentarily corrupted (concurrent writes, kill-during-write), this
     // returns defaults -- we must not write those back over good config.
     const currentConfig = getConfig(file, createDefault)
-    if (file === getGlobalClaudeFile() && wouldLoseAuthState(currentConfig)) {
+    if (file === getGlobalClaudeFile() && wouldLoseOnboardingState(currentConfig)) {
       logForDebugging(
         'saveConfigWithLock: re-read config is missing auth that cache has; refusing to write to avoid wiping ~/.claude.json. See GH #3117.',
         { level: 'error' },
@@ -1670,7 +1650,7 @@ export function saveCurrentProjectConfig(
     // Same race window as saveGlobalConfig's fallback -- refuse to write
     // defaults over good cached config. See GH #3117.
     const config = getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
-    if (wouldLoseAuthState(config)) {
+    if (wouldLoseOnboardingState(config)) {
       logForDebugging(
         'saveCurrentProjectConfig fallback: re-read config is missing auth that cache has; refusing to write. See GH #3117.',
         { level: 'error' },
@@ -1808,7 +1788,7 @@ export function getUserClaudeRulesDir(): string {
 
 // Exported for testing only
 export const _getConfigForTesting = getConfig
-export const _wouldLoseAuthStateForTesting = wouldLoseAuthState
+export const _wouldLoseOnboardingStateForTesting = wouldLoseOnboardingState
 export function _setGlobalConfigCacheForTesting(
   config: GlobalConfig | null,
 ): void {

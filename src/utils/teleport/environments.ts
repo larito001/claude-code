@@ -1,7 +1,5 @@
 import axios from 'axios'
 import { getOauthConfig } from 'src/constants/oauth.js'
-import { getOrganizationUUID } from 'src/utils/apiKeyAccount.js'
-import { getClaudeAIOAuthTokens } from '../auth.js'
 import { toError } from '../errors.js'
 import { logError } from '../log.js'
 import { getOAuthHeaders } from './api.js'
@@ -30,14 +28,14 @@ export type EnvironmentListResponse = {
  * @throws Error if the API request fails or no access token is available
  */
 export async function fetchEnvironments(): Promise<EnvironmentResource[]> {
-  const accessToken = getClaudeAIOAuthTokens()?.accessToken
+  const accessToken = null?.accessToken
   if (!accessToken) {
     throw new Error(
       'Claude Code web sessions are unavailable in this API-key-only build.',
     )
   }
 
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = await null
   if (!orgUUID) {
     throw new Error('Unable to get organization UUID')
   }
@@ -76,11 +74,11 @@ export async function fetchEnvironments(): Promise<EnvironmentResource[]> {
 export async function createDefaultCloudEnvironment(
   name: string,
 ): Promise<EnvironmentResource> {
-  const accessToken = getClaudeAIOAuthTokens()?.accessToken
+  const accessToken = null?.accessToken
   if (!accessToken) {
     throw new Error('No access token available')
   }
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = await null
   if (!orgUUID) {
     throw new Error('Unable to get organization UUID')
   }

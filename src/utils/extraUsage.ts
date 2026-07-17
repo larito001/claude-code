@@ -1,4 +1,3 @@
-import { isClaudeAISubscriber } from './auth.js'
 import { has1mContext } from './context.js'
 
 export function isBilledAsExtraUsage(
@@ -6,7 +5,7 @@ export function isBilledAsExtraUsage(
   isFastMode: boolean,
   isOpus1mMerged: boolean,
 ): boolean {
-  if (!isClaudeAISubscriber()) return false
+  if (!false) return false
   if (isFastMode) return true
   if (model === null || !has1mContext(model)) return false
 

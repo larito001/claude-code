@@ -2,7 +2,7 @@ import axios from 'axios'
 
 import { debugBody, extractErrorDetail } from './debugUtils.js'
 import {
-  BRIDGE_LOGIN_INSTRUCTION,
+  BRIDGE_UNAVAILABLE_INSTRUCTION,
   type BridgeApiClient,
   type BridgeConfig,
   type PermissionResponseEvent,
@@ -91,7 +91,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
   function resolveAuth(): string {
     const accessToken = deps.getAccessToken()
     if (!accessToken) {
-      throw new Error(BRIDGE_LOGIN_INSTRUCTION)
+      throw new Error(BRIDGE_UNAVAILABLE_INSTRUCTION)
     }
     return accessToken
   }
@@ -464,7 +464,7 @@ function handleErrorStatus(
   switch (status) {
     case 401:
       throw new BridgeFatalError(
-        `${context}: Authentication failed (401)${detail ? `: ${detail}` : ''}. ${BRIDGE_LOGIN_INSTRUCTION}`,
+        `${context}: Authentication failed (401)${detail ? `: ${detail}` : ''}. ${BRIDGE_UNAVAILABLE_INSTRUCTION}`,
         401,
         errorType,
       )

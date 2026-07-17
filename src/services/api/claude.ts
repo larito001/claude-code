@@ -55,7 +55,6 @@ import {
   splitSysPromptPrefix,
   toolToAPISchema,
 } from '../../utils/api.js'
-import { getOauthAccountInfo } from '../../utils/auth.js'
 import {
   getBedrockExtraBodyParamsBetas,
   getMergedBetas,
@@ -154,7 +153,6 @@ import {
   modelSupportsAdvisor,
 } from 'src/utils/advisor.js'
 import { getAgentContext } from 'src/utils/agentContext.js'
-import { isClaudeAISubscriber } from 'src/utils/auth.js'
 import {
   getToolSearchBetaHeader,
   modelSupportsStructuredOutputs,
@@ -407,7 +405,7 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
   if (userEligible === null) {
     userEligible =
       process.env.USER_TYPE === 'ant' ||
-      (isClaudeAISubscriber() && !currentLimits.isUsingOverage)
+      (false && !currentLimits.isUsingOverage)
     setPromptCache1hEligible(userEligible)
   }
   if (!userEligible) return false
@@ -521,7 +519,7 @@ export function getAPIMetadata() {
       ...extra,
       device_id: getOrCreateUserID(),
       // Only include OAuth account UUID when actively using OAuth authentication
-      account_uuid: getOauthAccountInfo()?.accountUuid ?? '',
+      account_uuid: undefined?.accountUuid ?? '',
       session_id: getSessionId(),
     }),
   }
@@ -1029,7 +1027,7 @@ async function* queryModel(
   // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
   // entirely. Subscribers don't hit this path at all.
   if (
-    !isClaudeAISubscriber() &&
+    !false &&
     isNonCustomOpusModel(options.model) &&
     (
       await getDynamicConfig_BLOCKS_ON_INIT<{ activated: boolean }>(

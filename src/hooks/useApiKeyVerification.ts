@@ -1,12 +1,7 @@
 import { useCallback, useState } from 'react'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'
 import { verifyApiKey } from '../services/api/claude.js'
-import {
-  getAnthropicApiKeyWithSource,
-  getApiKeyFromApiKeyHelper,
-  isAnthropicAuthEnabled,
-  isClaudeAISubscriber,
-} from '../utils/auth.js'
+import { getAnthropicApiKeyWithSource, getApiKeyFromApiKeyHelper } from '../utils/auth.js'
 
 export type VerificationStatus =
   | 'loading'
@@ -23,9 +18,6 @@ export type ApiKeyVerificationResult = {
 
 export function useApiKeyVerification(): ApiKeyVerificationResult {
   const [status, setStatus] = useState<VerificationStatus>(() => {
-    if (!isAnthropicAuthEnabled() || isClaudeAISubscriber()) {
-      return 'valid'
-    }
     // Use skipRetrievingKeyFromApiKeyHelper to avoid executing apiKeyHelper
     // before trust dialog is shown (security: prevents RCE via settings.json)
     const { key, source } = getAnthropicApiKeyWithSource({
@@ -41,10 +33,6 @@ export function useApiKeyVerification(): ApiKeyVerificationResult {
   const [error, setError] = useState<Error | null>(null)
 
   const verify = useCallback(async (): Promise<void> => {
-    if (!isAnthropicAuthEnabled() || isClaudeAISubscriber()) {
-      setStatus('valid')
-      return
-    }
     // Warm the apiKeyHelper cache (no-op if not configured), then read from
     // all sources. getAnthropicApiKeyWithSource() reads the now-warm cache.
     await getApiKeyFromApiKeyHelper(getIsNonInteractiveSession())

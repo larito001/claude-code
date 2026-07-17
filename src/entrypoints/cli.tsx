@@ -4,6 +4,13 @@ import { feature } from 'bun:bundle';
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 process.env.COREPACK_ENABLE_AUTO_PIN = '0';
 
+// DeepSeek exposes an Anthropic-compatible API, so the SDK still reads its
+// conventional variable internally. The user-facing development config keeps
+// the provider-specific name and takes precedence over inherited shell values.
+if (process.env.DEEPSEEK_API_KEY) {
+  process.env.ANTHROPIC_API_KEY = process.env.DEEPSEEK_API_KEY;
+}
+
 // 为 CCR 环境中的子进程设置最大堆内存（容器有 16GB 内存）
 // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level, custom-rules/safe-env-boolean-check
 if (process.env.CLAUDE_CODE_REMOTE === 'true') {

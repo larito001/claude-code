@@ -19,17 +19,11 @@ import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'
 import type { SDKControlResponse } from '../entrypoints/sdk/controlTypes.js'
 import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js'
-import { getOrganizationUUID } from '../utils/apiKeyAccount.js'
 import {
   isPolicyAllowed,
   waitForPolicyLimitsToLoad,
 } from '../services/policyLimits/index.js'
 import type { Message } from '../types/message.js'
-import {
-  checkAndRefreshOAuthTokenIfNeeded,
-  getClaudeAIOAuthTokens,
-  handleOAuth401Error,
-} from '../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
 import { logForDebugging } from '../utils/debug.js'
 import { stripDisplayTagsAllowEmpty } from '../utils/displayTags.js'
@@ -141,12 +135,10 @@ export async function initReplBridge(
   // since each implementation has its own floor (tengu_bridge_min_version
   // for v1, tengu_bridge_repl_v2_config.min_version for v2).
 
-  // 2. Check OAuth — must be signed in with claude.ai. Runs before the
-  // policy check so console-auth users get the actionable "/login" hint
-  // instead of a misleading policy error from a stale/wrong-org cache.
+  // 2. Account-backed bridge authentication is unavailable in this build.
   if (!getBridgeAccessToken()) {
     logBridgeSkip('no_oauth', '[bridge:repl] Skipping: no OAuth tokens')
-    onStateChange?.('failed', '/login')
+    onStateChange?.('failed', 'Remote Control is unavailable in this API-key-only build.')
     return null
   }
 
@@ -172,13 +164,12 @@ export async function initReplBridge(
     // server 5xx, lockfile errors per auth.ts:1437/1444/1485): each process
     // independently retries until 3 consecutive failures prove the token dead.
     // Mirrors useReplBridge's MAX_CONSECUTIVE_INIT_FAILURES for in-process.
-    // The expiresAt key is content-addressed: /login → new token → new expiresAt
-    // → this stops matching without any explicit clear.
+    // The expiresAt key is content-addressed, so a new token stops matching.
     const cfg = getGlobalConfig()
     if (
       cfg.bridgeOauthDeadExpiresAt != null &&
       (cfg.bridgeOauthDeadFailCount ?? 0) >= 3 &&
-      getClaudeAIOAuthTokens()?.expiresAt === cfg.bridgeOauthDeadExpiresAt
+      null?.expiresAt === cfg.bridgeOauthDeadExpiresAt
     ) {
       logForDebugging(
         `[bridge:repl] Skipping: cross-process backoff (dead token seen ${cfg.bridgeOauthDeadFailCount} times)`,
@@ -194,12 +185,6 @@ export async function initReplBridge(
     // at 30:1 401:200 when many unrelated users cluster at the 8h TTL boundary.
     //
     // Fresh-token cost: one memoized read + one Date.now() comparison (~µs).
-    // checkAndRefreshOAuthTokenIfNeeded clears its own cache in every path that
-    // touches the keychain (refresh success, lockfile race, throw), so no
-    // explicit clearOAuthTokenCache() here — that would force a blocking
-    // keychain spawn on the 91%+ fresh-token path.
-    await checkAndRefreshOAuthTokenIfNeeded()
-
     // 2c. Skip if token is still expired post-refresh-attempt. Env-var / FD
     // tokens (auth.ts:894-917) have expiresAt=null → never trip this. But a
     // keychain token whose refresh token is dead (password change, org left,
@@ -215,13 +200,13 @@ export async function initReplBridge(
     // + transient refresh endpoint blip (5xx/timeout/wifi-reconnect) would
     // falsely trip a buffered check; the still-valid token would connect fine.
     // Check actual expiry instead: past-expiry AND refresh-failed → truly dead.
-    const tokens = getClaudeAIOAuthTokens()
+    const tokens = null
     if (tokens && tokens.expiresAt !== null && tokens.expiresAt <= Date.now()) {
       logBridgeSkip(
         'oauth_expired_unrefreshable',
-        '[bridge:repl] Skipping: OAuth token expired and refresh failed (re-login required)',
+        '[bridge:repl] Skipping: account-backed authentication is unavailable',
       )
-      onStateChange?.('failed', '/login')
+      onStateChange?.('failed', 'Remote Control is unavailable in this API-key-only build.')
       // Persist for the next process. Increments failCount when re-discovering
       // the same dead token (matched by expiresAt); resets to 1 for a different
       // token. Once count reaches 3, step 2a's early-return fires and this path
@@ -387,10 +372,10 @@ export async function initReplBridge(
   // environment registration; v2 for archive (which lives at the compat
   // /v1/sessions/{id}/archive, not /v1/code/sessions). Without it, v2
   // archive 404s and sessions stay alive in CCR after /exit.
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = await null
   if (!orgUUID) {
     logBridgeSkip('no_org_uuid', '[bridge:repl] Skipping: no org UUID')
-    onStateChange?.('failed', '/login')
+    onStateChange?.('failed', 'Remote Control is unavailable in this API-key-only build.')
     return null
   }
 
@@ -427,7 +412,6 @@ export async function initReplBridge(
       orgUUID,
       title,
       getAccessToken: getBridgeAccessToken,
-      onAuth401: handleOAuth401Error,
       toSDKMessages,
       initialHistoryCap,
       initialMessages,
@@ -528,7 +512,6 @@ export async function initReplBridge(
     getCurrentTitle: () => getCurrentSessionTitle(getSessionId()) ?? title,
     onUserMessage,
     toSDKMessages,
-    onAuth401: handleOAuth401Error,
     getPollIntervalConfig,
     initialHistoryCap,
     initialMessages,

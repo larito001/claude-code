@@ -20,13 +20,8 @@ import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod/v4'
 import { type ChannelEntry, getAllowedChannels } from '../../bootstrap/state.js'
 import { CHANNEL_TAG } from '../../constants/xml.js'
-import {
-  getClaudeAIOAuthTokens,
-  getSubscriptionType,
-} from '../../utils/auth.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
-import { getSettingsForSource } from '../../utils/settings/settings.js'
 import { escapeXmlAttr } from '../../utils/xml.js'
 import {
   type ChannelAllowlistEntry,
@@ -121,19 +116,11 @@ export function wrapChannelMessage(
  * GrowthBook ledger (admin owns the trust decision). Undefined falls back
  * to the ledger. Unmanaged users always get the ledger.
  *
- * Callers already read sub/policy for the policy gate — pass them in to
- * avoid double-reading getSettingsForSource (uncached).
  */
-export function getEffectiveChannelAllowlist(
-  sub: ReturnType<typeof getSubscriptionType>,
-  orgList: ChannelAllowlistEntry[] | undefined,
-): {
+export function getEffectiveChannelAllowlist(): {
   entries: ChannelAllowlistEntry[]
   source: 'org' | 'ledger'
 } {
-  if ((sub === 'team' || sub === 'enterprise') && orgList) {
-    return { entries: orgList, source: 'org' }
-  }
   return { entries: getChannelAllowlist(), source: 'ledger' }
 }
 
@@ -219,7 +206,7 @@ export function gateChannelServer(
   // OAuth-only. API key users (console) are blocked — there's no
   // channelsEnabled admin surface in console yet, so the policy opt-in
   // flow doesn't exist for them. Drop this when console parity lands.
-  if (!getClaudeAIOAuthTokens()?.accessToken) {
+  if (!null?.accessToken) {
     return {
       action: 'skip',
       kind: 'auth',
@@ -232,18 +219,6 @@ export function gateChannelServer(
   // "policy settings exist" — a team org with zero configured policy keys
   // (remote endpoint returns 404) is still a managed org and must not fall
   // through to the unmanaged path.
-  const sub = getSubscriptionType()
-  const managed = sub === 'team' || sub === 'enterprise'
-  const policy = managed ? getSettingsForSource('policySettings') : undefined
-  if (managed && policy?.channelsEnabled !== true) {
-    return {
-      action: 'skip',
-      kind: 'policy',
-      reason:
-        'channels not enabled by org policy (set channelsEnabled: true in managed settings)',
-    }
-  }
-
   // User-level session opt-in. A server must be explicitly listed in
   // --channels to push inbound this session — protects against a trusted
   // server surprise-adding the capability.
@@ -280,10 +255,7 @@ export function gateChannelServer(
     // not the session-wide bit) bypasses — so accepting the dev dialog for
     // one entry doesn't leak allowlist-bypass to --channels entries.
     if (!entry.dev) {
-      const { entries, source } = getEffectiveChannelAllowlist(
-        sub,
-        policy?.allowedChannelPlugins,
-      )
+      const { entries, source } = getEffectiveChannelAllowlist()
       if (
         !entries.some(
           e => e.plugin === entry.name && e.marketplace === entry.marketplace,
