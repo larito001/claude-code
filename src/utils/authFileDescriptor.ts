@@ -1,10 +1,4 @@
 import { mkdirSync, writeFileSync } from 'fs'
-import {
-  getApiKeyFromFd,
-  getOauthTokenFromFd,
-  setApiKeyFromFd,
-  setOauthTokenFromFd,
-} from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
 import { isEnvTruthy } from './envUtils.js'
 import { errorMessage, isENOENT } from './errors.js'
@@ -18,8 +12,6 @@ import { getFsImplementation } from './fsOperations.js'
  * the FD — which they can't: pipe FDs don't cross tmux/shell boundaries.
  */
 const CCR_TOKEN_DIR = '/home/claude/.claude/remote'
-export const CCR_OAUTH_TOKEN_PATH = `${CCR_TOKEN_DIR}/.oauth_token`
-export const CCR_API_KEY_PATH = `${CCR_TOKEN_DIR}/.api_key`
 export const CCR_SESSION_INGRESS_TOKEN_PATH = `${CCR_TOKEN_DIR}/.session_ingress_token`
 
 /**
@@ -94,103 +86,3 @@ export function readTokenFromWellKnownFile(
  *
  * Returns null if neither source has a credential. Cached in global state.
  */
-function getCredentialFromFd({
-  envVar,
-  wellKnownPath,
-  label,
-  getCached,
-  setCached,
-}: {
-  envVar: string
-  wellKnownPath: string
-  label: string
-  getCached: () => string | null | undefined
-  setCached: (value: string | null) => void
-}): string | null {
-  const cached = getCached()
-  if (cached !== undefined) {
-    return cached
-  }
-
-  const fdEnv = process.env[envVar]
-  if (!fdEnv) {
-    // No FD env var — either we're not in CCR, or we're a subprocess whose
-    // parent stripped the (useless) FD env var. Try the well-known file.
-    const fromFile = readTokenFromWellKnownFile(wellKnownPath, label)
-    setCached(fromFile)
-    return fromFile
-  }
-
-  const fd = parseInt(fdEnv, 10)
-  if (Number.isNaN(fd)) {
-    logForDebugging(
-      `${envVar} must be a valid file descriptor number, got: ${fdEnv}`,
-      { level: 'error' },
-    )
-    setCached(null)
-    return null
-  }
-
-  try {
-    // Use /dev/fd on macOS/BSD, /proc/self/fd on Linux
-    const fsOps = getFsImplementation()
-    const fdPath =
-      process.platform === 'darwin' || process.platform === 'freebsd'
-        ? `/dev/fd/${fd}`
-        : `/proc/self/fd/${fd}`
-
-    // eslint-disable-next-line custom-rules/no-sync-fs -- legacy FD path, read once at startup, caller is sync
-    const token = fsOps.readFileSync(fdPath, { encoding: 'utf8' }).trim()
-    if (!token) {
-      logForDebugging(`File descriptor contained empty ${label}`, {
-        level: 'error',
-      })
-      setCached(null)
-      return null
-    }
-    logForDebugging(`Successfully read ${label} from file descriptor ${fd}`)
-    setCached(token)
-    maybePersistTokenForSubprocesses(wellKnownPath, token, label)
-    return token
-  } catch (error) {
-    logForDebugging(
-      `Failed to read ${label} from file descriptor ${fd}: ${errorMessage(error)}`,
-      { level: 'error' },
-    )
-    // FD env var was set but read failed — typically a subprocess that
-    // inherited the env var but not the FD (ENXIO). Try the well-known file.
-    const fromFile = readTokenFromWellKnownFile(wellKnownPath, label)
-    setCached(fromFile)
-    return fromFile
-  }
-}
-
-/**
- * Get the CCR-injected OAuth token. See getCredentialFromFd for FD-vs-disk
- * rationale. Env var: CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR.
- * Well-known file: /home/claude/.claude/remote/.oauth_token.
- */
-export function getOAuthTokenFromFileDescriptor(): string | null {
-  return getCredentialFromFd({
-    envVar: 'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
-    wellKnownPath: CCR_OAUTH_TOKEN_PATH,
-    label: 'OAuth token',
-    getCached: getOauthTokenFromFd,
-    setCached: setOauthTokenFromFd,
-  })
-}
-
-/**
- * Get the CCR-injected API key. See getCredentialFromFd for FD-vs-disk
- * rationale. Env var: CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR.
- * Well-known file: /home/claude/.claude/remote/.api_key.
- */
-export function getApiKeyFromFileDescriptor(): string | null {
-  return getCredentialFromFd({
-    envVar: 'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR',
-    wellKnownPath: CCR_API_KEY_PATH,
-    label: 'API key',
-    getCached: getApiKeyFromFd,
-    setCached: setApiKeyFromFd,
-  })
-}

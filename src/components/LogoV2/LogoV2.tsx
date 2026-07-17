@@ -27,14 +27,6 @@ import { VoiceModeNotice } from './VoiceModeNotice.js';
 import { Opus1mMergeNotice } from './Opus1mMergeNotice.js';
 import { feature } from 'bun:bundle';
 
-// Conditional require so ChannelsNotice.tsx tree-shakes when both flags are
-// false. A module-scope helper component inside a feature() ternary does NOT
-// tree-shake (docs/feature-gating.md); the require pattern eliminates the
-// whole file. VoiceModeNotice uses the unsafe helper pattern but VOICE_MODE
-// is external: true so it's moot there.
-/* eslint-disable @typescript-eslint/no-require-imports */
-const ChannelsNoticeModule = feature('KAIROS') || feature('KAIROS_CHANNELS') ? require('./ChannelsNotice.js') as typeof import('./ChannelsNotice.js') : null;
-/* eslint-enable @typescript-eslint/no-require-imports */
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
 import { useShowGuestPassesUpsell, incrementGuestPassesSeenCount } from './GuestPassesUpsell.js';
 import { useShowOverageCreditUpsell, incrementOverageCreditUpsellSeenCount, createOverageCreditFeed } from './OverageCreditUpsell.js';
@@ -188,7 +180,7 @@ export function LogoV2() {
       t11 = <CondensedLogo />;
       t12 = <VoiceModeNotice />;
       t13 = <Opus1mMergeNotice />;
-      t14 = ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />;
+      t14 = null;
       t15 = isDebugMode() && <Box paddingLeft={2} flexDirection="column"><Text color="warning">Debug mode enabled</Text><Text dimColor={true}>Logging to: {isDebugToStdErr() ? "stderr" : getDebugLogPath()}</Text></Box>;
       t16 = <EmergencyTip />;
       t17 = process.env.CLAUDE_CODE_TMUX_SESSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>tmux session: {process.env.CLAUDE_CODE_TMUX_SESSION}</Text><Text dimColor={true}>{process.env.CLAUDE_CODE_TMUX_PREFIX_CONFLICTS ? `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} ${process.env.CLAUDE_CODE_TMUX_PREFIX} d (press prefix twice - Claude uses ${process.env.CLAUDE_CODE_TMUX_PREFIX})` : `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} d`}</Text></Box>;
@@ -298,7 +290,7 @@ export function LogoV2() {
     if ($[37] === Symbol.for("react.memo_cache_sentinel")) {
       t14 = <VoiceModeNotice />;
       t15 = <Opus1mMergeNotice />;
-      t16 = ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />;
+      t16 = null;
       $[37] = t14;
       $[38] = t15;
       $[39] = t16;
@@ -459,7 +451,7 @@ export function LogoV2() {
   if ($[75] === Symbol.for("react.memo_cache_sentinel")) {
     t29 = <VoiceModeNotice />;
     t30 = <Opus1mMergeNotice />;
-    t31 = ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />;
+    t31 = null;
     t32 = isDebugMode() && <Box paddingLeft={2} flexDirection="column"><Text color="warning">Debug mode enabled</Text><Text dimColor={true}>Logging to: {isDebugToStdErr() ? "stderr" : getDebugLogPath()}</Text></Box>;
     t33 = <EmergencyTip />;
     t34 = process.env.CLAUDE_CODE_TMUX_SESSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>tmux session: {process.env.CLAUDE_CODE_TMUX_SESSION}</Text><Text dimColor={true}>{process.env.CLAUDE_CODE_TMUX_PREFIX_CONFLICTS ? `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} ${process.env.CLAUDE_CODE_TMUX_PREFIX} d (press prefix twice - Claude uses ${process.env.CLAUDE_CODE_TMUX_PREFIX})` : `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} d`}</Text></Box>;

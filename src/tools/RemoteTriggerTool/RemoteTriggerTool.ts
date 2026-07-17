@@ -2,7 +2,7 @@ import axios from 'axios'
 import { z } from 'zod/v4'
 import { getOauthConfig } from '../../constants/oauth.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import { getOrganizationUUID } from '../../services/oauth/client.js'
+import { getOrganizationUUID } from '../../utils/apiKeyAccount.js'
 import { isPolicyAllowed } from '../../services/policyLimits/index.js'
 import type { ToolUseContext } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
@@ -80,7 +80,7 @@ export const RemoteTriggerTool = buildTool({
     const accessToken = getClaudeAIOAuthTokens()?.accessToken
     if (!accessToken) {
       throw new Error(
-        'Not authenticated with a claude.ai account. Run /login and try again.',
+        'Remote triggers are unavailable in this API-key-only build.',
       )
     }
     const orgUUID = await getOrganizationUUID()

@@ -4,6 +4,7 @@ dist/
 bun.lock
 bun.lockb
 .DS_Store
+.idea/
 .bun/
 .bun-cache*/
 .env.deepseek.local

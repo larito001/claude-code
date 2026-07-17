@@ -16,8 +16,6 @@ import {
   clearApiKeyHelperCache,
   clearAwsCredentialsCache,
   clearGcpCredentialsCache,
-  getClaudeAIOAuthTokens,
-  handleOAuth401Error,
   isClaudeAISubscriber,
   isEnterpriseSubscriber,
 } from '../../utils/auth.js'
@@ -232,21 +230,10 @@ export async function* withRetry<T>(
       if (
         client === null ||
         (lastError instanceof APIError && lastError.status === 401) ||
-        isOAuthTokenRevokedError(lastError) ||
         isBedrockAuthError(lastError) ||
         isVertexAuthError(lastError) ||
         isStaleConnection
       ) {
-        // On 401 "token expired" or 403 "token revoked", force a token refresh
-        if (
-          (lastError instanceof APIError && lastError.status === 401) ||
-          isOAuthTokenRevokedError(lastError)
-        ) {
-          const failedAccessToken = getClaudeAIOAuthTokens()?.accessToken
-          if (failedAccessToken) {
-            await handleOAuth401Error(failedAccessToken)
-          }
-        }
         client = await getClient()
       }
 
@@ -620,14 +607,6 @@ export function is529Error(error: unknown): boolean {
   )
 }
 
-function isOAuthTokenRevokedError(error: unknown): boolean {
-  return (
-    error instanceof APIError &&
-    error.status === 403 &&
-    (error.message?.includes('OAuth token has been revoked') ?? false)
-  )
-}
-
 function isBedrockAuthError(error: unknown): boolean {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) {
     // AWS libs reject without an API call if .aws holds a past Expiration value
@@ -769,14 +748,8 @@ function shouldRetry(error: APIError): boolean {
   }
 
   // Clear API key cache on 401 and allow retry.
-  // OAuth token handling is done in the main retry loop via handleOAuth401Error.
   if (error.status === 401) {
     clearApiKeyHelperCache()
-    return true
-  }
-
-  // Retry on 403 "token revoked" (same refresh logic as 401, see above)
-  if (isOAuthTokenRevokedError(error)) {
     return true
   }
 

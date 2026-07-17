@@ -1,7 +1,7 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { randomUUID } from 'crypto'
 import { getOauthConfig } from 'src/constants/oauth.js'
-import { getOrganizationUUID } from 'src/services/oauth/client.js'
+import { getOrganizationUUID } from 'src/utils/apiKeyAccount.js'
 import z from 'zod/v4'
 import { getClaudeAIOAuthTokens } from '../auth.js'
 import { logForDebugging } from '../debug.js'
@@ -185,7 +185,7 @@ export async function prepareApiRequest(): Promise<{
   const accessToken = getClaudeAIOAuthTokens()?.accessToken
   if (accessToken === undefined) {
     throw new Error(
-      'Claude Code web sessions require authentication with a Claude.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.',
+      'Claude Code web sessions are unavailable in this API-key-only build.',
     )
   }
 
@@ -314,7 +314,7 @@ export async function fetchSession(
     }
 
     if (response.status === 401) {
-      throw new Error('Session expired. Please run /login to sign in again.')
+      throw new Error('Claude Code web sessions are unavailable in this API-key-only build.')
     }
 
     throw new Error(

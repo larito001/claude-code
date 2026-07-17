@@ -19,7 +19,7 @@ import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'
 import type { SDKControlResponse } from '../entrypoints/sdk/controlTypes.js'
 import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js'
-import { getOrganizationUUID } from '../services/oauth/client.js'
+import { getOrganizationUUID } from '../utils/apiKeyAccount.js'
 import {
   isPolicyAllowed,
   waitForPolicyLimitsToLoad,

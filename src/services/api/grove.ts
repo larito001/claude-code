@@ -14,7 +14,7 @@ import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import {
   getAuthHeaders,
   getUserAgent,
-  withOAuth401Retry,
+  withAuthRequest,
 } from '../../utils/http.js'
 import { logError } from '../../utils/log.js'
 import { getClaudeCodeUserAgent } from '../../utils/userAgent.js'
@@ -56,7 +56,7 @@ export const getGroveSettings = memoize(
       return { success: false }
     }
     try {
-      const response = await withOAuth401Retry(() => {
+      const response = await withAuthRequest(() => {
         const authHeaders = getAuthHeaders()
         if (authHeaders.error) {
           throw new Error(`Failed to get auth headers: ${authHeaders.error}`)
@@ -89,7 +89,7 @@ export const getGroveSettings = memoize(
  */
 export async function markGroveNoticeViewed(): Promise<void> {
   try {
-    await withOAuth401Retry(() => {
+    await withAuthRequest(() => {
       const authHeaders = getAuthHeaders()
       if (authHeaders.error) {
         throw new Error(`Failed to get auth headers: ${authHeaders.error}`)
@@ -121,7 +121,7 @@ export async function updateGroveSettings(
   groveEnabled: boolean,
 ): Promise<void> {
   try {
-    await withOAuth401Retry(() => {
+    await withAuthRequest(() => {
       const authHeaders = getAuthHeaders()
       if (authHeaders.error) {
         throw new Error(`Failed to get auth headers: ${authHeaders.error}`)
@@ -236,7 +236,7 @@ export const getGroveNoticeConfig = memoize(
       return { success: false }
     }
     try {
-      const response = await withOAuth401Retry(() => {
+      const response = await withAuthRequest(() => {
         const authHeaders = getAuthHeaders()
         if (authHeaders.error) {
           throw new Error(`Failed to get auth headers: ${authHeaders.error}`)

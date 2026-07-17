@@ -3,7 +3,7 @@ import { hasProfileScope, isClaudeAISubscriber } from '../../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { errorMessage } from '../../utils/errors.js'
-import { getAuthHeaders, withOAuth401Retry } from '../../utils/http.js'
+import { getAuthHeaders, withAuthRequest } from '../../utils/http.js'
 import { logError } from '../../utils/log.js'
 import { memoizeWithTTLAsync } from '../../utils/memoize.js'
 import { isEssentialTrafficOnly } from '../../utils/privacyLevel.js'
@@ -59,9 +59,7 @@ async function _checkMetricsEnabledAPI(): Promise<MetricsStatus> {
   }
 
   try {
-    const data = await withOAuth401Retry(_fetchMetricsEnabled, {
-      also403Revoked: true,
-    })
+    const data = await withAuthRequest(_fetchMetricsEnabled)
 
     logForDebugging(
       `Metrics opt-out API response: enabled=${data.metrics_logging_enabled}`,

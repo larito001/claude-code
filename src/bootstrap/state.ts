@@ -84,8 +84,6 @@ type State = {
   flagSettingsInline: Record<string, unknown> | null
   allowedSettingSources: SettingSource[]
   sessionIngressToken: string | null | undefined
-  oauthTokenFromFd: string | null | undefined
-  apiKeyFromFd: string | null | undefined
   // Telemetry state
   meter: Meter | null
   sessionCounter: AttributedCounter | null
@@ -212,7 +210,7 @@ type State = {
   // Either kind needs entry.dev to bypass allowlist.
   allowedChannels: ChannelEntry[]
   // True if any entry in allowedChannels came from
-  // --dangerously-load-development-channels (so ChannelsNotice can name the
+  // --dangerously-load-development-channels (so channel gating can name the
   // right flag in policy-blocked messages)
   hasDevChannels: boolean
   // Dir containing the session's `.jsonl`; null = derive from originalCwd.
@@ -306,8 +304,6 @@ function getInitialState(): State {
     sessionSource: undefined,
     questionPreviewFormat: undefined,
     sessionIngressToken: undefined,
-    oauthTokenFromFd: undefined,
-    apiKeyFromFd: undefined,
     flagSettingsPath: undefined,
     flagSettingsInline: null,
     allowedSettingSources: [
@@ -1153,22 +1149,6 @@ export function getSessionIngressToken(): string | null | undefined {
 
 export function setSessionIngressToken(token: string | null): void {
   STATE.sessionIngressToken = token
-}
-
-export function getOauthTokenFromFd(): string | null | undefined {
-  return STATE.oauthTokenFromFd
-}
-
-export function setOauthTokenFromFd(token: string | null): void {
-  STATE.oauthTokenFromFd = token
-}
-
-export function getApiKeyFromFd(): string | null | undefined {
-  return STATE.apiKeyFromFd
-}
-
-export function setApiKeyFromFd(key: string | null): void {
-  STATE.apiKeyFromFd = key
 }
 
 export function setLastAPIRequest(

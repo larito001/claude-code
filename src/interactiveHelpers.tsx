@@ -239,7 +239,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   // is NOT bypassed — gateChannelServer() still runs; this flag only exists
   // to sidestep the --channels approved-server allowlist.
   if (feature('KAIROS') || feature('KAIROS_CHANNELS')) {
-    // gateChannelServer and ChannelsNotice read tengu_harbor after this
+    // Channel gating reads tengu_harbor after this
     // function returns. A cold disk cache (fresh install, or first run after
     // the flag was added server-side) defaults to false and silently drops
     // channel notifications for the whole session — gh#37026.
@@ -258,9 +258,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       }] = await Promise.all([import('./services/mcp/channelAllowlist.js'), import('./utils/auth.js')]);
       // Skip the dialog when channels are blocked (tengu_harbor off or no
       // OAuth) — accepting then immediately seeing "not available" in
-      // ChannelsNotice is worse than no dialog. Append entries anyway so
-      // ChannelsNotice renders the blocked branch with the dev entries
-      // named. dev:true here is for the flag label in ChannelsNotice
+      // Append development entries so channel gating can name them.
       // (hasNonDev check); the allowlist bypass it also grants is moot
       // since the gate blocks upstream.
       if (!isChannelsEnabled() || !getClaudeAIOAuthTokens()?.accessToken) {

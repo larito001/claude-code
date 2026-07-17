@@ -89,7 +89,7 @@ export async function resolveAttachments(
     // Headless/SDK callers never set appState.replBridgeEnabled (only the TTY
     // REPL does, at main.tsx init). CLAUDE_CODE_BRIEF_UPLOAD lets a host that
     // runs the CLI as a subprocess opt in — e.g. the cowork desktop bridge,
-    // which already passes CLAUDE_CODE_OAUTH_TOKEN for auth.
+    // which already passes the configured API credentials.
     const shouldUpload =
       uploadCtx.replBridgeEnabled ||
       isEnvTruthy(process.env.CLAUDE_CODE_BRIEF_UPLOAD)

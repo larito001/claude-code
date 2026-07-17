@@ -14,7 +14,7 @@ import type { Root } from '../ink.js';
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js';
 import { queryHaiku } from '../services/api/claude.js';
 import { getSessionLogsViaOAuth, getTeleportEvents } from '../services/api/sessionIngress.js';
-import { getOrganizationUUID } from '../services/oauth/client.js';
+import { getOrganizationUUID } from './apiKeyAccount.js';
 import { AppStateProvider } from '../state/AppState.js';
 import type { Message, SystemMessage } from '../types/message.js';
 import type { PermissionMode } from '../types/permissions.js';
@@ -438,7 +438,7 @@ export async function teleportResumeCodeSession(sessionId: string, onProgress?: 
       logEvent('tengu_teleport_resume_error', {
         error_type: 'no_access_token' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
-      throw new Error('Claude Code web sessions require authentication with a Claude.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.');
+      throw new Error('Claude Code web sessions are unavailable in this API-key-only build.');
     }
 
     // Get organization UUID

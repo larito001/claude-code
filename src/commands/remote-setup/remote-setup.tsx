@@ -95,7 +95,7 @@ function Web({
           logEvent('tengu_remote_setup_result', {
             result: 'not_signed_in' as SafeString
           });
-          onDone('Not signed in to Claude. Run /login first.');
+          onDone('Remote setup is unavailable in this API-key-only build.');
           return;
         case 'gh_not_installed':
         case 'gh_not_authenticated':

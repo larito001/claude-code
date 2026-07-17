@@ -16,7 +16,6 @@ import type {
 } from 'src/types/message.js'
 import {
   getAnthropicApiKeyWithSource,
-  getClaudeAIOAuthTokens,
   getOauthAccountInfo,
   isClaudeAISubscriber,
 } from 'src/utils/auth.js'
@@ -56,7 +55,7 @@ export const API_ERROR_MESSAGE_PREFIX = 'API Error'
 export function startsWithApiErrorPrefix(text: string): boolean {
   return (
     text.startsWith(API_ERROR_MESSAGE_PREFIX) ||
-    text.startsWith(`Please run /login · ${API_ERROR_MESSAGE_PREFIX}`)
+    text.startsWith(`Check ANTHROPIC_API_KEY · ${API_ERROR_MESSAGE_PREFIX}`)
   )
 }
 export const PROMPT_TOO_LONG_ERROR_MESSAGE = 'Prompt is too long'
@@ -152,15 +151,12 @@ export function isMediaSizeErrorMessage(msg: AssistantMessage): boolean {
   )
 }
 export const CREDIT_BALANCE_TOO_LOW_ERROR_MESSAGE = 'Credit balance is too low'
-export const INVALID_API_KEY_ERROR_MESSAGE = 'Not logged in · Please run /login'
+export const INVALID_API_KEY_ERROR_MESSAGE =
+  'Missing API key · Set ANTHROPIC_API_KEY and restart'
 export const INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL =
   'Invalid API key · Fix external API key'
-export const ORG_DISABLED_ERROR_MESSAGE_ENV_KEY_WITH_OAUTH =
-  'Your ANTHROPIC_API_KEY belongs to a disabled organization · Unset the environment variable to use your subscription instead'
 export const ORG_DISABLED_ERROR_MESSAGE_ENV_KEY =
   'Your ANTHROPIC_API_KEY belongs to a disabled organization · Update or unset the environment variable'
-export const TOKEN_REVOKED_ERROR_MESSAGE =
-  'OAuth token revoked · Please run /login'
 export const CCR_AUTH_ERROR_MESSAGE =
   'Authentication error · This may be a temporary network issue, please try again'
 export const REPEATED_529_ERROR_MESSAGE = 'Repeated 529 Overloaded errors'
@@ -194,21 +190,6 @@ export function getRequestTooLargeErrorMessage(): string {
     ? `Request too large (${limits}). Try with a smaller file.`
     : `Request too large (${limits}). Double press esc to go back and try with a smaller file.`
 }
-export const OAUTH_ORG_NOT_ALLOWED_ERROR_MESSAGE =
-  'Your account does not have access to Claude Code. Please run /login.'
-
-export function getTokenRevokedErrorMessage(): string {
-  return getIsNonInteractiveSession()
-    ? 'Your account does not have access to Claude. Please login again or contact your administrator.'
-    : TOKEN_REVOKED_ERROR_MESSAGE
-}
-
-export function getOauthOrgNotAllowedErrorMessage(): string {
-  return getIsNonInteractiveSession()
-    ? 'Your organization does not have access to Claude. Please login again or contact your administrator.'
-    : OAUTH_ORG_NOT_ALLOWED_ERROR_MESSAGE
-}
-
 /**
  * Check if we're in CCR (Claude Code Remote) mode.
  * In CCR mode, auth is handled via JWTs provided by the infrastructure,
@@ -742,7 +723,7 @@ export function getAssistantMessageFromError(
   ) {
     return createAssistantAPIErrorMessage({
       content:
-        'Claude Opus is not available with the Claude Pro plan. If you have updated your subscription plan recently, run /logout and /login for the plan to take effect.',
+        'Claude Opus is unavailable for the current API key.',
       error: 'invalid_request',
     })
   }
@@ -797,15 +778,9 @@ export function getAssistantMessageFromError(
       process.env.ANTHROPIC_API_KEY &&
       !isClaudeAISubscriber()
     ) {
-      const hasStoredOAuth = getClaudeAIOAuthTokens()?.accessToken != null
-      // Not 'authentication_failed' — that triggers VS Code's showLogin(), but
-      // login can't fix this (approved env var keeps overriding OAuth). The fix
-      // is configuration-based (unset the var), so invalid_request is correct.
       return createAssistantAPIErrorMessage({
         error: 'invalid_request',
-        content: hasStoredOAuth
-          ? ORG_DISABLED_ERROR_MESSAGE_ENV_KEY_WITH_OAUTH
-          : ORG_DISABLED_ERROR_MESSAGE_ENV_KEY,
+        content: ORG_DISABLED_ERROR_MESSAGE_ENV_KEY,
       })
     }
   }
@@ -878,7 +853,7 @@ export function getAssistantMessageFromError(
       error: 'authentication_failed',
       content: getIsNonInteractiveSession()
         ? `Failed to authenticate. ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`
-        : `Please run /login · ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`,
+        : `Check ANTHROPIC_API_KEY · ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`,
     })
   }
 
