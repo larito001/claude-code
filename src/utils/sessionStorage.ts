@@ -1,9 +1,9 @@
 import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
 import type { Dirent } from 'fs'
-// Sync fs primitives for readFileTailSync — separate from fs/promises
-// imports above. Named (not wildcard) per CLAUDE.md style; no collisions
-// with the async-suffixed names.
+// readFileTailSync 的同步 fs 原语 — 与 fs/promises 分开
+// 以上进口。按照 CLAUDE.md 风格命名（不是通配符）；没有碰撞
+// 带有 async 后缀的名称。
 import { closeSync, fstatSync, openSync, readSync } from 'fs'
 import {
   appendFile as fsAppendFile,
@@ -94,8 +94,8 @@ import { jsonParse, jsonStringify } from './slowOperations.js'
 import type { ContentReplacementRecord } from './toolResultStorage.js'
 import { validateUuid } from './uuid.js'
 
-// Cache MACRO.VERSION at module level to work around bun --define bug in async contexts
-// See: https://github.com/oven-sh/bun/issues/26168
+// 在模块级别缓存 MACRO.VERSION 以解决异步上下文中的 Bun --define bug
+// 请参阅：https://github.com/oven-sh/bun/issues/26168
 const VERSION = typeof MACRO !== 'undefined' ? MACRO.VERSION : 'unknown'
 
 type Transcript = (
@@ -105,21 +105,21 @@ type Transcript = (
   | SystemMessage
 )[]
 
-// Use getOriginalCwd() at each call site instead of capturing at module load
-// time. getCwd() at import time may run before bootstrap resolves symlinks via
-// realpathSync, causing a different sanitized project directory than what
-// getOriginalCwd() returns after bootstrap. This split-brain made sessions
-// saved under one path invisible when loaded via the other.
+// 在每个调用站点使用 getOriginalCwd() 而不是在模块加载时捕获
+// 时间。导入时的 getCwd() 可能会在引导程序解析符号链接之前运行
+// realpathSync，导致与之前不同的清理后的项目目录
+// getOriginalCwd() 在引导后返回。这个裂脑会议
+// 保存在一个路径下，通过另一路径加载时不可见。
 
 /**
- * Pre-compiled regex to skip non-meaningful messages when extracting first prompt.
- * Matches anything starting with a lowercase XML-like tag (IDE context, hook
- * output, task notifications, channel messages, etc.) or a synthetic interrupt
- * marker. Kept in sync with sessionStoragePortable.ts — generic pattern avoids
- * an ever-growing allowlist that falls behind as new notification types ship.
+ * 预编译的正则表达式可在提取第一个提示时跳过无意义的消息。
+ * 匹配以小写 XML 类标记开头的任何内容（IDE 上下文、钩子
+ * 输出、任务通知、通道消息等）或合成中断
+ * 标记。与 sessionStoragePortable.ts 保持同步 — 避免通用模式
+ * 随着新通知类型的发布，许可名单不断增长，但逐渐落后。
  */
-// 50MB — prevents OOM in the tombstone slow path which reads + rewrites the
-// entire session file. Session files can grow to multiple GB (inc-3930).
+// 50MB — 防止逻辑删除慢速路径中的 OOM 读取+重写
+// 整个会话文件。会话文件可以增长到多个 GB (inc-3930)。
 const MAX_TOMBSTONE_REWRITE_BYTES = 50 * 1024 * 1024
 
 const SKIP_FIRST_PROMPT_PATTERN =
@@ -127,14 +127,14 @@ const SKIP_FIRST_PROMPT_PATTERN =
 
 /**
  * Type guard to check if an entry is a transcript message.
- * Transcript messages include user, assistant, attachment, and system messages.
- * IMPORTANT: This is the single source of truth for what constitutes a transcript message.
- * loadTranscriptFile() uses this to determine which messages to load into the chain.
+ * 转录消息包括用户消息、助理消息、附件消息和系统消息。
+ * 重要提示：这是构成转录消息的唯一事实来源。
+ * loadTranscriptFile() 使用它来确定将哪些消息加载到链中。
  *
- * Progress messages are NOT transcript messages. They are ephemeral UI state
- * and must not be persisted to the JSONL or participate in the parentUuid
- * chain. Including them caused chain forks that orphaned real conversation
- * messages on resume (see #14373, #23537).
+ * 进度消息不是转录消息。它们是短暂的 UI 状态
+ * 并且不得持久化到 JSONL 或参与parentUuid
+ * 链。包括他们在内会导致链分叉，从而孤立真正的对话
+ * 简历上的消息（请参阅#14373、#23537）。
  */
 export function isTranscriptMessage(entry: Entry): entry is TranscriptMessage {
   return (
@@ -146,10 +146,10 @@ export function isTranscriptMessage(entry: Entry): entry is TranscriptMessage {
 }
 
 /**
- * Entries that participate in the parentUuid chain. Used on the write path
- * (insertMessageChain, useLogMessages) to skip progress when assigning
- * parentUuid. Old transcripts with progress already in the chain are handled
- * by the progressBridge rewrite in loadTranscriptFile.
+ * 参与parentUuid链的条目。用于写入路径
+ * (insertMessageChain, useLogMessages) 分配时跳过进度
+ * 父Uuid。处理已在链中取得进展的旧成绩单
+ * 通过loadTranscriptFile中的progressBridge重写。
  */
 export function isChainParticipant(m: Pick<Message, 'type'>): boolean {
   return m.type !== 'progress'
@@ -162,9 +162,9 @@ type LegacyProgressEntry = {
 }
 
 /**
- * Progress entries in transcripts written before PR #24099. They are not
- * in the Entry type union anymore but still exist on disk with uuid and
- * parentUuid fields. loadTranscriptFile bridges the chain across them.
+ * PR #24099 之前编写的成绩单中的进度条目。他们不是
+ * 不再存在于 Entry 类型联合中，但仍以 uuid 存在于磁盘上并且
+ * ParentUuid 字段。 loadTranscriptFile 在它们之间架起了桥梁。
  */
 function isLegacyProgressEntry(entry: unknown): entry is LegacyProgressEntry {
   return (
@@ -178,10 +178,10 @@ function isLegacyProgressEntry(entry: unknown): entry is LegacyProgressEntry {
 }
 
 /**
- * High-frequency tool progress ticks (1/sec for Sleep, per-chunk for Bash).
- * These are UI-only: not sent to the API, not rendered after the tool
- * completes. Used by REPL.tsx to replace-in-place instead of appending, and
- * by loadTranscriptFile to skip legacy entries from old transcripts.
+ * 高频工具进度刻度（Sleep 为 1/秒，Bash 为每块）。
+ * 这些仅用于 UI：不发送到 API，不在工具之后呈现
+ * 完成。由 REPL.tsx 用于就地替换而不是附加，以及
+ * 通过 loadTranscriptFile 跳过旧记录中的遗留条目。
  */
 const EPHEMERAL_PROGRESS_TYPES = new Set([
   'bash_progress',
@@ -3259,18 +3259,18 @@ async function scanPreBoundaryMetadata(
  */
 
 /**
- * Disambiguate multiple `"uuid":"<36>","timestamp":"` matches in one line by
- * finding the one at JSON nesting depth 1. String-aware brace counter:
- * `{`/`}` inside string values don't count; `\"` and `\\` inside strings are
- * handled. Candidates is sorted ascending (the scan loop produces them in
- * byte order). Returns the first depth-1 candidate, or the last candidate if
- * none are at depth 1 (shouldn't happen for well-formed JSONL — depth-1 is
- * where the top-level object's fields live).
+ * 通过以下方式消除一行中多个 `"uuid":"<36>","timestamp":"` 匹配的歧义
+ * 在 JSON 嵌套深度 1 处找到一个。字符串感知大括号计数器：
+ * 字符串值内的 `{`/`}` 不计入在内；字符串内的 `\"` 和 `\\` 是
+ * 处理。候选者按升序排序（扫描循环产生它们
+ * 字节顺序）。返回第一个深度 1 候选者，或者最后一个候选者，如果
+ * 没有一个位于深度 1（对于格式良好的 JSONL 来说不应该发生 — 深度 1 是
+ * 顶级对象的字段所在的位置）。
  *
- * Only called when ≥2 suffix matches exist (agent_progress with a nested
- * Message, or mcpMeta with a coincidentally-suffixed object). Cost is
- * O(max(candidates) - lineStart) — one forward byte pass, stopping at the
- * first depth-1 hit.
+ * 仅当存在≥2个后缀匹配时调用（带有嵌套的agent_progress
+ * 消息，或具有一致后缀的对象的 mcpMeta）。成本是
+ * O(max(candidates) - lineStart) — 一个正向字节传递，停在
+ * 第一次深度 1 命中。
  */
 function pickDepthOneUuidCandidate(
   buf: Buffer,
@@ -3316,10 +3316,10 @@ function walkChainBeforeParse(buf: Buffer): Buffer {
   const PREFIX_LEN = PARENT_PREFIX.length
   const KEY_LEN = UUID_KEY.length
 
-  // Stride-3 flat index of transcript messages: [lineStart, lineEnd, parentStart].
-  // parentStart is the byte offset of the parent uuid's first char, or -1 for null.
-  // Metadata lines (summary, mode, file-history-snapshot, etc.) go in metaRanges
-  // unfiltered - they lack the parentUuid prefix and downstream needs all of them.
+  // 转录消息的 Stride-3 平面索引：[lineStart、lineEnd、parentStart]。
+  // ParentStart 是父 uuid 的第一个字符的字节偏移量，或者 -1 表示 null。
+  // 元数据行（摘要、模式、文件历史记录快照等）位于 metaRanges 中
+  // 未过滤 - 它们缺少parentUuid 前缀，下游需要所有这些前缀。
   const msgIdx: number[] = []
   const metaRanges: number[] = []
   const uuidToSlot = new Map<string, number>()
@@ -3334,24 +3334,24 @@ function walkChainBeforeParse(buf: Buffer): Buffer {
       buf[pos] === OPEN_BRACE &&
       buf.compare(PARENT_PREFIX, 0, PREFIX_LEN, pos, pos + PREFIX_LEN) === 0
     ) {
-      // `{"parentUuid":null,` or `{"parentUuid":"<36 chars>",`
+      // `{"parentUuid":null,` 或 `{"parentUuid":"<36 个字符>",`
       const parentStart =
         buf[pos + PREFIX_LEN] === QUOTE ? pos + PREFIX_LEN + 1 : -1
-      // The top-level uuid is immediately followed by `","timestamp":"` in
-      // user/assistant/attachment entries (the create* helpers put them
-      // adjacent; both always defined). But the suffix is NOT unique:
-      //   - agent_progress entries carry a nested Message in data.message,
-      //     serialized BEFORE top-level uuid — that inner Message has its
-      //     own uuid,timestamp adjacent, so its bytes also satisfy the
-      //     suffix check.
-      //   - mcpMeta/toolUseResult come AFTER top-level uuid and hold
-      //     server-controlled Record<string,unknown> — a server returning
+      // 顶级 uuid 后紧跟 `","timestamp":"`
+      // 用户/助理/附件条目（创建*帮助器将它们
+      // 邻近的;两者总是定义的）。但后缀并不唯一：
+      //   - agent_progress 条目在 data.message 中携带嵌套消息，
+      //     在顶级 uuid 之前序列化 - 内部消息有其
+      //     自己的uuid，时间戳相邻，所以它的字节也满足
+      //     后缀检查。
+      //   - mcpMeta/toolUseResult 出现在顶级 uuid 之后并保留
+      //     服务器控制的 Record<string,unknown> — 服务器返回
       //     {uuid:"<36>",timestamp:"..."} would also match.
-      // Collect all suffix matches; a single one is unambiguous (common
+      // 收集所有后缀匹配；单一的一个是明确的（常见的
       // case), multiple need a brace-depth check to pick the one at
-      // JSON nesting depth 1. Entries with NO suffix match (some progress
-      // variants put timestamp BEFORE uuid → `"uuid":"<36>"}` at EOL)
-      // have only one `"uuid":"` and the first-match fallback is sound.
+      // JSON 嵌套深度 1。没有后缀匹配的条目（一些进展
+      // 变体将时间戳放在 uuid → `"uuid":"<36>"}` 之前 EOL)
+      // 只有一个 `"uuid":"` 并且第一场比赛的后备是合理的。
       let firstAny = -1
       let suffix0 = -1
       let suffixN: number[] | undefined
@@ -3383,7 +3383,7 @@ function walkChainBeforeParse(buf: Buffer): Buffer {
           : firstAny
       if (uk >= 0) {
         const uuidStart = uk + KEY_LEN
-        // UUIDs are pure ASCII so latin1 avoids UTF-8 decode overhead.
+        // UUID 是纯 ASCII，因此 latin1 避免了 UTF-8 解码开销。
         const uuid = buf.toString('latin1', uuidStart, uuidStart + UUID_LEN)
         uuidToSlot.set(uuid, msgIdx.length)
         msgIdx.push(pos, lineEnd, parentStart)
@@ -3396,10 +3396,10 @@ function walkChainBeforeParse(buf: Buffer): Buffer {
     pos = lineEnd
   }
 
-  // Leaf = last non-sidechain entry. isSidechain is the 2nd or 3rd key
-  // (after parentUuid, maybe logicalParentUuid) so indexOf from lineStart
-  // finds it within a few dozen bytes when present; when absent it spills
-  // into the next line, caught by the bounds check.
+  // 叶子=最后一个非侧链条目。 isSidechain 是第二个或第三个密钥
+  // （在parentUuid之后，也许是逻辑ParentUuid）所以indexOf来自lineStart
+  // 如果存在的话，在几十个字节内找到它；当不存在时它会溢出
+  // 进入下一行，被边界检查抓住。
   let leafSlot = -1
   for (let i = msgIdx.length - 3; i >= 0; i -= 3) {
     const sc = buf.indexOf(SIDECHAIN_TRUE, msgIdx[i]!)
@@ -3410,12 +3410,12 @@ function walkChainBeforeParse(buf: Buffer): Buffer {
   }
   if (leafSlot < 0) return buf
 
-  // Walk parentUuid to root. Collect kept-message line starts and sum their
-  // byte lengths so we can decide whether the concat is worth it. A dangling
-  // parent (uuid not in file) is the normal termination for forked sessions
-  // and post-boundary chains -- same semantics as buildConversationChain.
-  // Correctness against index poisoning rests on the timestamp suffix check
-  // above: a nested `"uuid":"` match without the suffix never becomes uk.
+  // 将parentUuid 转至root。收集保留消息行的开头并对其求和
+  // 字节长度，以便我们可以决定 concat 是否值得。一个悬空的
+  // 父级（uuid 不在文件中）是分叉会话的正常终止
+  // 和后边界链——与 buildConversationChain 具有相同的语义。
+  // 索引中毒的正确性取决于时间戳后缀检查
+  // 上图：没有后缀的嵌套 `"uuid":"` 匹配永远不会成为 uk。
   const seen = new Set<number>()
   const chain = new Set<number>()
   let chainBytes = 0
@@ -3431,21 +3431,21 @@ function walkChainBeforeParse(buf: Buffer): Buffer {
     slot = uuidToSlot.get(parent)
   }
 
-  // parseJSONL cost scales with bytes, not entry count. A session can have
-  // thousands of dead entries by count but only single-digit-% of bytes if
-  // the dead branches are short turns and the live chain holds the fat
-  // assistant responses (measured: 107 MB session, 69% dead entries, 30%
-  // dead bytes - index+concat overhead exceeded parse savings). Gate on
-  // bytes: only stitch if we would drop at least half the buffer. Metadata
-  // is tiny so len - chainBytes approximates dead bytes closely enough.
-  // Near break-even the concat memcpy (copying chainBytes into a fresh
-  // allocation) dominates, so a conservative 50% gate stays safely on the
-  // winning side.
+  // parseJSONL 成本随字节变化，而不是条目计数。一个会话可以有
+  // 按计数计有数千个死条目，但只有个位数百分比的字节，如果
+  // 死枝是短转，活链则容纳脂肪
+  // 助理响应（测量：107 MB 会话，69% 无效条目，30%
+  // 死字节 - 索引+连接开销超出了解析节省）。门打开
+  // bytes：只有当我们删除至少一半的缓冲区时才缝合。元数据
+  // 很小，所以 len - chainBytes 足够接近死字节。
+  // concat memcpy 接近收支平衡（将 chainBytes 复制到新的
+  // 分配）占主导地位，因此保守的 50% 门可以安全地保持在
+  // 获胜的一方。
   if (len - chainBytes < len >> 1) return buf
 
-  // Merge chain entries with metadata in original file order. Both msgIdx and
-  // metaRanges are already sorted by offset; interleave them into subarray
-  // views and concat once.
+  // 按原始文件顺序将链条目与元数据合并。 msgIdx 和
+  // metaRanges 已经按偏移量排序；将它们交错到子数组中
+  // 视图并连接一次。
   const parts: Buffer[] = []
   let m = 0
   for (let i = 0; i < msgIdx.length; i += 3) {
@@ -3466,8 +3466,8 @@ function walkChainBeforeParse(buf: Buffer): Buffer {
 }
 
 /**
- * Loads all messages, summaries, and file history snapshots from a transcript file.
- * Returns the messages, summaries, custom titles, tags, file history snapshots, and attribution snapshots.
+ * 从转录文件加载所有消息、摘要和文件历史快照。
+ * 返回消息、摘要、自定义标题、标签、文件历史快照和属性快照。
  */
 export async function loadTranscriptFile(
   filePath: string,
@@ -3512,24 +3512,24 @@ export async function loadTranscriptFile(
     AgentId,
     ContentReplacementRecord[]
   >()
-  // Array, not Map — commit order matters (nested collapses).
+  // 数组，而不是映射——提交顺序很重要（嵌套折叠）。
   const contextCollapseCommits: ContextCollapseCommitEntry[] = []
-  // Last-wins — later entries supersede.
+  // 最后获胜者 — 后来的条目取代。
   let contextCollapseSnapshot: ContextCollapseSnapshotEntry | undefined
 
   try {
     // For large transcripts, avoid materializing megabytes of stale content.
-    // Single forward chunked read: attribution-snapshot lines are skipped at
-    // the fd level (never buffered), compact boundaries truncate the
-    // accumulator in-stream. Peak allocation is the OUTPUT size, not the
-    // file size — a 151 MB session that is 84% stale attr-snaps allocates
-    // ~32 MB instead of 159+64 MB. This matters because mimalloc does not
+    // 单前向分块读取：在以下位置跳过归因快照行
+    // fd 级别（从不缓冲），紧凑边界截断
+    // 累加器流中。峰值分配是输出大小，而不是
+    // 文件大小 — 84% 陈旧 attr-snaps 分配的 151 MB 会话
+    // ~32 MB，而不是 159+64 MB。这很重要，因为 mimalloc 不
     // return those pages to the OS even after JS-level GC frees the backing
-    // buffers (measured: arrayBuffers=0 after Bun.gc(true) but RSS stuck at
-    // ~316 MB on the old scan+strip path vs ~155 MB here).
+    // 缓冲区（测量：Bun.gc(true) 之后 arrayBuffers=0 但 RSS 停留在
+    // 旧扫描+剥离路径上约为 316 MB，此处约为 155 MB）。
     //
-    // Pre-boundary metadata (agent-setting, mode, pr-link, etc.) is recovered
-    // via a cheap byte-level forward scan of [0, boundary).
+    // 恢复边界前元数据（代理设置、模式、pr-link 等）
+    // 通过[0，边界）的廉价字节级前向扫描。
     let buf: Buffer | null = null
     let metadataLines: string[] | null = null
     let hasPreservedSegment = false
@@ -3540,12 +3540,12 @@ export async function loadTranscriptFile(
         buf = scan.postBoundaryBuf
         hasPreservedSegment = scan.hasPreservedSegment
         // >0 means we truncated pre-boundary bytes and must recover
-        // session-scoped metadata from that range. A preservedSegment
-        // boundary does not truncate (preserved messages are physically
-        // pre-boundary), so offset stays 0 unless an EARLIER non-preserved
-        // boundary already truncated — in which case the preserved messages
+        // 该范围内的会话范围元数据。保留的段
+        // 边界不会截断（保留的消息在物理上
+        // 前边界），因此偏移量保持为 0，除非较早的非保留
+        // 边界已经被截断——在这种情况下保留的消息
         // for the later boundary are post-that-earlier-boundary and were
-        // kept, and we still want the metadata scan.
+        // 保留，我们仍然需要元数据扫描。
         if (scan.boundaryStartOffset > 0) {
           metadataLines = await scanPreBoundaryMetadata(
             filePath,
@@ -3556,19 +3556,19 @@ export async function loadTranscriptFile(
     }
     buf ??= await readFile(filePath)
     // For large buffers (which here means readTranscriptForLoad output with
-    // attr-snaps already stripped at the fd level — the <5MB readFile path
-    // falls through the size gate below), the dominant cost is parsing dead
-    // fork branches that buildConversationChain would discard anyway. Skip
-    // when the caller needs all
-    // leaves (loadAllLogsFromSessionFile for /insights picks the branch with
-    // most user messages, not the latest), when the boundary has a
-    // preservedSegment (those messages keep their pre-compact parentUuid on
-    // disk -- applyPreservedSegmentRelinks splices them in-memory AFTER
-    // parse, so a pre-parse chain walk would drop them as orphans), and when
-    // CLAUDE_CODE_DISABLE_PRECOMPACT_SKIP is set (that kill switch means
-    // "load everything, skip nothing"; this is another skip-before-parse
-    // optimization and the scan it depends on for hasPreservedSegment did
-    // not run).
+    // attr-snaps 已在 fd 级别剥离 — <5MB 的 readFile 路径
+    // 落入下面的大小门），主要成本是解析死区
+    // 无论如何，buildConversationChain 的分支分支都会被丢弃。跳过
+    // 当调用者需要全部时
+    // 叶子（ /insights 的 loadAllLogsFromSessionFile 选择带有
+    // 大多数用户消息，不是最新的），当边界有
+    // servedSegment（这些消息将其预压缩的parentUuid保留在
+    // disk -- applyPreservedSegmentRelinks 将它们拼接到内存中
+    // 解析，因此预解析链行走会将它们作为孤儿丢弃），并且当
+    // CLAUDE_CODE_DISABLE_PRECOMPACT_SKIP 已设置（终止开关意味着
+    // “加载所有内容，不跳过任何内容”；这是另一个解析前跳过
+    // 优化以及它所依赖的 hasPreservedSegment 扫描
+    // 不运行）。
     if (
       !opts?.keepAllLeaves &&
       !hasPreservedSegment &&
@@ -3578,10 +3578,10 @@ export async function loadTranscriptFile(
       buf = walkChainBeforeParse(buf)
     }
 
-    // First pass: process metadata-only lines collected during the boundary scan.
-    // These populate the session-scoped maps (agentSettings, modes, prNumbers,
-    // etc.) for entries written before the compact boundary. Any overlap with
-    // the post-boundary buffer is harmless — later values overwrite earlier ones.
+    // 第一遍：处理边界扫描期间收集的仅元数据行。
+    // 这些填充会话范围的映射（agentSettings、modes、prNumbers、
+    // 等）对于在紧凑边界之前写入的条目。与任何重叠
+    // 后边界缓冲区是无害的——后面的值会覆盖前面的值。
     if (metadataLines && metadataLines.length > 0) {
       const metaEntries = parseJSONL<Entry>(
         Buffer.from(metadataLines.join('\n')),
@@ -3613,23 +3613,23 @@ export async function loadTranscriptFile(
 
     const entries = parseJSONL<Entry>(buf)
 
-    // Bridge map for legacy progress entries: progress_uuid → progress_parent_uuid.
-    // PR #24099 removed progress from isTranscriptMessage, so old transcripts with
-    // progress in the parentUuid chain would truncate at buildConversationChain
-    // when messages.get(progressUuid) returns undefined. Since transcripts are
-    // append-only (parents before children), we record each progress→parent link
-    // as we see it, chain-resolving through consecutive progress entries, then
-    // rewrite any subsequent message whose parentUuid lands in the bridge.
+    // 旧进度条目的桥接图：progress_uuid→progress_parent_uuid。
+    // PR #24099 删除了 isTranscriptMessage 的进度，因此旧的成绩单带有
+    // ParentUuid 链中的进度将在 buildConversationChain 处截断
+    // 当 messages.get(progressUuid) 返回未定义时。由于成绩单是
+    // 仅附加（父母在孩子之前），我们记录每个进度→父链接
+    // 正如我们所看到的，通过连续的进度条目进行链式解析，然后
+    // 重写其parentUuid 到达网桥的任何后续消息。
     const progressBridge = new Map<UUID, UUID | null>()
 
     for (const entry of entries) {
-      // Legacy progress check runs before the Entry-typed else-if chain —
-      // progress is not in the Entry union, so checking it after TypeScript
-      // has narrowed `entry` intersects to `never`.
+      // 传统进度检查在 Entry 类型的 else-if 链之前运行 -
+      // 进度不在 Entry 联合中，因此在 TypeScript 之后检查它
+      // 已将“entry”相交范围缩小为“never”。
       if (isLegacyProgressEntry(entry)) {
-        // Chain-resolve through consecutive progress entries so a later
-        // message pointing at the tail of a progress run bridges to the
-        // nearest non-progress ancestor in one lookup.
+        // 通过连续的进度条目进行链式解析，稍后再进行
+        // 指向进度运行尾部的消息桥接到
+        // 一次查找中最近的非进度祖先。
         const parent = entry.parentUuid
         progressBridge.set(
           entry.uuid,
@@ -3644,13 +3644,13 @@ export async function loadTranscriptFile(
           entry.parentUuid = progressBridge.get(entry.parentUuid) ?? null
         }
         messages.set(entry.uuid, entry)
-        // Compact boundary: prior marble-origami-commit entries reference
-        // messages that won't be in the post-boundary chain. The >5MB
-        // backward-scan path discards them naturally by never reading the
-        // pre-boundary bytes; the <5MB path reads everything, so discard
-        // here. Without this, getStats().collapsedSpans in /context
-        // overcounts (projectView silently skips the stale commits but
-        // they're still in the log).
+        // 紧凑边界：先前的大理石折纸提交条目参考
+        // 不会出现在后边界链中的消息。 >5MB
+        // 向后扫描路径通过不读取而自然地丢弃它们
+        // 前边界字节； <5MB 路径读取所有内容，因此丢弃
+        // 这里。如果没有这个， getStats().collapsedSpans 在 /context 中
+        // 过度计数（projectView 默默地跳过过时的提交，但
+        // 它们仍在日志中）。
         if (isCompactBoundaryMessage(entry)) {
           contextCollapseCommits.length = 0
           contextCollapseSnapshot = undefined
@@ -3680,8 +3680,8 @@ export async function loadTranscriptFile(
       } else if (entry.type === 'attribution-snapshot') {
         attributionSnapshots.set(entry.messageId, entry)
       } else if (entry.type === 'content-replacement') {
-        // Subagent decisions key by agentId (sidechain resume); main-thread
-        // decisions key by sessionId (/resume).
+        // 子代理通过agentId决定密钥（侧链简历）；主线程
+        // 决策关键由 sessionId (/resume) 决定。
         if (entry.agentId) {
           const existing = agentContentReplacements.get(entry.agentId) ?? []
           agentContentReplacements.set(entry.agentId, existing)
@@ -3698,39 +3698,39 @@ export async function loadTranscriptFile(
       }
     }
   } catch {
-    // File doesn't exist or can't be read
+    // 文件不存在或无法读取
   }
 
   applyPreservedSegmentRelinks(messages)
   applySnipRemovals(messages)
 
-  // Compute leaf UUIDs once at load time
-  // Only user/assistant messages should be considered as leaves for anchoring resume.
-  // Other message types (system, attachment) are metadata or auxiliary and shouldn't
-  // anchor a conversation chain.
+  // 在加载时计算一次叶子 UUID
+  // 只有用户/助理消息才应被视为锚定恢复的离开。
+  // 其他消息类型（系统、附件）是元数据或辅助消息，不应该
+  // 锚定对话链。
   //
-  // We use standard parent relationship for main chain detection, but also need to
-  // handle cases where the last message is a system/metadata message.
+  // 我们使用标准的父关系进行主链检测，但还需要
+  // 处理最后一条消息是系统/元数据消息的情况。
   // For each conversation chain (identified by following parent links), the leaf
-  // is the most recent user/assistant message.
+  // 是最新的用户/助理消息。
   const allMessages = [...messages.values()]
 
-  // Standard leaf computation using parent relationships
+  // 使用父关系的标准叶计算
   const parentUuids = new Set(
     allMessages
       .map(msg => msg.parentUuid)
       .filter((uuid): uuid is UUID => uuid !== null),
   )
 
-  // Find all terminal messages (messages with no children)
+  // 查找所有终端消息（没有子项的消息）
   const terminalMessages = allMessages.filter(msg => !parentUuids.has(msg.uuid))
 
   const leafUuids = new Set<UUID>()
   let hasCycle = false
 
   if (getFeatureValue_CACHED_MAY_BE_STALE('tengu_pebble_leaf_prune', false)) {
-    // Build a set of UUIDs that have user/assistant children
-    // (these are mid-conversation nodes, not dead ends)
+    // 构建一组具有用户/助理子级的 UUID
+    // （这些是对话中间的节点，而不是死胡同）
     const hasUserAssistantChild = new Set<UUID>()
     for (const msg of allMessages) {
       if (msg.parentUuid && (msg.type === 'user' || msg.type === 'assistant')) {
@@ -3739,9 +3739,9 @@ export async function loadTranscriptFile(
     }
 
     // For each terminal message, walk back to find the nearest user/assistant ancestor.
-    // Skip ancestors that already have user/assistant children - those are mid-conversation
-    // nodes where the conversation continued (e.g., an assistant tool_use message whose
-    // progress child is terminal, but whose tool_result child continues the conversation).
+    // 跳过已经有用户/助理子代的祖先 - 这些是对话中的
+    // 对话继续的节点（例如，助理 tool_use 消息，其
+    // Progress 子项是终端，但其 tool_result 子项继续对话）。
     for (const terminal of terminalMessages) {
       const seen = new Set<UUID>()
       let current: TranscriptMessage | undefined = terminal
@@ -3763,8 +3763,8 @@ export async function loadTranscriptFile(
       }
     }
   } else {
-    // Original leaf computation: walk back from terminal messages to find
-    // the nearest user/assistant ancestor unconditionally
+    // 原始叶子计算：从终端消息返回查找
+    // 无条件地最近的用户/助理祖先
     for (const terminal of terminalMessages) {
       const seen = new Set<UUID>()
       let current: TranscriptMessage | undefined = terminal
@@ -3813,7 +3813,7 @@ export async function loadTranscriptFile(
 }
 
 /**
- * Loads all messages, summaries, file history snapshots, and attribution snapshots from a specific session file.
+ * 从特定会话文件加载所有消息、摘要、文件历史快照和属性快照。
  */
 async function loadSessionFile(sessionId: UUID): Promise<{
   messages: Map<UUID, TranscriptMessage>

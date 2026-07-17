@@ -61,7 +61,7 @@ import type { DenialTrackingState } from './utils/permissions/denialTracking.js'
 import type { SystemPrompt } from './utils/systemPromptType.js'
 import type { ContentReplacementState } from './utils/toolResultStorage.js'
 
-// Re-export progress types for backwards compatibility
+// 重新导出进度类型以实现向后兼容性
 export type {
   AgentToolProgress,
   BashProgress,
@@ -108,7 +108,7 @@ export type SetToolJSXFn = (
     showSpinner?: boolean
     isLocalJSXCommand?: boolean
     isImmediate?: boolean
-    /** Set to true to clear a local JSX command (e.g., from its onDone callback) */
+    /** 设置为 true 以清除本地 JSX 命令（例如，从其 onDone 回调） */
     clearLocalJSX?: boolean
   } | null,
 ) => void
@@ -116,10 +116,10 @@ export type SetToolJSXFn = (
 // Import tool permission types from centralized location to break import cycles
 import type { ToolPermissionRulesBySource } from './types/permissions.js'
 
-// Re-export for backwards compatibility
+// 重新导出以实现向后兼容性
 export type { ToolPermissionRulesBySource }
 
-// Apply DeepImmutable to the imported type
+// 将 DeepImmutable 应用于导入的类型
 export type ToolPermissionContext = DeepImmutable<{
   mode: PermissionMode
   additionalWorkingDirectories: Map<string, AdditionalWorkingDirectory>
@@ -129,11 +129,11 @@ export type ToolPermissionContext = DeepImmutable<{
   isBypassPermissionsModeAvailable: boolean
   isAutoModeAvailable?: boolean
   strippedDangerousRules?: ToolPermissionRulesBySource
-  /** When true, permission prompts are auto-denied (e.g., background agents that can't show UI) */
+  /** 如果为 true，则自动拒绝权限提示（例如，无法显示 UI 的后台代理） */
   shouldAvoidPermissionPrompts?: boolean
-  /** When true, automated checks (classifier, hooks) are awaited before showing the permission dialog (coordinator workers) */
+  /** 当 true 时，在显示权限对话框（协调器工作人员）之前等待自动检查（分类器、挂钩） */
   awaitAutomatedChecksBeforeDialog?: boolean
-  /** Stores the permission mode before model-initiated plan mode entry, so it can be restored on exit */
+  /** 存储模型启动的计划模式进入之前的权限模式，因此可以在退出时恢复 */
   prePlanMode?: PermissionMode
 }>
 
@@ -168,13 +168,13 @@ export type ToolUseContext = {
     isNonInteractiveSession: boolean
     agentDefinitions: AgentDefinitionsResult
     maxBudgetUsd?: number
-    /** Custom system prompt that replaces the default system prompt */
+    /** 自定义系统提示符替换默认系统提示符 */
     customSystemPrompt?: string
-    /** Additional system prompt appended after the main system prompt */
+    /** 主系统提示符后附加的附加系统提示符 */
     appendSystemPrompt?: string
-    /** Override querySource for analytics tracking */
+    /** 覆盖 querySource 以进行分析跟踪 */
     querySource?: QuerySource
-    /** Optional callback to get the latest tools (e.g., after MCP servers connect mid-query) */
+    /** 用于获取最新工具的可选回调（例如，在 MCP 服务器连接查询中后） */
     refreshTools?: () => Tools
   }
   abortController: AbortController
@@ -182,18 +182,18 @@ export type ToolUseContext = {
   getAppState(): AppState
   setAppState(f: (prev: AppState) => AppState): void
   /**
-   * Always-shared setAppState for session-scoped infrastructure (background
-   * tasks, session hooks). Unlike setAppState, which is no-op for async agents
-   * (see createSubagentContext), this always reaches the root store so agents
-   * at any nesting depth can register/clean up infrastructure that outlives
-   * a single turn. Only set by createSubagentContext; main-thread contexts
-   * fall back to setAppState.
+   * 始终共享的 setAppState 用于会话范围的基础设施（后台
+   * 任务、会话挂钩）。与 setAppState 不同，setAppState 对于异步代理来说是无操作的
+   * （请参阅 createSubagentContext），这总是到达根存储，因此代理
+   * 在任何嵌套深度都可以注册/清理过时的基础设施
+   * 单轮。仅由createSubagentContext设置；主线程上下文
+   * 回退到 setAppState。
    */
   setAppStateForTasks?: (f: (prev: AppState) => AppState) => void
   /**
-   * Optional handler for URL elicitations triggered by tool call errors (-32042).
-   * In print/SDK mode, this delegates to structuredIO.handleElicitation.
-   * In REPL mode, this is undefined and the queue-based UI path is used.
+   * 由工具调用错误触发的 URL 引发的可选处理程序 (-32042)。
+   * 在打印/SDK 模式下，这委托给 StructuredIO.handleElicitation。
+   * 在 REPL 模式下，这是未定义的，并且使用基于队列的 UI 路径。
    */
   handleElicitation?: (
     serverName: string,
@@ -202,34 +202,34 @@ export type ToolUseContext = {
   ) => Promise<ElicitResult>
   setToolJSX?: SetToolJSXFn
   addNotification?: (notif: Notification) => void
-  /** Append a UI-only system message to the REPL message list. Stripped at the
-   *  normalizeMessagesForAPI boundary — the Exclude<> makes that type-enforced. */
+  /** 将仅 UI 系统消息附加到 REPL 消息列表。脱光于
+   *  NormalizeMessagesForAPI 边界 — Exclude<> 使该类型强制执行。 */
   appendSystemMessage?: (
     msg: Exclude<SystemMessage, SystemLocalCommandMessage>,
   ) => void
-  /** Send an OS-level notification (iTerm2, Kitty, Ghostty, bell, etc.) */
+  /** 发送操作系统级别的通知（iTerm2、Kitty、Ghostty、bell 等） */
   sendOSNotification?: (opts: {
     message: string
     notificationType: string
   }) => void
   nestedMemoryAttachmentTriggers?: Set<string>
   /**
-   * CLAUDE.md paths already injected as nested_memory attachments this
-   * session. Dedup for memoryFilesToAttachments — readFileState is an LRU
-   * that evicts entries in busy sessions, so its .has() check alone can
-   * re-inject the same CLAUDE.md dozens of times.
+   * CLAUDE.md 路径已作为nested_memory 附件注入
+   * 会议。 memoryFilesToAttachments 的 Dedup — readFileState 是一个 LRU
+   * 在繁忙的会话中驱逐条目，因此它的 .has() 检查本身就可以
+   * 重新注入相同的 CLAUDE.md 数十次。
    */
   loadedNestedMemoryPaths?: Set<string>
   dynamicSkillDirTriggers?: Set<string>
-  /** Skill names surfaced via skill_discovery this session. Telemetry only (feeds was_discovered). */
+  /** 技能名称通过本次会议的 Skill_discovery 浮出水面。仅遥测（提要 was_discovered）。 */
   discoveredSkillNames?: Set<string>
   userModified?: boolean
   setInProgressToolUseIDs: (f: (prev: Set<string>) => Set<string>) => void
-  /** Only wired in interactive (REPL) contexts; SDK/QueryEngine don't set this. */
+  /** 仅在交互式 (REPL) 上下文中连接； SDK/QueryEngine 不设置此项。 */
   setHasInterruptibleToolInProgress?: (v: boolean) => void
   setResponseLength: (f: (prev: number) => number) => void
-  /** Ant-only: push a new API metrics entry for OTPS tracking.
-   *  Called by subagent streaming when a new API request starts. */
+  /** 仅 Ant：推送新的 API 指标条目以进行 OTPS 跟踪。
+   *  当新的 API 请求开始时，由子代理流调用。 */
   pushApiMetricsEntry?: (ttftMs: number) => void
   setStreamMode?: (mode: SpinnerMode) => void
   onCompactProgress?: (event: CompactProgressEvent) => void
@@ -242,10 +242,10 @@ export type ToolUseContext = {
     updater: (prev: AttributionState) => AttributionState,
   ) => void
   setConversationId?: (id: UUID) => void
-  agentId?: AgentId // Only set for subagents; use getSessionId() for session ID. Hooks use this to distinguish subagent calls.
-  agentType?: string // Subagent type name. For the main thread's --agent type, hooks fall back to getMainThreadAgentType().
-  /** When true, canUseTool must always be called even when hooks auto-approve.
-   *  Used by speculation for overlay file path rewriting. */
+  agentId?: AgentId // 仅为子代理设置；使用 getSessionId() 获取会话 ID。挂钩使用它来区分子代理调用。
+  agentType?: string // 子代理类型名称。对于主线程的 --agent 类型，钩子会回退到 getMainThreadAgentType()。
+  /** 如果为 true，则即使钩子自动批准，也必须始终调用 canUseTool。
+   *  推测用于覆盖文件路径重写。 */
   requireCanUseTool?: boolean
   messages: Message[]
   fileReadingLimits?: {
@@ -264,42 +264,42 @@ export type ToolUseContext = {
     }
   >
   queryTracking?: QueryChainTracking
-  /** Callback factory for requesting interactive prompts from the user.
-   * Returns a prompt callback bound to the given source name.
-   * Only available in interactive (REPL) contexts. */
+  /** 用于向用户请求交互式提示的回调工厂。
+   * 返回绑定到给定源名称的提示回调。
+   * 仅在交互式 (REPL) 上下文中可用。 */
   requestPrompt?: (
     sourceName: string,
     toolInputSummary?: string | null,
   ) => (request: PromptRequest) => Promise<PromptResponse>
   toolUseId?: string
   criticalSystemReminder_EXPERIMENTAL?: string
-  /** When true, preserve toolUseResult on messages even for subagents.
-   * Used by in-process teammates whose transcripts are viewable by the user. */
+  /** 如果为 true，则即使对于子代理，也会在消息上保留 toolUseResult。
+   * 由正在处理的队友使用，用户可以查看其记录。 */
   preserveToolUseResults?: boolean
-  /** Local denial tracking state for async subagents whose setAppState is a
-   *  no-op. Without this, the denial counter never accumulates and the
-   *  fallback-to-prompting threshold is never reached. Mutable — the
-   *  permissions code updates it in place. */
+  /** setAppState 为 a 的异步子代理的本地拒绝跟踪状态
+   *  无操作。如果没有这个，拒绝计数器永远不会累积，并且
+   *  永远不会达到回退提示阈值。可变的——
+   *  权限代码将其更新到位。 */
   localDenialTracking?: DenialTrackingState
   /**
-   * Per-conversation-thread content replacement state for the tool result
-   * budget. When present, query.ts applies the aggregate tool result budget.
-   * Main thread: REPL provisions once (never resets — stale UUID keys
-   * are inert). Subagents: createSubagentContext clones the parent's state
-   * by default (cache-sharing forks need identical decisions), or
-   * resumeAgentBackground threads one reconstructed from sidechain records.
+   * 工具结果的每个对话线程内容替换状态
+   * 预算。如果存在，query.ts 将应用聚合工具结果预算。
+   * 主线程：REPL 规定一次（永不重置 — 过时的 UUID 密钥
+   * 是惰性的）。子代理：createSubagentContext 克隆父代理的状态
+   * 默认情况下（缓存共享分叉需要相同的决策），或者
+   * resumeAgentBackground 线程是根据侧链记录重建的。
    */
   contentReplacementState?: ContentReplacementState
   /**
-   * Parent's rendered system prompt bytes, frozen at turn start.
-   * Used by fork subagents to share the parent's prompt cache — re-calling
-   * getSystemPrompt() at fork-spawn time can diverge (GrowthBook cold→warm)
-   * and bust the cache. See forkSubagent.ts.
+   * 父渲染的系统提示字节，在回合开始时冻结。
+   * 由fork子代理用来共享父级的提示缓存——重新调用
+   * 分叉生成时的 getSystemPrompt() 可能会发散（GrowthBook 冷→热）
+   * 并破坏缓存。请参阅 forkSubagent.ts。
    */
   renderedSystemPrompt?: SystemPrompt
 }
 
-// Re-export ToolProgressData from centralized location
+// 从集中位置重新导出 ToolProgressData
 export type { ToolProgressData }
 
 export type Progress = ToolProgressData | HookProgress
@@ -326,9 +326,9 @@ export type ToolResult<T> = {
     | AttachmentMessage
     | SystemMessage
   )[]
-  // contextModifier is only honored for tools that aren't concurrency safe.
+  // contextModifier 仅适用于非并发安全的工具。
   contextModifier?: (context: ToolUseContext) => ToolUseContext
-  /** MCP protocol metadata (structuredContent, _meta) to pass through to SDK consumers */
+  /** MCP 协议元数据（structedContent、_meta）传递给 SDK 使用者 */
   mcpMeta?: {
     _meta?: Record<string, unknown>
     structuredContent?: Record<string, unknown>
@@ -343,7 +343,7 @@ export type ToolCallProgress<P extends ToolProgressData = ToolProgressData> = (
 export type AnyObject = z.ZodType<{ [key: string]: unknown }>
 
 /**
- * Checks if a tool matches the given name (primary name or alias).
+ * 检查工具是否与给定名称（主名称或别​​名）匹配。
  */
 export function toolMatchesName(
   tool: { name: string; aliases?: string[] },
@@ -353,7 +353,7 @@ export function toolMatchesName(
 }
 
 /**
- * Finds a tool by name or alias from a list of tools.
+ * 从工具列表中按名称或别名查找工具。
  */
 export function findToolByName(tools: Tools, name: string): Tool | undefined {
   return tools.find(t => toolMatchesName(t, name))
@@ -365,15 +365,15 @@ export type Tool<
   P extends ToolProgressData = ToolProgressData,
 > = {
   /**
-   * Optional aliases for backwards compatibility when a tool is renamed.
-   * The tool can be looked up by any of these names in addition to its primary name.
+   * 重命名工具时用于向后兼容的可选别名。
+   * 除了其主要名称之外，还可以通过这些名称中的任何一个来查找该工具。
    */
   aliases?: string[]
   /**
-   * One-line capability phrase used by ToolSearch for keyword matching.
-   * Helps the model find this tool via keyword search when it's deferred.
-   * 3–10 words, no trailing period.
-   * Prefer terms not already in the tool name (e.g. 'jupyter' for NotebookEdit).
+   * ToolSearch 用于关键字匹配的单行功能短语。
+   * 延迟时帮助模型通过关键字搜索找到此工具。
+   * 3-10 个字，无句号。
+   * 首选工具名称中尚未包含的术语（例如 NotebookEdit 的“jupyter”）。
    */
   searchHint?: string
   call(
@@ -393,38 +393,38 @@ export type Tool<
   ): Promise<string>
   readonly inputSchema: Input
   // Type for MCP tools that can specify their input schema directly in JSON Schema format
-  // rather than converting from Zod schema
+  // 而不是从 Zod 模式转换
   readonly inputJSONSchema?: ToolInputJSONSchema
-  // Optional because TungstenTool doesn't define this. TODO: Make it required.
-  // When we do that, we can also go through and make this a bit more type-safe.
+  // 可选，因为 TungstenTool 没有定义它。 TODO：将其设为必需。
+  // 当我们这样做时，我们还可以检查并使其更加类型安全。
   outputSchema?: z.ZodType<unknown>
   inputsEquivalent?(a: z.infer<Input>, b: z.infer<Input>): boolean
   isConcurrencySafe(input: z.infer<Input>): boolean
   isEnabled(): boolean
   isReadOnly(input: z.infer<Input>): boolean
-  /** Defaults to false. Only set when the tool performs irreversible operations (delete, overwrite, send). */
+  /** 默认为 false。仅当工具执行不可逆操作（删除、覆盖、发送）时才设置。 */
   isDestructive?(input: z.infer<Input>): boolean
   /**
-   * What should happen when the user submits a new message while this tool
-   * is running.
+   * 当用户使用此工具提交新消息时会发生什么
+   * 正在运行。
    *
-   * - `'cancel'` — stop the tool and discard its result
-   * - `'block'`  — keep running; the new message waits
+   * - `'cancel'` — 停止工具并放弃其结果
+   * - `'block'` — 继续运行；新消息等待
    *
-   * Defaults to `'block'` when not implemented.
+   * 未实现时默认为“阻止”。
    */
   interruptBehavior?(): 'cancel' | 'block'
   /**
-   * Returns information about whether this tool use is a search or read operation
-   * that should be collapsed into a condensed display in the UI. Examples include
-   * file searching (Grep, Glob), file reading (Read), and bash commands like find,
-   * grep, wc, etc.
+   * 返回有关此工具使用是搜索还是读取操作的信息
+   * 应该在 UI 中折叠成压缩显示。例子包括
+   * 文件搜索（Grep、Glob）、文件读取（Read）和 bash 命令，如 find、
+   * grep、wc 等
    *
-   * Returns an object indicating whether the operation is a search or read operation:
-   * - `isSearch: true` for search operations (grep, find, glob patterns)
-   * - `isRead: true` for read operations (cat, head, tail, file read)
-   * - `isList: true` for directory-listing operations (ls, tree, du)
-   * - All can be false if the operation shouldn't be collapsed
+   * 返回一个对象，指示该操作是搜索还是读取操作：
+   * - `isSearch: true` 用于搜索操作（grep、find、glob 模式）
+   * - `isRead: true` 用于读取操作（cat、head、tail、文件读取）
+   * - `isList: true` 用于目录列表操作（ls、tree、du）
+   * - 如果操作不应该折叠，则所有都可以为 false
    */
   isSearchOrReadCommand?(input: z.infer<Input>): {
     isSearch: boolean
@@ -436,53 +436,53 @@ export type Tool<
   isMcp?: boolean
   isLsp?: boolean
   /**
-   * When true, this tool is deferred (sent with defer_loading: true) and requires
-   * ToolSearch to be used before it can be called.
+   * 当 true 时，该工具将被延迟（使用 defer_loading: true 发送）并且需要
+   * ToolSearch 在调用之前要使用。
    */
   readonly shouldDefer?: boolean
   /**
-   * When true, this tool is never deferred — its full schema appears in the
-   * initial prompt even when ToolSearch is enabled. For MCP tools, set via
-   * `_meta['anthropic/alwaysLoad']`. Use for tools the model must see on
-   * turn 1 without a ToolSearch round-trip.
+   * 如果为 true，则该工具永远不会延迟 - 其完整架构出现在
+   * 即使启用了 ToolSearch，也会出现初始提示。对于 MCP 工具，通过设置
+   * `_meta['anthropic/alwaysLoad']`。用于模型必须看到的工具
+   * 转 1，无需 ToolSearch 往返。
    */
   readonly alwaysLoad?: boolean
   /**
    * For MCP tools: the server and tool names as received from the MCP server (unnormalized).
-   * Present on all MCP tools regardless of whether `name` is prefixed (mcp__server__tool)
-   * or unprefixed (CLAUDE_AGENT_SDK_MCP_NO_PREFIX mode).
+   * 存在于所有 MCP 工具上，无论“name”是否带有前缀 (mcp__server__tool)
+   * 或无前缀（CLAUDE_AGENT_SDK_MCP_NO_PREFIX 模式）。
    */
   mcpInfo?: { serverName: string; toolName: string }
   readonly name: string
   /**
-   * Maximum size in characters for tool result before it gets persisted to disk.
-   * When exceeded, the result is saved to a file and Claude receives a preview
-   * with the file path instead of the full content.
+   * 工具结果在保存到磁盘之前的最大大小（以字符为单位）。
+   * 超过时，结果将保存到文件中，克劳德会收到预览
+   * 使用文件路径而不是完整内容。
    *
-   * Set to Infinity for tools whose output must never be persisted (e.g. Read,
-   * where persisting creates a circular Read→file→Read loop and the tool
-   * already self-bounds via its own limits).
+   * 对于其输出绝不能持久保存的工具设置为 Infinity（例如 Read、
+   * 其中持久创建循环读取→文件→读取循环和工具
+   * 已经通过自身的限制进行了自我约束）。
    */
   maxResultSizeChars: number
   /**
-   * When true, enables strict mode for this tool, which causes the API to
-   * more strictly adhere to tool instructions and parameter schemas.
-   * Only applied when the tengu_tool_pear is enabled.
+   * 如果为 true，则为此工具启用严格模式，这会导致 API
+   * 更严格地遵守工具说明和参数模式。
+   * 仅在启用 tengu_tool_pear 时应用。
    */
   readonly strict?: boolean
 
   /**
-   * Called on copies of tool_use input before observers see it (SDK stream,
-   * transcript, canUseTool, PreToolUse/PostToolUse hooks). Mutate in place
-   * to add legacy/derived fields. Must be idempotent. The original API-bound
-   * input is never mutated (preserves prompt cache). Not re-applied when a
-   * hook/permission returns a fresh updatedInput — those own their shape.
+   * 在观察者看到 tool_use 输入的副本之前调用它（SDK 流，
+   * 转录本、canUseTool、PreToolUse/PostToolUse 挂钩）。原地变异
+   * 添加遗留/派生字段。必须是幂等的。原始API绑定
+   * 输入永远不会改变（保留提示缓存）。当出现以下情况时，不再重新申请
+   * hook/permission 返回一个新的updatedInput——它们拥有自己的形状。
    */
   backfillObservableInput?(input: Record<string, unknown>): void
 
   /**
-   * Determines if this tool is allowed to run with this input in the current context.
-   * It informs the model of why the tool use failed, and does not directly display any UI.
+   * 确定是否允许此工具在当前上下文中使用此输入运行。
+   * 它通知模型工具使用失败的原因，并且不直接显示任何 UI。
    * @param input
    * @param context
    */
@@ -492,8 +492,8 @@ export type Tool<
   ): Promise<ValidationResult>
 
   /**
-   * Determines if the user is asked for permission. Only called after validateInput() passes.
-   * General permission logic is in permissions.ts. This method contains tool-specific logic.
+   * 确定是否请求用户许可。仅在 validateInput() 通过后调用。
+   * 一般权限逻辑位于permissions.ts中。此方法包含特定于工具的逻辑。
    * @param input
    * @param context
    */
@@ -502,14 +502,14 @@ export type Tool<
     context: ToolUseContext,
   ): Promise<PermissionResult>
 
-  // Optional method for tools that operate on a file path
+  // 对文件路径进行操作的工具的可选方法
   getPath?(input: z.infer<Input>): string
 
   /**
-   * Prepare a matcher for hook `if` conditions (permission-rule patterns like
-   * "git *" from "Bash(git *)"). Called once per hook-input pair; any
-   * expensive parsing happens here. Returns a closure that is called per
-   * hook pattern. If not implemented, only tool-name-level matching works.
+   * 为钩子“if”条件准备一个匹配器（权限规则模式，例如
+   * “Bash(git *)”中的“git *”）。每个钩子输入对调用一次；任何
+   * 昂贵的解析发生在这里。返回一个名为 per 的闭包
+   * 钩图案。如果未实现，则仅工具名称级别匹配有效。
    */
   preparePermissionMatcher?(
     input: z.infer<Input>,
@@ -526,32 +526,32 @@ export type Tool<
     input: Partial<z.infer<Input>> | undefined,
   ): keyof Theme | undefined
   /**
-   * Transparent wrappers (e.g. REPL) delegate all rendering to their progress
-   * handler, which emits native-looking blocks for each inner tool call.
-   * The wrapper itself shows nothing.
+   * 透明包装器（例如 REPL）将所有渲染委托给其进度
+   * 处理程序，它为每个内部工具调用发出看起来本机的块。
+   * 包装本身什么也没显示。
    */
   isTransparentWrapper?(): boolean
   /**
-   * Returns a short string summary of this tool use for display in compact views.
-   * @param input The tool input
-   * @returns A short string summary, or null to not display
+   * 返回此工具的简短字符串摘要，用于在紧凑视图中显示。
+   * @param input 工具输入
+   * @returns 短字符串摘要，或 null 不显示
    */
   getToolUseSummary?(input: Partial<z.infer<Input>> | undefined): string | null
   /**
-   * Returns a human-readable present-tense activity description for spinner display.
-   * Example: "Reading src/foo.ts", "Running bun test", "Searching for pattern"
-   * @param input The tool input
-   * @returns Activity description string, or null to fall back to tool name
+   * 返回人类可读的现在时活动描述以供旋转器显示。
+   * 示例：“读取 src/foo.ts”、“运行包子测试”、“搜索模式”
+   * @param input 工具输入
+   * @returns 活动描述字符串，或 null 以回退到工具名称
    */
   getActivityDescription?(
     input: Partial<z.infer<Input>> | undefined,
   ): string | null
   /**
-   * Returns a compact representation of this tool use for the auto-mode
-   * security classifier. Examples: `ls -la` for Bash, `/tmp/x: new content`
+   * 返回此工具用于自动模式的紧凑表示
+   * 安全分类器。示例：Bash 的“ls -la”、“/tmp/x：新内容”
    * for Edit. Return '' to skip this tool in the classifier transcript
-   * (e.g. tools with no security relevance). May return an object to avoid
-   * double-encoding when the caller JSON-wraps the value.
+   * （例如与安全无关的工具）。可能会返回一个要避免的对象
+   * 当调用者 JSON 包装值时进行双重编码。
    */
   toAutoClassifierInput(input: z.infer<Input>): unknown
   mapToolResultToToolResultBlockParam(
@@ -559,9 +559,9 @@ export type Tool<
     toolUseID: string,
   ): ToolResultBlockParam
   /**
-   * Optional. When omitted, the tool result renders nothing (same as returning
-   * null). Omit for tools whose results are surfaced elsewhere (e.g., TodoWrite
-   * updates the todo panel, not the transcript).
+   * 选修的。当省略时，工具结果不会呈现任何内容（与返回相同）
+   * 无效的）。省略其结果在其他地方出现的工具（例如，TodoWrite
+   * 更新待办事项面板，而不是记录）。
    */
   renderToolResultMessage?(
     content: Output,
@@ -573,54 +573,54 @@ export type Tool<
       verbose: boolean
       isTranscriptMode?: boolean
       isBriefOnly?: boolean
-      /** Original tool_use input, when available. Useful for compact result
-       * summaries that reference what was requested (e.g. "Sent to #foo"). */
+      /** 原始 tool_use 输入（如果可用）。对于紧凑的结果很有用
+       * 引用请求内容的摘要（例如“发送到#foo”）。 */
       input?: unknown
     },
   ): React.ReactNode
   /**
-   * Flattened text of what renderToolResultMessage shows IN TRANSCRIPT
-   * MODE (verbose=true, isTranscriptMode=true). For transcript search
-   * indexing: the index counts occurrences in this string, the highlight
-   * overlay scans the actual screen buffer. For count ≡ highlight, this
-   * must return the text that ends up visible — not the model-facing
-   * serialization from mapToolResultToToolResultBlockParam (which adds
-   * system-reminders, persisted-output wrappers).
+   * renderToolResultMessage 在 TRANSCRIPT 中显示的扁平化文本
+   * 模式（详细 = true，isTranscriptMode = true）。用于成绩单搜索
+   * 索引：索引计算该字符串中的出现次数，突出显示
+   * 覆盖扫描实际的屏幕缓冲区。对于计数 == 高亮，这
+   * 必须返回最终可见的文本——而不是面向模型的文本
+   * 从 mapToolResultToToolResultBlockParam 序列化（这增加了
+   * 系统提醒、持久输出包装器）。
    *
-   * Chrome can be skipped (under-count is fine). "Found 3 files in 12ms"
-   * isn't worth indexing. Phantoms are not fine — text that's claimed
-   * here but doesn't render is a count≠highlight bug.
+   * Chrome 可以跳过（计数不足也可以）。 “12 毫秒内找到 3 个文件”
+   * 不值得建立索引。幻影并不好——声称的文字
+   * 这里但不渲染是一个计数≠突出显示的错误。
    *
-   * Optional: omitted → field-name heuristic in transcriptSearch.ts.
-   * Drift caught by test/utils/transcriptSearch.renderFidelity.test.tsx
-   * which renders sample outputs and flags text that's indexed-but-not-
-   * rendered (phantom) or rendered-but-not-indexed (under-count warning).
+   * 可选：省略→transcriptSearch.ts 中的字段名称启发式。
+   * test/utils/transcriptSearch.renderFidelity.test.tsx 捕获的漂移
+   * 它呈现示例输出并标记已索引但未索引的文本
+   * 已渲染（幻影）或已渲染但未索引（计数不足警告）。
    */
   extractSearchText?(out: Output): string
   /**
-   * Render the tool use message. Note that `input` is partial because we render
-   * the message as soon as possible, possibly before tool parameters have fully
-   * streamed in.
+   * 渲染工具使用消息。请注意，“输入”是部分的，因为我们渲染
+   * 尽快（可能在工具参数完全确定之前）发送消息
+   * 涌入。
    */
   renderToolUseMessage(
     input: Partial<z.infer<Input>>,
     options: { theme: ThemeName; verbose: boolean; commands?: Command[] },
   ): React.ReactNode
   /**
-   * Returns true when the non-verbose rendering of this output is truncated
-   * (i.e., clicking to expand would reveal more content). Gates
-   * click-to-expand in fullscreen — only messages where verbose actually
-   * shows more get a hover/click affordance. Unset means never truncated.
+   * 当此输出的非详细呈现被截断时返回 true
+   * （即，单击展开将显示更多内容）。盖茨
+   * 单击以全屏展开 - 仅显示实际上很详细的消息
+   * 显示更多获得悬停/点击可供性。未设置意味着从未被截断。
    */
   isResultTruncated?(output: Output): boolean
   /**
-   * Renders an optional tag to display after the tool use message.
-   * Used for additional metadata like timeout, model, resume ID, etc.
-   * Returns null to not display anything.
+   * 呈现一个可选标签以在工具使用消息之后显示。
+   * 用于附加元数据，如超时、模型、简历 ID 等。
+   * 返回 null 不显示任何内容。
    */
   renderToolUseTag?(input: Partial<z.infer<Input>>): React.ReactNode
   /**
-   * Optional. When omitted, no progress UI is shown while the tool runs.
+   * 选修的。如果省略，则工具运行时不会显示进度 UI。
    */
   renderToolUseProgressMessage?(
     progressMessagesForMessage: ProgressMessage<P>[],
@@ -634,9 +634,9 @@ export type Tool<
   ): React.ReactNode
   renderToolUseQueuedMessage?(): React.ReactNode
   /**
-   * Optional. When omitted, falls back to <FallbackToolUseRejectedMessage />.
-   * Only define this for tools that need custom rejection UI (e.g., file edits
-   * that show the rejected diff).
+   * 选修的。省略时，回退到 <FallbackToolUseRejectedMessage />。
+   * 仅为需要自定义拒绝 UI 的工具定义此项（例如，文件编辑
+   * 显示被拒绝的差异）。
    */
   renderToolUseRejectedMessage?(
     input: z.infer<Input>,
@@ -652,9 +652,9 @@ export type Tool<
     },
   ): React.ReactNode
   /**
-   * Optional. When omitted, falls back to <FallbackToolUseErrorMessage />.
-   * Only define this for tools that need custom error UI (e.g., search tools
-   * that show "File not found" instead of the raw error).
+   * 选修的。省略时，返回到 <FallbackToolUseErrorMessage />。
+   * 仅为需要自定义错误 UI 的工具（例如搜索工具
+   * 显示“找不到文件”而不是原始错误）。
    */
   renderToolUseErrorMessage?(
     result: ToolResultBlockParam['content'],
@@ -667,13 +667,13 @@ export type Tool<
   ): React.ReactNode
 
   /**
-   * Renders multiple parallel instances of this tool as a group.
-   * @returns React node to render, or null to fall back to individual rendering
+   * 将此工具的多个并行实例渲染为一个组。
+   * @returns React 节点进行渲染，或 null 回退到单独渲染
    */
   /**
-   * Renders multiple tool uses as a group (non-verbose mode only).
-   * In verbose mode, individual tool uses render at their original positions.
-   * @returns React node to render, or null to fall back to individual rendering
+   * 将多个工具使用作为一个组进行渲染（仅限非详细模式）。
+   * 在详细模式下，各个工具在其原始位置使用渲染。
+   * @returns React 节点进行渲染，或 null 回退到单独渲染
    */
   renderGroupedToolUse?(
     toolUses: Array<{
@@ -695,14 +695,14 @@ export type Tool<
 }
 
 /**
- * A collection of tools. Use this type instead of `Tool[]` to make it easier
- * to track where tool sets are assembled, passed, and filtered across the codebase.
+ * 工具的集合。使用此类型代替“Tool[]”以使其更容易
+ * 跟踪工具集在代码库中的组装、传递和过滤位置。
  */
 export type Tools = readonly Tool[]
 
 /**
- * Methods that `buildTool` supplies a default for. A `ToolDef` may omit these;
- * the resulting `Tool` always has them.
+ * `buildTool` 提供默认值的方法。 `ToolDef` 可以省略这些；
+ * 由此产生的“工具”总是有它们。
  */
 type DefaultableToolKeys =
   | 'isEnabled'
@@ -714,9 +714,9 @@ type DefaultableToolKeys =
   | 'userFacingName'
 
 /**
- * Tool definition accepted by `buildTool`. Same shape as `Tool` but with the
- * defaultable methods optional — `buildTool` fills them in so callers always
- * see a complete `Tool`.
+ * `buildTool` 接受的工具定义。与“工具”形状相同，但带有
+ * 默认方法可选 - `buildTool` 填充它们，以便调用者始终
+ * 查看完整的“工具”。
  */
 export type ToolDef<
   Input extends AnyObject = AnyObject,
@@ -727,10 +727,10 @@ export type ToolDef<
 
 /**
  * Type-level spread mirroring `{ ...TOOL_DEFAULTS, ...def }`. For each
- * defaultable key: if D provides it (required), D's type wins; if D omits
- * it or has it optional (inherited from Partial<> in the constraint), the
- * default fills in. All other keys come from D verbatim — preserving arity,
- * optional presence, and literal types exactly as `satisfies Tool` did.
+ * 默认密钥：如果 D 提供（必需），则 D 的类型获胜；如果 D 省略
+ * 它或者它是可选的（继承自约束中的 Partial<>），
+ * 默认填充。所有其他密钥都逐字来自 D — 保留数量，
+ * 可选的存在和文字类型与“满足工具”完全相同。
  */
 type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
   [K in DefaultableToolKeys]-?: K extends keyof D
@@ -741,18 +741,18 @@ type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
 }
 
 /**
- * Build a complete `Tool` from a partial definition, filling in safe defaults
+ * 从部分定义构建完整的“工具”，填充安全默认值
  * for the commonly-stubbed methods. All tool exports should go through this so
- * that defaults live in one place and callers never need `?.() ?? default`.
+ * 默认值位于一个地方，调用者永远不需要 `?.() ??默认`。
  *
- * Defaults (fail-closed where it matters):
- * - `isEnabled` → `true`
- * - `isConcurrencySafe` → `false` (assume not safe)
- * - `isReadOnly` → `false` (assume writes)
+ * 默认值（重要时失败关闭）：
+ * - `isEnabled`→`true`
+ * - `isConcurrencySafe`→`false`（假设不安全）
+ * - `isReadOnly`→`false`（假设写入）
  * - `isDestructive` → `false`
- * - `checkPermissions` → `{ behavior: 'allow', updatedInput }` (defer to general permission system)
- * - `toAutoClassifierInput` → `''` (skip classifier — security-relevant tools must override)
- * - `userFacingName` → `name`
+ * - `checkPermissions` → `{behavior: 'allow', UpdatedInput }`（遵循一般权限系统）
+ * - `toAutoClassifierInput` → `''` （跳过分类器 — 安全相关工具必须覆盖）
+ * - `userFacingName` → `名称`
  */
 const TOOL_DEFAULTS = {
   isEnabled: () => true,
@@ -768,21 +768,21 @@ const TOOL_DEFAULTS = {
   userFacingName: (_input?: unknown) => '',
 }
 
-// The defaults type is the ACTUAL shape of TOOL_DEFAULTS (optional params so
-// both 0-arg and full-arg call sites type-check — stubs varied in arity and
-// tests relied on that), not the interface's strict signatures.
+// 默认类型是 TOOL_DEFAULTS 的实际形状（可选参数，因此
+// 0-arg 和 full-arg 调用站点类型检查 - 存根的数量和数量各不相同
+// 测试依赖于此），而不是接口的严格签名。
 type ToolDefaults = typeof TOOL_DEFAULTS
 
-// D infers the concrete object-literal type from the call site. The
-// constraint provides contextual typing for method parameters; `any` in
-// constraint position is structural and never leaks into the return type.
-// BuiltTool<D> mirrors runtime `{...TOOL_DEFAULTS, ...def}` at the type level.
+// D 从调用站点推断具体的对象文字类型。这
+// 约束为方法参数提供上下文类型；中的“任何”
+// 约束位置是结构性的，永远不会泄漏到返回类型中。
+// builtTool<D> 在类型级别镜像运行时 `{...TOOL_DEFAULTS, ...def}`。
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyToolDef = ToolDef<any, any, any>
 
 export function buildTool<D extends AnyToolDef>(def: D): BuiltTool<D> {
-  // The runtime spread is straightforward; the `as` bridges the gap between
-  // the structural-any constraint and the precise BuiltTool<D> return. The
+  // 运行时间分布很简单； “as”弥合了两者之间的差距
+  // 结构任意约束和精确的Bui​​ltTool<D> 返回。这
   // type semantics are proven by the 0-error typecheck across all 60+ tools.
   return {
     ...TOOL_DEFAULTS,

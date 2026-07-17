@@ -1,4 +1,4 @@
-// Runtime MACRO injection (compile-time constant in production Bun builds)
+// 运行时宏注入（生产 Bun 构建中的编译时常数）
 if (typeof globalThis.MACRO === 'undefined') {
   (globalThis as any).MACRO = {
     VERSION: '2.1.87',
@@ -11,14 +11,14 @@ if (typeof globalThis.MACRO === 'undefined') {
   };
 }
 
-// These side-effects must run before all other imports:
-// 1. profileCheckpoint marks entry before heavy module evaluation begins
-// 2. startMdmRawRead fires MDM subprocesses (plutil/reg query) so they run in
-//    parallel with the remaining ~135ms of imports below
-// 3. startKeychainPrefetch fires both macOS keychain reads (OAuth + legacy API
-//    key) in parallel — isRemoteManagedSettingsEligible() otherwise reads them
-//    sequentially via sync spawn inside applySafeConfigEnvironmentVariables()
-//    (~65ms on every macOS startup)
+// 这些副作用必须在所有其他导入之前运行：
+// 1. profileCheckpoint 在重模块评估开始之前标记条目
+// 2. startMdmRawRead 触发 MDM 子进程（plutil/reg 查询），以便它们在
+//    与下面剩余的约 135 毫秒的导入并行
+// 3. startKeychainPrefetch 触发 macOS 钥匙串读取（OAuth + 旧 API
+//    key) 并行 - isRemoteManagedSettingsEligible() 否则读取它们
+//    通过 applySafeConfigEnvironmentVariables() 内的同步生成顺序
+//    （每次 macOS 启动大约需要 65 毫秒）
 import { profileCheckpoint, profileReport } from './utils/startupProfiler.js';
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
@@ -78,17 +78,17 @@ import { computeInitialTeamContext } from './utils/swarm/reconnection.js';
 import { initializeWarningHandler } from './utils/warningHandler.js';
 import { isWorktreeModeEnabled } from './utils/worktreeModeEnabled.js';
 
-// Lazy require to avoid circular dependency: teammate.ts -> AppState.tsx -> ... -> main.tsx
+// 惰性 require 避免循环依赖： teammate.ts -> AppState.tsx -> ... -> main.tsx
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getTeammateUtils = () => require('./utils/teammate.js') as typeof import('./utils/teammate.js');
 const getTeammatePromptAddendum = () => require('./utils/swarm/teammatePromptAddendum.js') as typeof import('./utils/swarm/teammatePromptAddendum.js');
 const getTeammateModeSnapshot = () => require('./utils/swarm/backends/teammateModeSnapshot.js') as typeof import('./utils/swarm/backends/teammateModeSnapshot.js');
 /* eslint-enable @typescript-eslint/no-require-imports */
-// Dead code elimination: conditional import for COORDINATOR_MODE
+// 死代码消除：COORDINATOR_MODE 的条件导入
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModeModule = feature('COORDINATOR_MODE') ? require('./coordinator/coordinatorMode.js') as typeof import('./coordinator/coordinatorMode.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
-// Dead code elimination: conditional import for KAIROS (assistant mode)
+// 消除死代码：KAIROS 的条件导入（辅助模式）
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assistantModule = feature('KAIROS') ? require('./assistant/index.js') as typeof import('./assistant/index.js') : null;
 const kairosGate = feature('KAIROS') ? require('./assistant/gate.js') as typeof import('./assistant/gate.js') : null;
@@ -149,7 +149,7 @@ import { logPluginLoadErrors, logPluginsEnabledForSession } from './utils/teleme
 import { logSkillsLoaded } from './utils/telemetry/skillLoadedEvent.js';
 import { generateTempFilePath } from './utils/tempfile.js';
 import { validateUuid } from './utils/uuid.js';
-// Plugin startup checks are now handled non-blockingly in REPL.tsx
+// 插件启动检查现在在 REPL.tsx 中以非阻塞方式处理
 
 import { registerMcpAddCommand } from 'src/commands/mcp/addCommand.js';
 import { registerMcpXaaIdpCommand } from 'src/commands/mcp/xaaIdpCommand.js';
@@ -183,7 +183,7 @@ import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession,
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') as typeof import('./utils/permissions/autoModeState.js') : null;
 
-// TeleportRepoMismatchDialog, TeleportResumeWrapper dynamically imported at call sites
+// TeleportRepoMismatchDialog、TeleportResumeWrapper 在调用站点动态导入
 import { migrateAutoUpdatesToSettings } from './migrations/migrateAutoUpdatesToSettings.js';
 import { migrateBypassPermissionsAcceptedToSettings } from './migrations/migrateBypassPermissionsAcceptedToSettings.js';
 import { migrateEnableAllProjectMcpServersToSettings } from './migrations/migrateEnableAllProjectMcpServersToSettings.js';
@@ -197,7 +197,7 @@ import { resetAutoModeOptInForDefaultOffer } from './migrations/resetAutoModeOpt
 import { resetProToOpusDefault } from './migrations/resetProToOpusDefault.js';
 import { createRemoteSessionConfig } from './remote/RemoteSessionManager.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
-// teleportWithProgress dynamically imported at call site
+// teleportWithProgress 在调用站点动态导入
 import { createDirectConnectSession, DirectConnectError } from './server/createDirectConnectSession.js';
 import { initializeLspServerManager } from './services/lsp/manager.js';
 import { shouldEnablePromptSuggestion } from './services/PromptSuggestion/promptSuggestion.js';
@@ -222,9 +222,9 @@ import { getTmuxInstallInstructions, isTmuxAvailable, parsePRReference } from '.
 profileCheckpoint('main_tsx_imports_loaded');
 
 /**
- * Log managed settings keys to Statsig for analytics.
- * This is called after init() completes to ensure settings are loaded
- * and environment variables are applied before model resolution.
+ * 将托管设置密钥记录到 Statsig 以进行分析。
+ * 这在 init() 完成后调用，以确保加载设置
+ * 和环境变量在模型解析之前应用。
  */
 function logManagedSettings(): void {
   try {
@@ -237,57 +237,57 @@ function logManagedSettings(): void {
       });
     }
   } catch {
-    // Silently ignore errors - this is just for analytics
+    // 默默地忽略错误 - 这仅用于分析
   }
 }
 
-// Check if running in debug/inspection mode
+// 检查是否在调试/检查模式下运行
 function isBeingDebugged() {
   const isBun = isRunningWithBun();
 
-  // Check for inspect flags in process arguments (including all variants)
+  // 检查进程参数中的检查标志（包括所有变体）
   const hasInspectArg = process.execArgv.some(arg => {
     if (isBun) {
-      // Note: Bun has an issue with single-file executables where application arguments
-      // from process.argv leak into process.execArgv (similar to https://github.com/oven-sh/bun/issues/11673)
-      // This breaks use of --debug mode if we omit this branch
-      // We're fine to skip that check, because Bun doesn't support Node.js legacy --debug or --debug-brk flags
+      // 注意：Bun 存在单文件可执行文件的问题，其中应用程序参数
+      // 从 process.argv 泄漏到 process.execArgv （类似于 https://github.com/oven-sh/bun/issues/11673）
+      // 如果我们省略这个分支，这会破坏 --debug 模式的使用
+      // 我们可以跳过该检查，因为 Bun 不支持 Node.js 遗留的 --debug 或 --debug-brk 标志
       return /--inspect(-brk)?/.test(arg);
     } else {
-      // In Node.js, check for both --inspect and legacy --debug flags
+      // 在 Node.js 中，检查 --inspect 和 Legacy --debug 标志
       return /--inspect(-brk)?|--debug(-brk)?/.test(arg);
     }
   });
 
-  // Check if NODE_OPTIONS contains inspect flags
+  // 检查 NODE_OPTIONS 是否包含检查标志
   const hasInspectEnv = process.env.NODE_OPTIONS && /--inspect(-brk)?|--debug(-brk)?/.test(process.env.NODE_OPTIONS);
 
-  // Check if inspector is available and active (indicates debugging)
+  // 检查检查器是否可用且处于活动状态（表示正在调试）
   try {
-    // Dynamic import would be better but is async - use global object instead
+    // 动态导入会更好，但是异步的 - 使用全局对象代替
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const inspector = (global as any).require('inspector');
     const hasInspectorUrl = !!inspector.url();
     return hasInspectorUrl || hasInspectArg || hasInspectEnv;
   } catch {
-    // Ignore error and fall back to argument detection
+    // 忽略错误并回退到参数检测
     return hasInspectArg || hasInspectEnv;
   }
 }
 
-// Exit if we detect node debugging or inspection
+// 如果我们检测到节点调试或检查则退出
 if ("external" !== 'ant' && isBeingDebugged()) {
-  // Use process.exit directly here since we're in the top-level code before imports
-  // and gracefulShutdown is not yet available
+  // 在这里直接使用 process.exit 因为我们在导入之前处于顶级代码
+  // 且 GracefulShutdown 尚不可用
   // eslint-disable-next-line custom-rules/no-top-level-side-effects
   process.exit(1);
 }
 
 /**
- * Per-session skill/plugin telemetry. Called from both the interactive path
- * and the headless -p path (before runHeadless) — both go through
- * main.tsx but branch before the interactive startup path, so it needs two
- * call sites here rather than one here + one in QueryEngine.
+ * 每会话技能/插件遥测。从交互路径调用
+ * 和 headless -p 路径（在 runHeadless 之前）——都经过
+ * main.tsx 但在交互式启动路径之前分支，因此需要两个
+ * 在此处调用站点，而不是在此处调用站点 + QueryEngine 中的站点。
  */
 function logSessionTelemetry(): void {
   const model = parseUserSpecifiedModel(getInitialMainLoopModel() ?? getDefaultMainLoopModel());
@@ -333,8 +333,8 @@ async function logStartupTelemetry(): Promise<void> {
   });
 }
 
-// @[MODEL LAUNCH]: Consider any migrations you may need for model strings. See migrateSonnet1mToSonnet45.ts for an example.
-// Bump this when adding a new sync migration so existing users re-run the set.
+// @[MODEL LAUNCH]：考虑模型字符串可能需要的任何迁移。有关示例，请参阅 migrateSonnet1mToSonnet45.ts。
+// 添加新的同步迁移时请更改此设置，以便现有用户重新运行该集。
 const CURRENT_MIGRATION_VERSION = 11;
 function runMigrations(): void {
   if (getGlobalConfig().migrationVersion !== CURRENT_MIGRATION_VERSION) {
@@ -358,30 +358,30 @@ function runMigrations(): void {
       migrationVersion: CURRENT_MIGRATION_VERSION
     });
   }
-  // Async migration - fire and forget since it's non-blocking
+  // 异步迁移：不会阻塞，触发后无需等待
   migrateChangelogFromConfig().catch(() => {
-    // Silently ignore migration errors - will retry on next startup
+    // 静默忽略迁移错误 - 将在下次启动时重试
   });
 }
 
 /**
- * Prefetch system context (including git status) only when it's safe to do so.
- * Git commands can execute arbitrary code via hooks and config (e.g., core.fsmonitor,
- * diff.external), so we must only run them after trust is established or in
- * non-interactive mode where trust is implicit.
+ * 仅在安全时才预取系统上下文（包括 git status）。
+ * Git 命令可通过钩子和配置执行任意代码（例如 core.fsmonitor，
+ * diff.external），因此我们只能在建立信任后或在
+ * 信任是隐式的非交互模式。
  */
 function prefetchSystemContextIfSafe(): void {
   const isNonInteractiveSession = getIsNonInteractiveSession();
 
-  // In non-interactive mode (--print), trust dialog is skipped and
-  // execution is considered trusted (as documented in help text)
+  // 在非交互模式（--print）下，将跳过信任对话框并
+  // 执行被认为是可信的（如帮助文本中所述）
   if (isNonInteractiveSession) {
     logForDiagnosticsNoPII('info', 'prefetch_system_context_non_interactive');
     void getSystemContext();
     return;
   }
 
-  // In interactive mode, only prefetch if trust has already been established
+  // 在交互模式下，仅在已建立信任的情况下预取
   const hasTrust = checkHasTrustDialogAccepted();
   if (hasTrust) {
     logForDiagnosticsNoPII('info', 'prefetch_system_context_has_trust');
@@ -389,31 +389,31 @@ function prefetchSystemContextIfSafe(): void {
   } else {
     logForDiagnosticsNoPII('info', 'prefetch_system_context_skipped_no_trust');
   }
-  // Otherwise, don't prefetch - wait for trust to be established first
+  // 否则，不要预取 - 等待首先建立信任
 }
 
 /**
- * Start background prefetches and housekeeping that are NOT needed before first render.
- * These are deferred from setup() to reduce event loop contention and child process
- * spawning during the critical startup path.
- * Call this after the REPL has been rendered.
+ * 启动首次渲染之前不需要的后台预取和内务处理。
+ * 这些是从 setup() 推迟的，以减少事件循环争用和子进程
+ * 在关键启动路径期间生成。
+ * 在渲染 REPL 后调用此函数。
  */
 export function startDeferredPrefetches(): void {
-  // This function runs after first render, so it doesn't block the initial paint.
-  // However, the spawned processes and async work still contend for CPU and event
-  // loop time, which skews startup benchmarks (CPU profiles, time-to-first-render
-  // measurements). Skip all of it when we're only measuring startup performance.
+  // 该函数在第一次渲染后运行，因此它不会阻止初始绘制。
+  // 然而，生成的进程和异步工作仍然争夺 CPU 和事件
+  // 循环时间，这会影响启动基准（CPU 配置文件、首次渲染时间
+  // 测量）。当我们只测量启动性能时，请跳过所有这些。
   if (isEnvTruthy(process.env.CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER) ||
-  // --bare: skip ALL prefetches. These are cache-warms for the REPL's
-  // first-turn responsiveness (initUser, getUserContext, tips, countFiles,
-  // modelCapabilities, change detectors). Scripted -p calls don't have a
-  // "user is typing" window to hide this work in — it's pure overhead on
-  // the critical path.
+  // --bare：跳过所有预取。这些是 REPL 的缓存预热
+  // 首轮响应（initUser、getUserContext、tips、countFiles、
+  // 模型功能、变化检测器）。脚本化 -p 调用没有
+  // “用户正在输入”窗口来隐藏这项工作 - 这纯粹是开销
+  // 关键路径。
   isBareMode()) {
     return;
   }
 
-  // Process-spawning prefetches (consumed at first API call, user is still typing)
+  // 进程生成预取（在第一次 API 调用时使用，用户仍在输入）
   void initUser();
   void getUserContext();
   prefetchSystemContextIfSafe();
@@ -426,18 +426,18 @@ export function startDeferredPrefetches(): void {
   }
   void countFilesRoundedRg(getCwd(), AbortSignal.timeout(3000), []);
 
-  // Analytics and feature flag initialization
+  // 分析和功能标志初始化
   void initializeAnalyticsGates();
   void prefetchOfficialMcpUrls();
   void refreshModelCapabilities();
 
-  // File change detectors deferred from init() to unblock first render
+  // 文件更改检测器从 init() 推迟到解锁首次渲染
   void settingsChangeDetector.initialize();
   if (!isBareMode()) {
     void skillChangeDetector.initialize();
   }
 
-  // Event loop stall detector — logs when the main thread is blocked >500ms
+  // 事件循环停顿检测器 - 当主线程被阻塞 >500 毫秒时进行记录
   if ("external" === 'ant') {
     void import('./utils/eventLoopStallDetector.js').then(m => m.startEventLoopStallDetector());
   }
@@ -448,28 +448,28 @@ function loadSettingsFromFlag(settingsFile: string): void {
     const looksLikeJson = trimmedSettings.startsWith('{') && trimmedSettings.endsWith('}');
     let settingsPath: string;
     if (looksLikeJson) {
-      // It's a JSON string - validate and create temp file
+      // 这是一个 JSON 字符串 - 验证并创建临时文件
       const parsedJson = safeParseJSON(trimmedSettings);
       if (!parsedJson) {
         process.stderr.write(chalk.red('Error: Invalid JSON provided to --settings\n'));
         process.exit(1);
       }
 
-      // Create a temporary file and write the JSON to it.
-      // Use a content-hash-based path instead of random UUID to avoid
-      // busting the Anthropic API prompt cache. The settings path ends up
-      // in the Bash tool's sandbox denyWithinAllow list, which is part of
-      // the tool description sent to the API. A random UUID per subprocess
-      // changes the tool description on every query() call, invalidating
-      // the cache prefix and causing a 12x input token cost penalty.
-      // The content hash ensures identical settings produce the same path
-      // across process boundaries (each SDK query() spawns a new process).
+      // 创建一个临时文件并将 JSON 写入其中。
+      // 使用基于内容哈希的路径而不是随机 UUID 来避免
+      // 破坏 Anthropic API 提示缓存。设置路径结束
+      // 在 Bash 工具的沙箱中的 DenyWithinAllow 列表中，该列表是
+      // 发送到 API 的工具描述。每个子进程一个随机的 UUID
+      // 更改每个 query() 调用的工具描述，使之无效
+      // 缓存前缀并导致 12 倍的输入令牌成本损失。
+      // 内容哈希确保相同的设置产生相同的路径
+      // 跨进程边界（每个 SDK query() 都会生成一个新进程）。
       settingsPath = generateTempFilePath('claude-settings', '.json', {
         contentHash: trimmedSettings
       });
       writeFileSync_DEPRECATED(settingsPath, trimmedSettings, 'utf8');
     } else {
-      // It's a file path - resolve and validate by attempting to read
+      // 这是一个文件路径 - 通过尝试读取来解析和验证
       const {
         resolvedPath: resolvedSettingsPath
       } = safeResolvePath(getFsImplementation(), settingsFile);
@@ -509,18 +509,18 @@ function loadSettingSourcesFromFlag(settingSourcesArg: string): void {
 }
 
 /**
- * Parse and load settings flags early, before init()
- * This ensures settings are filtered from the start of initialization
+ * 在 init() 前尽早解析并加载设置参数。
+ * 这可确保从初始化开始就过滤设置。
  */
 function eagerLoadSettings(): void {
   profileCheckpoint('eagerLoadSettings_start');
-  // Parse --settings flag early to ensure settings are loaded before init()
+  // 尽早解析 --settings 参数，确保在 init() 前加载设置
   const settingsFile = eagerParseCliFlag('--settings');
   if (settingsFile) {
     loadSettingsFromFlag(settingsFile);
   }
 
-  // Parse --setting-sources flag early to control which sources are loaded
+  // 尽早解析 --setting-sources 参数，以控制加载哪些来源
   const settingSourcesArg = eagerParseCliFlag('--setting-sources');
   if (settingSourcesArg !== undefined) {
     loadSettingSourcesFromFlag(settingSourcesArg);
@@ -528,13 +528,13 @@ function eagerLoadSettings(): void {
   profileCheckpoint('eagerLoadSettings_end');
 }
 function initializeEntrypoint(isNonInteractive: boolean): void {
-  // Skip if already set (e.g., by SDK or other entrypoints)
+  // 已设置时跳过（例如由 SDK 或其他入口设置）
   if (process.env.CLAUDE_CODE_ENTRYPOINT) {
     return;
   }
   const cliArgs = process.argv.slice(2);
 
-  // Check for MCP serve command (handle flags before mcp serve, e.g., --debug mcp serve)
+  // 检查 MCP serve 命令（在 mcp serve 前处理参数，例如 --debug mcp serve）
   const mcpIndex = cliArgs.indexOf('mcp');
   if (mcpIndex !== -1 && cliArgs[mcpIndex + 1] === 'serve') {
     process.env.CLAUDE_CODE_ENTRYPOINT = 'mcp';
@@ -545,14 +545,14 @@ function initializeEntrypoint(isNonInteractive: boolean): void {
     return;
   }
 
-  // Note: 'local-agent' entrypoint is set by the local agent mode launcher
-  // via CLAUDE_CODE_ENTRYPOINT env var (handled by early return above)
+  // 注意：local-agent 入口由本地代理模式启动器通过
+  // CLAUDE_CODE_ENTRYPOINT 环境变量设置（上方的提前返回会处理它）。
 
-  // Set based on interactive status
+  // 根据是否交互式运行设置。
   process.env.CLAUDE_CODE_ENTRYPOINT = isNonInteractive ? 'sdk-cli' : 'cli';
 }
 
-// Set by early argv processing when `claude open <url>` is detected (interactive mode only)
+// 在提前处理 argv 时检测到 `claude open <url>` 后设置（仅交互模式）
 type PendingConnect = {
   url: string | undefined;
   authToken: string | undefined;
@@ -564,7 +564,7 @@ const _pendingConnect: PendingConnect | undefined = feature('DIRECT_CONNECT') ? 
   dangerouslySkipPermissions: false
 } : undefined;
 
-// Set by early argv processing when `claude assistant [sessionId]` is detected
+// 在提前处理 argv 时检测到 `claude assistant [sessionId]` 后设置
 type PendingAssistantChat = {
   sessionId?: string;
   discover: boolean;
@@ -574,17 +574,17 @@ const _pendingAssistantChat: PendingAssistantChat | undefined = feature('KAIROS'
   discover: false
 } : undefined;
 
-// `claude ssh <host> [dir]` — parsed from argv early (same pattern as
-// DIRECT_CONNECT above) so the main command path can pick it up and hand
-// the REPL an SSH-backed session instead of a local one.
+// `claude ssh <host> [dir]`：提前从 argv 解析（与上方的
+// DIRECT_CONNECT 使用相同模式），以便主命令路径取得它，并向
+// REPL 传递 SSH 支持的会话，而不是本地会话。
 type PendingSSH = {
   host: string | undefined;
   cwd: string | undefined;
   permissionMode: string | undefined;
   dangerouslySkipPermissions: boolean;
-  /** --local: spawn the child CLI directly, skip ssh/probe/deploy. e2e test mode. */
+  /** --local：直接启动子 CLI，跳过 SSH、探测和部署。用于端到端测试模式。 */
   local: boolean;
-  /** Extra CLI args to forward to the remote CLI on initial spawn (--resume, -c). */
+  /** 初次启动时转发给远程 CLI 的额外参数（--resume、-c）。 */
   extraCliArgs: string[];
 };
 const _pendingSSH: PendingSSH | undefined = feature('SSH_REMOTE') ? {
@@ -598,20 +598,20 @@ const _pendingSSH: PendingSSH | undefined = feature('SSH_REMOTE') ? {
 export async function main() {
   profileCheckpoint('main_function_start');
 
-  // SECURITY: Prevent Windows from executing commands from current directory
-  // This must be set before ANY command execution to prevent PATH hijacking attacks
-  // See: https://docs.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-searchpathw
+  // 安全性：阻止 Windows 从当前目录执行命令。
+  // 必须在执行任何命令前设置，以防范 PATH 劫持攻击。
+  // 参考：https://docs.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-searchpathw
   process.env.NoDefaultCurrentDirectoryInExePath = '1';
 
-  // Initialize warning handler early to catch warnings
+  // 尽早初始化警告处理器以捕获警告
   initializeWarningHandler();
   process.on('exit', () => {
     resetCursor();
   });
   process.on('SIGINT', () => {
-    // In print mode, print.ts registers its own SIGINT handler that aborts
-    // the in-flight query and calls gracefulShutdown; skip here to avoid
-    // preempting it with a synchronous process.exit().
+    // 在打印模式下，print.ts 会注册自己的 SIGINT 处理器，以中止
+    // 正在进行的查询并调用 gracefulShutdown；此处跳过，避免使用
+    // 同步的 process.exit() 抢先退出。
     if (process.argv.includes('-p') || process.argv.includes('--print')) {
       return;
     }
@@ -619,9 +619,9 @@ export async function main() {
   });
   profileCheckpoint('main_warning_handler_initialized');
 
-  // Check for cc:// or cc+unix:// URL in argv — rewrite so the main command
-  // handles it, giving the full interactive TUI instead of a stripped-down subcommand.
-  // For headless (-p), we rewrite to the internal `open` subcommand.
+  // 检查 argv 中是否有 cc:// 或 cc+unix:// URL：重写参数，让主命令
+  // 处理它，从而提供完整交互式 TUI，而非精简子命令。
+  // 对无界面模式（-p），重写为内部 `open` 子命令。
   if (feature('DIRECT_CONNECT')) {
     const rawCliArgs = process.argv.slice(2);
     const ccIdx = rawCliArgs.findIndex(a => a.startsWith('cc://') || a.startsWith('cc+unix://'));
@@ -633,7 +633,7 @@ export async function main() {
       const parsed = parseConnectUrl(ccUrl);
       _pendingConnect.dangerouslySkipPermissions = rawCliArgs.includes('--dangerously-skip-permissions');
       if (rawCliArgs.includes('-p') || rawCliArgs.includes('--print')) {
-        // Headless: rewrite to internal `open` subcommand
+        // 无界面模式：重写为内部 `open` 子命令
         const stripped = rawCliArgs.filter((_, i) => i !== ccIdx);
         const dspIdx = stripped.indexOf('--dangerously-skip-permissions');
         if (dspIdx !== -1) {
@@ -641,7 +641,7 @@ export async function main() {
         }
         process.argv = [process.argv[0]!, process.argv[1]!, 'open', ccUrl, ...stripped];
       } else {
-        // Interactive: strip cc:// URL and flags, run main command
+        // 交互模式：移除 cc:// URL 和相关参数，运行主命令
         _pendingConnect.url = parsed.serverUrl;
         _pendingConnect.authToken = parsed.authToken;
         const stripped = rawCliArgs.filter((_, i) => i !== ccIdx);
@@ -654,9 +654,8 @@ export async function main() {
     }
   }
 
-  // Handle deep link URIs early — this is invoked by the OS protocol handler
-  // and should bail out before full init since it only needs to parse the URI
-  // and open a terminal.
+  // 提前处理深层链接 URI：该路径由操作系统协议处理器调用，
+  // 只需解析 URI 并打开终端，因此应在完整初始化前退出。
   if (feature('LODESTONE')) {
     const handleUriIdx = process.argv.indexOf('--handle-uri');
     if (handleUriIdx !== -1 && process.argv[handleUriIdx + 1]) {
@@ -672,10 +671,10 @@ export async function main() {
       process.exit(exitCode);
     }
 
-    // macOS URL handler: when LaunchServices launches our .app bundle, the
-    // URL arrives via Apple Event (not argv). LaunchServices overwrites
-    // __CFBundleIdentifier to the launching bundle's ID, which is a precise
-    // positive signal — cheaper than importing and guessing with heuristics.
+    // macOS URL 处理器：当 LaunchServices 启动应用程序包时，URL 会通过
+    // Apple Event（而不是 argv）传入。LaunchServices 会将
+    // __CFBundleIdentifier 覆盖为启动包的 ID，这是明确的肯定信号，
+    // 比导入模块再用启发式方法猜测更省资源。
     if (process.platform === 'darwin' && process.env.__CFBundleIdentifier === 'com.anthropic.claude-code-url-handler') {
       const {
         enableConfigs
@@ -689,12 +688,11 @@ export async function main() {
     }
   }
 
-  // `claude assistant [sessionId]` — stash and strip so the main
-  // command handles it, giving the full interactive TUI. Position-0 only
-  // (matching the ssh pattern below) — indexOf would false-positive on
-  // `claude -p "explain assistant"`. Root-flag-before-subcommand
-  // (e.g. `--debug assistant`) falls through to the stub, which
-  // prints usage.
+  // `claude assistant [sessionId]`：暂存并从参数中移除，交由主命令
+  // 处理，从而提供完整交互式 TUI。仅允许位于第 0 位（与下方 ssh 模式
+  // 一致），因为 indexOf 会将 `claude -p "explain assistant"` 误判。
+  // 根参数位于子命令前（例如 `--debug assistant`）时会落入占位命令，
+  // 并打印用法说明。
   if (feature('KAIROS') && _pendingAssistantChat) {
     const rawArgs = process.argv.slice(2);
     if (rawArgs[0] === 'assistant') {
@@ -708,22 +706,21 @@ export async function main() {
         rawArgs.splice(0, 1); // drop 'assistant'
         process.argv = [process.argv[0]!, process.argv[1]!, ...rawArgs];
       }
-      // else: `claude assistant --help` → fall through to stub
+      // 否则：`claude assistant --help` 会落入占位命令
     }
   }
 
-  // `claude ssh <host> [dir]` — strip from argv so the main command handler
-  // runs (full interactive TUI), stash the host/dir for the REPL branch at
-  // ~line 3720 to pick up. Headless (-p) mode not supported in v1: SSH
-  // sessions need the local REPL to drive them (interrupt, permissions).
+  // `claude ssh <host> [dir]`：从 argv 中移除以运行主命令处理器（完整
+  // 交互式 TUI），并暂存主机和目录，供约第 3720 行的 REPL 分支使用。
+  // v1 不支持无界面（-p）模式：SSH 会话需要本地 REPL 驱动（中断、权限）。
   if (feature('SSH_REMOTE') && _pendingSSH) {
     const rawCliArgs = process.argv.slice(2);
-    // SSH-specific flags can appear before the host positional (e.g.
-    // `ssh --permission-mode auto host /tmp` — standard POSIX flags-before-
-    // positionals). Pull them all out BEFORE checking whether a host was
-    // given, so `claude ssh --permission-mode auto host` and `claude ssh host
-    // --permission-mode auto` are equivalent. The host check below only needs
-    // to guard against `-h`/`--help` (which commander should handle).
+    // SSH 专用参数可以位于主机位置参数之前（例如
+    // `ssh --permission-mode auto host /tmp`，这是标准 POSIX 的参数在
+    // 位置参数之前的写法）。在检查是否提供主机前先提取全部参数，
+    // 因此 `claude ssh --permission-mode auto host` 和 `claude ssh host
+    // --permission-mode auto` 是等效的。下面的host检查只需要
+    // 防止`-h`/`--help`（指挥官应该处理）。
     if (rawCliArgs[0] === 'ssh') {
       const localIdx = rawCliArgs.indexOf('--local');
       if (localIdx !== -1) {
@@ -745,10 +742,10 @@ export async function main() {
         _pendingSSH.permissionMode = rawCliArgs[pmEqIdx]!.split('=')[1];
         rawCliArgs.splice(pmEqIdx, 1);
       }
-      // Forward session-resume + model flags to the remote CLI's initial spawn.
-      // --continue/-c and --resume <uuid> operate on the REMOTE session history
-      // (which persists under the remote's ~/.claude/projects/<cwd>/).
-      // --model controls which model the remote uses.
+      // 将会话恢复 + 模型标志转发到远程 CLI 的初始生成。
+      // --Continue/-c 和 --resume <uuid> 对 REMOTE 会话历史记录进行操作
+      // （它持续存在于远程的 ~/.claude/projects/<cwd>/ 下）。
+      // --model 控制遥控器使用的型号。
       const extractFlag = (flag: string, opts: {
         hasValue?: boolean;
         as?: string;
@@ -781,12 +778,12 @@ export async function main() {
         hasValue: true
       });
     }
-    // After pre-extraction, any remaining dash-arg at [1] is either -h/--help
-    // (commander handles) or an unknown-to-ssh flag (fall through to commander
-    // so it surfaces a proper error). Only a non-dash arg is the host.
+    // 预提取后，[1] 中残留的短横线参数要么是 -h/--help（由 commander 处理），
+    // 要么是 SSH 不认识的参数（交给 commander 以显示正确错误）。只有不以
+    // 短横线开头的参数才是主机。
     if (rawCliArgs[0] === 'ssh' && rawCliArgs[1] && !rawCliArgs[1].startsWith('-')) {
       _pendingSSH.host = rawCliArgs[1];
-      // Optional positional cwd.
+      // 可选的位置参数 cwd。
       let consumed = 2;
       if (rawCliArgs[2] && !rawCliArgs[2].startsWith('-')) {
         _pendingSSH.cwd = rawCliArgs[2];
@@ -794,40 +791,40 @@ export async function main() {
       }
       const rest = rawCliArgs.slice(consumed);
 
-      // Headless (-p) mode is not supported with SSH in v1 — reject early
-      // so the flag doesn't silently cause local execution.
+      // v1 的 SSH 不支持无界面（-p）模式，尽早拒绝，避免该参数
+      // 悄悄导致本地执行。
       if (rest.includes('-p') || rest.includes('--print')) {
         process.stderr.write('Error: headless (-p/--print) mode is not supported with claude ssh\n');
         gracefulShutdownSync(1);
         return;
       }
 
-      // Rewrite argv so the main command sees remaining flags but not `ssh`.
+      // 重写 argv，让主命令看到剩余参数但不包含 `ssh`。
       process.argv = [process.argv[0]!, process.argv[1]!, ...rest];
     }
   }
 
-  // Check for -p/--print and --init-only flags early to set isInteractiveSession before init()
-  // This is needed because telemetry initialization calls auth functions that need this flag
+  // 在 init() 前尽早检查 -p/--print 和 --init-only 参数，以设置 isInteractiveSession。
+  // 这是必需的，因为遥测初始化会调用依赖该参数的认证函数。
   const cliArgs = process.argv.slice(2);
   const hasPrintFlag = cliArgs.includes('-p') || cliArgs.includes('--print');
   const hasInitOnlyFlag = cliArgs.includes('--init-only');
   const hasSdkUrl = cliArgs.some(arg => arg.startsWith('--sdk-url'));
   const isNonInteractive = hasPrintFlag || hasInitOnlyFlag || hasSdkUrl || !process.stdout.isTTY;
 
-  // Stop capturing early input for non-interactive modes
+  // 对非交互模式停止捕获早期输入
   if (isNonInteractive) {
     stopCapturingEarlyInput();
   }
 
-  // Set simplified tracking fields
+  // 设置简化追踪字段
   const isInteractive = !isNonInteractive;
   setIsInteractive(isInteractive);
 
-  // Initialize entrypoint based on mode - needs to be set before any event is logged
+  // 根据模式初始化入口：必须在记录任何事件前设置
   initializeEntrypoint(isNonInteractive);
 
-  // Determine client type
+  // 确定客户端类型
   const clientType = (() => {
     if (isEnvTruthy(process.env.GITHUB_ACTIONS)) return 'github-action';
     if (process.env.CLAUDE_CODE_ENTRYPOINT === 'sdk-ts') return 'sdk-typescript';
@@ -837,7 +834,7 @@ export async function main() {
     if (process.env.CLAUDE_CODE_ENTRYPOINT === 'local-agent') return 'local-agent';
     if (process.env.CLAUDE_CODE_ENTRYPOINT === 'claude-desktop') return 'claude-desktop';
 
-    // Check if session-ingress token is provided (indicates remote session)
+    // 检查是否提供会话接入令牌（表示远程会话）
     const hasSessionIngressToken = process.env.CLAUDE_CODE_SESSION_ACCESS_TOKEN || process.env.CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR;
     if (process.env.CLAUDE_CODE_ENTRYPOINT === 'remote' || hasSessionIngressToken) {
       return 'remote';
@@ -849,19 +846,19 @@ export async function main() {
   if (previewFormat === 'markdown' || previewFormat === 'html') {
     setQuestionPreviewFormat(previewFormat);
   } else if (!clientType.startsWith('sdk-') &&
-  // Desktop and CCR pass previewFormat via toolConfig; when the feature is
-  // gated off they pass undefined — don't override that with markdown.
+  // 桌面端和 CCR 通过 toolConfig 传入 previewFormat；功能关闭时会传入
+  // undefined，不要用 markdown 覆盖它。
   clientType !== 'claude-desktop' && clientType !== 'local-agent' && clientType !== 'remote') {
     setQuestionPreviewFormat('markdown');
   }
 
-  // Tag sessions created via `claude remote-control` so the backend can identify them
+  // 标记由 `claude remote-control` 创建的会话，以便后端识别
   if (process.env.CLAUDE_CODE_ENVIRONMENT_KIND === 'bridge') {
     setSessionSource('remote-control');
   }
   profileCheckpoint('main_client_type_determined');
 
-  // Parse and load settings flags early, before init()
+  // 在 init() 前尽早解析并加载设置参数
   eagerLoadSettings();
   profileCheckpoint('main_before_run');
   await run();
@@ -869,7 +866,7 @@ export async function main() {
 }
 async function getInputPrompt(prompt: string, inputFormat: 'text' | 'stream-json'): Promise<string | AsyncIterable<string>> {
   if (!process.stdin.isTTY &&
-  // Input hijacking breaks MCP.
+  // 输入劫持会破坏 MCP。
   !process.argv.includes('mcp')) {
     if (inputFormat === 'stream-json') {
       return process.stdin;
@@ -3319,8 +3316,8 @@ async function run(): Promise<CommanderCommand> {
         }
       }
 
-      // Auth — call prepareApiRequest() once for orgUUID, but use a
-      // getAccessToken closure for the token so reconnects get fresh tokens.
+      // Auth — 为 orgUUID 调用一次prepareApiRequest()，但使用
+      // getAccessToken 关闭令牌，以便重新连接获取新令牌。
       const {
         checkAndRefreshOAuthTokenIfNeeded,
         getClaudeAIOAuthTokens
@@ -4039,7 +4036,7 @@ async function run(): Promise<CommanderCommand> {
       const shutdown = async () => {
         if (shuttingDown) return;
         shuttingDown = true;
-        // Stop accepting new connections before tearing down sessions.
+        // 在拆除会话之前停止接受新连接。
         server.stop(true);
         await sessionManager.destroyAll();
         await removeServerLock();
@@ -4050,24 +4047,24 @@ async function run(): Promise<CommanderCommand> {
     });
   }
 
-  // `claude ssh <host> [dir]` — registered here only so --help shows it.
-  // The actual interactive flow is handled by early argv rewriting in main()
-  // (parallels the DIRECT_CONNECT/cc:// pattern above). If commander reaches
-  // this action it means the argv rewrite didn't fire (e.g. user ran
-  // `claude ssh` with no host) — just print usage.
+  // `claude ssh <host> [dir]` - 在这里注册只是为了 --help 显示它。
+  // 实际的交互流程是通过 main() 中的早期 argv 重写来处理的
+  // （与上面的 DIRECT_CONNECT/cc:// 模式类似）。如果指挥官到达
+  // 此操作意味着 argv 重写没有触发（例如用户运行
+  // 没有主机的“claude ssh”）——仅打印用法。
   if (feature('SSH_REMOTE')) {
     program.command('ssh <host> [dir]').description('Run Claude Code on a remote host over SSH. Deploys the binary and ' + 'tunnels API auth back through your local machine — no remote setup needed.').option('--permission-mode <mode>', 'Permission mode for the remote session').option('--dangerously-skip-permissions', 'Skip all permission prompts on the remote (dangerous)').option('--local', 'e2e test mode — spawn the child CLI locally (skip ssh/deploy). ' + 'Exercises the auth proxy and unix-socket plumbing without a remote host.').action(async () => {
-      // Argv rewriting in main() should have consumed `ssh <host>` before
-      // commander runs. Reaching here means host was missing or the
-      // rewrite predicate didn't match.
+      // main() 中的 Argv 重写应该在之前消耗了 `ssh <host>`
+      // 指挥官跑。到达这里意味着主机丢失或
+      // 重写谓词不匹配。
       process.stderr.write('Usage: claude ssh <user@host | ssh-config-alias> [dir]\n\n' + "Runs Claude Code on a remote Linux host. You don't need to install\n" + 'anything on the remote or run `claude auth login` there — the binary is\n' + 'deployed over SSH and API auth tunnels back through your local machine.\n');
       process.exit(1);
     });
   }
 
-  // claude connect — subcommand only handles -p (headless) mode.
-  // Interactive mode (without -p) is handled by early argv rewriting in main()
-  // which redirects to the main command with full TUI support.
+  // claude connect — 子命令仅处理 -p（无头）模式。
+  // 交互模式（不带 -p）通过 main() 中的早期 argv 重写来处理
+  // 它重定向到具有完整 TUI 支持的主命令。
   if (feature('DIRECT_CONNECT')) {
     program.command('open <cc-url>').description('Connect to a Claude Code server (internal — use cc:// URLs)').option('-p, --print [prompt]', 'Print mode (headless)').option('--output-format <format>', 'Output format: text, json, stream-json', 'text').action(async (ccUrl: string, opts: {
       print?: string | boolean;
@@ -4108,7 +4105,7 @@ async function run(): Promise<CommanderCommand> {
     });
   }
 
-  // claude auth
+  // 克劳德·奥特
 
   const auth = program.command('auth').description('Manage authentication').configureHelp(createSortedHelpConfig());
   auth.command('login').description('Sign in to your Anthropic account').option('--email <email>', 'Pre-populate email address on the login page').option('--sso', 'Force SSO login flow').option('--console', 'Use Anthropic Console (API usage billing) instead of Claude subscription').option('--claudeai', 'Use Claude subscription (default)').action(async ({
@@ -4149,15 +4146,15 @@ async function run(): Promise<CommanderCommand> {
   });
 
   /**
-   * Helper function to handle marketplace command errors consistently.
-   * Logs the error and exits the process with status 1.
-   * @param error The error that occurred
-   * @param action Description of the action that failed
+   * 帮助函数一致地处理市场命令错误。
+   * 记录错误并以状态 1 退出进程。
+   * @param error 发生的错误
+   * @param action 失败操作的描述
    */
-  // Hidden flag on all plugin/marketplace subcommands to target cowork_plugins.
+  // 所有插件/市场子命令上的隐藏标志以定位 cowork_plugins。
   const coworkOption = () => new Option('--cowork', 'Use cowork_plugins directory').hideHelp();
 
-  // Plugin validate command
+  // 插件验证命令
   const pluginCmd = program.command('plugin').alias('plugins').description('Manage Claude Code plugins').configureHelp(createSortedHelpConfig());
   pluginCmd.command('validate <path>').description('Validate a plugin or marketplace manifest').addOption(coworkOption()).action(async (manifestPath: string, options: {
     cowork?: boolean;
@@ -4168,7 +4165,7 @@ async function run(): Promise<CommanderCommand> {
     await pluginValidateHandler(manifestPath, options);
   });
 
-  // Plugin list command
+  // 插件列表命令
   pluginCmd.command('list').description('List installed plugins').option('--json', 'Output as JSON').option('--available', 'Include available plugins from marketplaces (requires --json)').addOption(coworkOption()).action(async (options: {
     json?: boolean;
     available?: boolean;
@@ -4180,7 +4177,7 @@ async function run(): Promise<CommanderCommand> {
     await pluginListHandler(options);
   });
 
-  // Marketplace subcommands
+  // 市场子命令
   const marketplaceCmd = pluginCmd.command('marketplace').description('Manage Claude Code marketplaces').configureHelp(createSortedHelpConfig());
   marketplaceCmd.command('add <source>').description('Add a marketplace from a URL, path, or GitHub repo').addOption(coworkOption()).option('--sparse <paths...>', 'Limit checkout to specific directories via git sparse-checkout (for monorepos). Example: --sparse .claude-plugin plugins').option('--scope <scope>', 'Where to declare the marketplace: user (default), project, or local').action(async (source: string, options: {
     cowork?: boolean;
@@ -4218,7 +4215,7 @@ async function run(): Promise<CommanderCommand> {
     await marketplaceUpdateHandler(name, options);
   });
 
-  // Plugin install command
+  // 插件安装命令
   pluginCmd.command('install <plugin>').alias('i').description('Install a plugin from available marketplaces (use plugin@marketplace for specific marketplace)').option('-s, --scope <scope>', 'Installation scope: user, project, or local', 'user').addOption(coworkOption()).action(async (plugin: string, options: {
     scope?: string;
     cowork?: boolean;
@@ -4229,7 +4226,7 @@ async function run(): Promise<CommanderCommand> {
     await pluginInstallHandler(plugin, options);
   });
 
-  // Plugin uninstall command
+  // 插件卸载命令
   pluginCmd.command('uninstall <plugin>').alias('remove').alias('rm').description('Uninstall an installed plugin').option('-s, --scope <scope>', 'Uninstall from scope: user, project, or local', 'user').option('--keep-data', "Preserve the plugin's persistent data directory (~/.claude/plugins/data/{id}/)").addOption(coworkOption()).action(async (plugin: string, options: {
     scope?: string;
     cowork?: boolean;
@@ -4241,7 +4238,7 @@ async function run(): Promise<CommanderCommand> {
     await pluginUninstallHandler(plugin, options);
   });
 
-  // Plugin enable command
+  // 插件启用命令
   pluginCmd.command('enable <plugin>').description('Enable a disabled plugin').option('-s, --scope <scope>', `Installation scope: ${VALID_INSTALLABLE_SCOPES.join(', ')} (default: auto-detect)`).addOption(coworkOption()).action(async (plugin: string, options: {
     scope?: string;
     cowork?: boolean;

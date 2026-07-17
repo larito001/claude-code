@@ -18,9 +18,9 @@ export function getAPIProviderForStatsig(): AnalyticsMetadata_I_VERIFIED_THIS_IS
 }
 
 /**
- * Check if ANTHROPIC_BASE_URL is a first-party Anthropic API URL.
- * Returns true if not set (default API) or points to api.anthropic.com
- * (or api-staging.anthropic.com for ant users).
+ * 检查 ANTHROPIC_BASE_URL 是否是第一方 Anthropic API URL。
+ * 如果未设置（默认 API）或指向 api.anthropic.com，则返回 true
+ * （对于 ant 用户则为 api-staging.anthropic.com）。
  */
 export function isFirstPartyAnthropicBaseUrl(): boolean {
   const baseUrl = process.env.ANTHROPIC_BASE_URL

@@ -1,10 +1,10 @@
 import { feature } from 'bun:bundle';
 
-// Bugfix for corepack auto-pinning, which adds yarnpkg to peoples' package.jsons
+// 修复 corepack 自动固定版本的问题，该功能会把 yarnpkg 添加到用户的 package.json 中
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 process.env.COREPACK_ENABLE_AUTO_PIN = '0';
 
-// Set max heap size for child processes in CCR environments (containers have 16GB)
+// 为 CCR 环境中的子进程设置最大堆内存（容器有 16GB 内存）
 // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level, custom-rules/safe-env-boolean-check
 if (process.env.CLAUDE_CODE_REMOTE === 'true') {
   // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level
@@ -26,30 +26,30 @@ if (feature('ABLATION_BASELINE') && process.env.CLAUDE_CODE_ABLATION_BASELINE) {
 }
 
 /**
- * Bootstrap entrypoint - checks for special flags before loading the full CLI.
- * All imports are dynamic to minimize module evaluation for fast paths.
- * Fast-path for --version has zero imports beyond this file.
+ * 引导入口：加载完整 CLI 前先检查特殊参数。
+ * 所有导入均为动态导入，以尽量减少快速路径中的模块求值。
+ * --version 快速路径除本文件外不会导入任何模块。
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
-  // Fast-path for --version/-v: zero module loading needed
+  // --version/-v 快速路径：无需加载任何模块
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
-    // MACRO.VERSION is inlined at build time
+    // MACRO.VERSION 会在构建时内联
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${MACRO.VERSION} (Claude Code)`);
     return;
   }
 
-  // For all other paths, load the startup profiler
+  // 其他路径需要加载启动性能分析器
   const {
     profileCheckpoint
   } = await import('../utils/startupProfiler.js');
   profileCheckpoint('cli_entry');
 
-  // Fast-path for --dump-system-prompt: output the rendered system prompt and exit.
-  // Used by prompt sensitivity evals to extract the system prompt at a specific commit.
-  // Ant-only: eliminated from external builds via feature flag.
+  // --dump-system-prompt 快速路径：输出渲染后的系统提示词并退出。
+  // 提示词敏感性评测用它提取特定提交中的系统提示词。
+  // 仅供内部使用：外部构建会通过功能开关移除此逻辑。
   if (feature('DUMP_SYSTEM_PROMPT') && args[0] === '--dump-system-prompt') {
     profileCheckpoint('cli_dump_system_prompt_path');
     const {
@@ -284,7 +284,7 @@ async function main(): Promise<void> {
     process.env.CLAUDE_CODE_SIMPLE = '1';
   }
 
-  // No special flags detected, load and run the full CLI
+  // 未检测到特殊参数，加载并运行完整 CLI
   const {
     startCapturingEarlyInput
   } = await import('../utils/earlyInput.js');

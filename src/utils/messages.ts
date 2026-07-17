@@ -85,7 +85,7 @@ import { formatNumber, formatTokens } from './format.js'
 import { getPewterLedgerVariant } from './planModeV2.js'
 import { jsonStringify } from './slowOperations.js'
 
-// Hook attachments that have a hookName field (excludes HookPermissionDecisionAttachment)
+// 挂钩具有 hookName 字段的附件（不包括 HookPermissionDecisionAttachment）
 type HookAttachmentWithName = Exclude<
   HookAttachment,
   HookPermissionDecisionAttachment
@@ -162,7 +162,7 @@ import {
 import { escapeRegExp } from './stringUtils.js'
 import { isTodoV2Enabled } from './tasks.js'
 
-// Lazy import to avoid circular dependency (teammateMailbox -> teammate -> ... -> messages)
+// 延迟导入以避免循环依赖（teammateMailbox -> teammate -> ... -> messages）
 function getTeammateMailbox(): typeof import('./teammateMailbox.js') {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require('./teammateMailbox.js')
@@ -179,8 +179,8 @@ const MEMORY_CORRECTION_HINT =
 const TOOL_REFERENCE_TURN_BOUNDARY = 'Tool loaded.'
 
 /**
- * Appends a memory correction hint to a rejection/cancellation message
- * when auto-memory is enabled and the GrowthBook flag is on.
+ * 将记忆更正提示附加到拒绝/取消消息
+ * 当启用自动记忆并且 GrowthBook 标志打开时。
  */
 export function withMemoryCorrectionHint(message: string): string {
   if (
@@ -193,14 +193,14 @@ export function withMemoryCorrectionHint(message: string): string {
 }
 
 /**
- * Derive a short stable message ID (6-char base36 string) from a UUID.
- * Used for snip tool referencing — injected into API-bound messages as [id:...] tags.
- * Deterministic: same UUID always produces the same short ID.
+ * 从 UUID 派生一个短的稳定消息 ID（6 个字符的 base36 字符串）。
+ * 用于剪切工具引用——作为 [id:...] 标签注入到 API 绑定消息中。
+ * 确定性：相同的 UUID 始终生成相同的短 ID。
  */
 export function deriveShortMessageId(uuid: string): string {
-  // Take first 10 hex chars from the UUID (skipping dashes)
+  // 从 UUID 中取出前 10 个十六进制字符（跳过破折号）
   const hex = uuid.replace(/-/g, '').slice(0, 10)
-  // Convert to base36 for shorter representation, take 6 chars
+  // 转换为 base36 以获得更短的表示形式，占用 6 个字符
   return parseInt(hex, 16).toString(36).slice(0, 6)
 }
 
@@ -221,7 +221,7 @@ export const PLAN_REJECTION_PREFIX =
   'The agent proposed a plan that was rejected by the user. The user chose to stay in plan mode rather than proceed with implementation.\n\nRejected plan:\n'
 
 /**
- * Shared guidance for permission denials, instructing the model on appropriate workarounds.
+ * 共享拒绝权限指南，指导模型采取适当的解决方法。
  */
 export const DENIAL_WORKAROUND_GUIDANCE =
   `IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, ` +
@@ -239,30 +239,30 @@ export function DONT_ASK_REJECT_MESSAGE(toolName: string): string {
 }
 export const NO_RESPONSE_REQUESTED = 'No response requested.'
 
-// Synthetic tool_result content inserted by ensureToolResultPairing when a
-// tool_use block has no matching tool_result. Exported so HFI submission can
-// reject any payload containing it — placeholder satisfies pairing structurally
-// but the content is fake, which poisons training data if submitted.
+// 当 a 时，ensureToolResultPairing 插入的合成 tool_result 内容
+// tool_use 块没有匹配的 tool_result。已导出，以便 HFI 提交可以
+// 拒绝任何包含它的有效负载 - 占位符满足结构配对
+// 但内容是假的，一旦提交就会毒害训练数据。
 export const SYNTHETIC_TOOL_RESULT_PLACEHOLDER =
   '[Tool result missing due to internal error]'
 
-// Prefix used by UI to detect classifier denials and render them concisely
+// UI 使用的前缀来检测分类器拒绝并简洁地呈现它们
 const AUTO_MODE_REJECTION_PREFIX =
   'Permission for this action has been denied. Reason: '
 
 /**
- * Check if a tool result message is a classifier denial.
- * Used by the UI to render a short summary instead of the full message.
+ * 检查工具结果消息是否是分类器拒绝。
+ * 由 UI 用于呈现简短摘要而不是完整消息。
  */
 export function isClassifierDenial(content: string): boolean {
   return content.startsWith(AUTO_MODE_REJECTION_PREFIX)
 }
 
 /**
- * Build a rejection message for auto mode classifier denials.
- * Encourages continuing with other tasks and suggests permission rules.
+ * 为自动模式分类器拒绝构建拒绝消息。
+ * 鼓励继续其他任务并建议权限规则。
  *
- * @param reason - The classifier's reason for denying the action
+ * @param reason - 分类器拒绝该操作的原因
  */
 export function buildYoloRejectionMessage(reason: string): string {
   const prefix = AUTO_MODE_REJECTION_PREFIX
@@ -331,8 +331,8 @@ function isSyntheticApiErrorMessage(
 export function getLastAssistantMessage(
   messages: Message[],
 ): AssistantMessage | undefined {
-  // findLast exits early from the end — much faster than filter + last for
-  // large message arrays (called on every REPL render via useFeedbackSurvey).
+  // findLast 从末尾提前退出 - 比 filter + last for 快得多
+  // 大型消息数组（通过 useFeedbackSurvey 在每个 REPL 渲染上调用）。
   return messages.findLast(
     (msg): msg is AssistantMessage => msg.type === 'assistant',
   )
@@ -424,7 +424,7 @@ export function createAssistantMessage({
             {
               type: 'text' as const,
               text: content === '' ? NO_CONTENT_MESSAGE : content,
-            } as BetaContentBlock, // NOTE: citations field is not supported in Bedrock API
+            } as BetaContentBlock, // 注意：Bedrock API 不支持引用字段
           ]
         : content,
     usage,
@@ -448,7 +448,7 @@ export function createAssistantAPIErrorMessage({
       {
         type: 'text' as const,
         text: content === '' ? NO_CONTENT_MESSAGE : content,
-      } as BetaContentBlock, // NOTE: citations field is not supported in Bedrock API
+      } as BetaContentBlock, // 注意：Bedrock API 不支持引用字段
     ],
     isApiErrorMessage: true,
     apiError,
@@ -478,8 +478,8 @@ export function createUserMessage({
   isVisibleInTranscriptOnly?: true
   isVirtual?: true
   isCompactSummary?: true
-  toolUseResult?: unknown // Matches tool's `Output` type
-  /** MCP protocol metadata to pass through to SDK consumers (never sent to model) */
+  toolUseResult?: unknown // 匹配工具的“输出”类型
+  /** MCP 协议元数据传递给 SDK 使用者（从不发送给模型） */
   mcpMeta?: {
     _meta?: Record<string, unknown>
     structuredContent?: Record<string, unknown>
@@ -489,21 +489,21 @@ export function createUserMessage({
   imagePasteIds?: number[]
   // For tool_result messages: the UUID of the assistant message containing the matching tool_use
   sourceToolAssistantUUID?: UUID
-  // Permission mode when message was sent (for rewind restoration)
+  // 发送消息时的权限模式（用于倒回恢复）
   permissionMode?: PermissionMode
   summarizeMetadata?: {
     messagesSummarized: number
     userContext?: string
     direction?: PartialCompactDirection
   }
-  // Provenance of this message. undefined = human (keyboard).
+  // 此消息的出处。未定义=人类（键盘）。
   origin?: MessageOrigin
 }): UserMessage {
   const m: UserMessage = {
     type: 'user',
     message: {
       role: 'user',
-      content: content || NO_CONTENT_MESSAGE, // Make sure we don't send empty messages
+      content: content || NO_CONTENT_MESSAGE, // 确保我们不会发送空消息
     },
     isMeta,
     isVisibleInTranscriptOnly,
@@ -560,8 +560,8 @@ export function createUserInterruptionMessage({
 }
 
 /**
- * Creates a new synthetic user caveat message for local commands (eg. bash, slash).
- * We need to create a new message each time because messages must have unique uuids.
+ * 为本地命令（例如 bash、slash）创建新的合成用户警告消息。
+ * 我们每次都需要创建一条新消息，因为消息必须具有唯一的 uuid。
  */
 export function createSyntheticUserCaveatMessage(): UserMessage {
   return createUserMessage({
@@ -3297,15 +3297,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 }
 
 function getReadOnlyToolNames(): string {
-  // Ant-native builds alias find/grep to embedded bfs/ugrep and remove the
-  // dedicated Glob/Grep tools from the registry, so point at find/grep via
-  // Bash instead.
+  // Ant-native 构建别名 find/grep 来嵌入 bfs/ugrep 并删除
+  // 注册表中的专用 Glob/Grep 工具，因此通过以下方式指向 find/grep
+  // 改为猛击。
   const tools = hasEmbeddedSearchTools()
     ? [FILE_READ_TOOL_NAME, '`find`', '`grep`']
     : [FILE_READ_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME]
   const { allowedTools } = getCurrentProjectConfig()
-  // allowedTools is a tool-name allowlist. find/grep are shell commands, not
-  // tool names, so the filter is only meaningful for the non-embedded branch.
+  // allowedTools 是工具名称允许列表。 find/grep 是 shell 命令，而不是
+  // 工具名称，因此过滤器仅对非嵌入分支有意义。
   const filtered =
     allowedTools && allowedTools.length > 0 && !hasEmbeddedSearchTools()
       ? tools.filter(t => allowedTools.includes(t))
@@ -3314,11 +3314,11 @@ function getReadOnlyToolNames(): string {
 }
 
 /**
- * Iterative interview-based plan mode workflow.
- * Instead of forcing Explore/Plan agents, this workflow has the model:
- * 1. Read files and ask questions iteratively
- * 2. Build up the spec/plan file incrementally as understanding grows
- * 3. Use AskUserQuestion throughout to clarify and gather input
+ * 基于迭代访谈的计划模式工作流程。
+ * 此工作流具有以下模型，而不是强制探索/计划代理：
+ * 1. 迭代地阅读文件并提出问题
+ * 2. 随着理解的加深逐步构建规范/计划文件
+ * 3. 在整个过程中使用 AskUserQuestion 来澄清和收集输入
  */
 function getPlanModeInterviewInstructions(attachment: {
   planFilePath?: string
@@ -3500,9 +3500,9 @@ Read the team config to discover your teammates' names. Check the task list peri
   }
 
 
-  // skill_discovery handled here (not in the switch) so the 'skill_discovery'
-  // string literal lives inside a feature()-guarded block. A case label can't
-  // be gated, but this pattern can — same approach as teammate_mailbox above.
+  // Skill_discovery 在这里处理（不在交换机中），因此“skill_discovery”
+  // 字符串文字位于 feature() 保护的块内。箱子标签不能
+  // 被门控，但这种模式可以——与上面的 teammate_mailbox 相同的方法。
   if (feature('EXPERIMENTAL_SKILL_SEARCH')) {
     if (attachment.type === 'skill_discovery') {
       if (attachment.skills.length === 0) return []
@@ -3563,7 +3563,7 @@ Read the team config to discover your teammates' names. Check the task list peri
               ? [
                   createUserMessage({
                     content: `Note: The file ${attachment.filename} was too large and has been truncated to the first ${MAX_LINES_TO_READ} lines. Don't tell the user about this truncation. Use ${FileReadTool.name} to read more of the file if you need.`,
-                    isMeta: true, // only claude will see this
+                    isMeta: true, // 只有克劳德会看到这个
                   }),
                 ]
               : []),
@@ -3578,7 +3578,7 @@ Read the team config to discover your teammates' names. Check the task list peri
           ])
         }
         case 'pdf': {
-          // PDFs are handled via supplementalContent in the tool result
+          // PDF 通过工具结果中的 SupplementalContent 进行处理
           return wrapMessagesInSystemReminder([
             createToolUseMessage(FileReadTool.name, {
               file_path: attachment.filename,

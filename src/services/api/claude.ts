@@ -256,33 +256,33 @@ import {
   withRetry,
 } from './withRetry.js'
 
-// Define a type that represents valid JSON values
+// 定义表示有效 JSON 值的类型
 type JsonValue = string | number | boolean | null | JsonObject | JsonArray
 type JsonObject = { [key: string]: JsonValue }
 type JsonArray = JsonValue[]
 
 /**
- * Assemble the extra body parameters for the API request, based on the
- * CLAUDE_CODE_EXTRA_BODY environment variable if present and on any beta
- * headers (primarily for Bedrock requests).
+ * 根据 API 请求组装额外的主体参数
+ * CLAUDE_CODE_EXTRA_BODY 环境变量（如果存在且在任何测试版上）
+ * 标头（主要用于基岩请求）。
  *
- * @param betaHeaders - An array of beta headers to include in the request.
- * @returns A JSON object representing the extra body parameters.
+ * @param betaHeaders - 要包含在请求中的一组 beta 标头。
+ * @returns 表示额外主体参数的 JSON 对象。
  */
 export function getExtraBodyParams(betaHeaders?: string[]): JsonObject {
-  // Parse user's extra body parameters first
+  // 先解析用户额外的身体参数
   const extraBodyStr = process.env.CLAUDE_CODE_EXTRA_BODY
   let result: JsonObject = {}
 
   if (extraBodyStr) {
     try {
-      // Parse as JSON, which can be null, boolean, number, string, array or object
+      // 解析为 JSON，可以是 null、boolean、number、string、array 或 object
       const parsed = safeParseJSON(extraBodyStr)
-      // We expect an object with key-value pairs to spread into API parameters
+      // 我们期望一个带有键值对的对象传播到 API 参数中
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        // Shallow clone — safeParseJSON is LRU-cached and returns the same
-        // object reference for the same string. Mutating `result` below
-        // would poison the cache, causing stale values to persist.
+        // 浅克隆 - safeParseJSON 是 LRU 缓存并返回相同的值
+        // 同一字符串的对象引用。改变下面的“结果”
+        // 会毒害缓存，导致过时的值持续存在。
         result = { ...(parsed as JsonObject) }
       } else {
         logForDebugging(

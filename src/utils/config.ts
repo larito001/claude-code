@@ -45,20 +45,20 @@ import type { ImageDimensions } from './imageResizer.js'
 import type { ModelOption } from './model/modelOptions.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 
-// Re-entrancy guard: prevents getConfig → logEvent → getGlobalConfig → getConfig
-// infinite recursion when the config file is corrupted. logEvent's sampling check
-// reads GrowthBook features from the global config, which calls getConfig again.
+// 重入防护：防止 getConfig → logEvent → getGlobalConfig → getConfig
+// 当配置文件损坏时无限递归。 logEvent的采样检查
+// 从全局配置中读取 GrowthBook 功能，再次调用 getConfig。
 let insideGetConfig = false
 
-// Image dimension info for coordinate mapping (only set when image was resized)
+// 用于坐标映射的图像尺寸信息（仅在调整图像大小时设置）
 export type PastedContent = {
-  id: number // Sequential numeric ID
+  id: number // 连续数字 ID
   type: 'text' | 'image'
   content: string
-  mediaType?: string // e.g., 'image/png', 'image/jpeg'
-  filename?: string // Display name for images in attachment slot
+  mediaType?: string // 例如，“图像/png”、“图像/jpeg”
+  filename?: string // 附件槽中图像的显示名称
   dimensions?: ImageDimensions
-  sourcePath?: string // Original file path for images dragged onto the terminal
+  sourcePath?: string // 拖到终端上的图像的原始文件路径
 }
 
 export interface SerializedStructuredHistoryEntry {
@@ -107,22 +107,22 @@ export type ProjectConfig = {
   exampleFiles?: string[]
   exampleFilesGeneratedAt?: number
 
-  // Trust dialog settings
+  // 信任对话框设置
   hasTrustDialogAccepted?: boolean
 
   hasCompletedProjectOnboarding?: boolean
   projectOnboardingSeenCount: number
   hasClaudeMdExternalIncludesApproved?: boolean
   hasClaudeMdExternalIncludesWarningShown?: boolean
-  // MCP server approval fields - migrated to settings but kept for backward compatibility
+  // MCP 服务器批准字段 - 迁移到设置但保留向后兼容性
   enabledMcpjsonServers?: string[]
   disabledMcpjsonServers?: string[]
   enableAllProjectMcpServers?: boolean
-  // List of disabled MCP servers (all scopes) - used for enable/disable toggle
+  // 禁用的 MCP 服务器列表（所有范围）- 用于启用/禁用切换
   disabledMcpServers?: string[]
-  // Opt-in list for built-in MCP servers that default to disabled
+  // 默认禁用的内置 MCP 服务器的选择加入列表
   enabledMcpServers?: string[]
-  // Worktree session management
+  // 工作树会话管理
   activeWorktreeSession?: {
     originalCwd: string
     worktreePath: string
@@ -131,7 +131,7 @@ export type ProjectConfig = {
     sessionId: string
     hookBased?: boolean
   }
-  /** Spawn mode for `claude remote-control` multi-session. Set by first-run dialog or `w` toggle. */
+  /** “克劳德远程控制”多会话的生成模式。通过首次运行对话框或“w”切换设置。 */
   remoteControlSpawnMode?: 'same-dir' | 'worktree'
 }
 
@@ -162,10 +162,10 @@ export type AccountInfo = {
   accountUuid: string
   emailAddress: string
   organizationUuid?: string
-  organizationName?: string | null // added 4/23/2025, not populated for existing users
+  organizationName?: string | null // 添加于 2025 年 4 月 23 日，未填充现有用户
   organizationRole?: string | null
   workspaceRole?: string | null
-  // Populated by /api/oauth/profile
+  // 由 /api/oauth/profile 填充
   displayName?: string
   hasExtraUsageEnabled?: boolean
   billingType?: BillingType | null
@@ -173,7 +173,7 @@ export type AccountInfo = {
   subscriptionCreatedAt?: string
 }
 
-// TODO: 'emacs' is kept for backward compatibility - remove after a few releases
+// TODO：保留“emacs”以实现向后兼容性 - 在几个版本后删除
 export type EditorMode = 'emacs' | (typeof EDITOR_MODES)[number]
 
 export type DiffTool = 'terminal' | 'auto'
@@ -182,38 +182,38 @@ export type OutputStyle = string
 
 export type GlobalConfig = {
   /**
-   * @deprecated Use settings.apiKeyHelper instead.
+   * @deprecated 请改用settings.apiKeyHelper。
    */
   apiKeyHelper?: string
   projects?: Record<string, ProjectConfig>
   numStartups: number
   installMethod?: InstallMethod
   autoUpdates?: boolean
-  // Flag to distinguish protection-based disabling from user preference
+  // 用于区分基于保护的禁用和用户首选项的标志
   autoUpdatesProtectedForNative?: boolean
-  // Session count when Doctor was last shown
+  // 上次显示 Doctor 时的会话计数
   doctorShownAtSession?: number
   userID?: string
   theme: ThemeSetting
   hasCompletedOnboarding?: boolean
-  // Tracks the last version that reset onboarding, used with MIN_VERSION_REQUIRING_ONBOARDING_RESET
+  // 跟踪重置入门的最后一个版本，与 MIN_VERSION_REQUIRING_ONBOARDING_RESET 一起使用
   lastOnboardingVersion?: string
-  // Tracks the last version for which release notes were seen, used for managing release notes
+  // 跟踪查看发行说明的最后一个版本，用于管理发行说明
   lastReleaseNotesSeen?: string
-  // Timestamp when changelog was last fetched (content stored in ~/.claude/cache/changelog.md)
+  // 上次获取变更日志时的时间戳（内容存储在 ~/.claude/cache/changelog.md 中）
   changelogLastFetched?: number
-  // @deprecated - Migrated to ~/.claude/cache/changelog.md. Keep for migration support.
+  // @deprecated - 迁移到 ~/.claude/cache/changelog.md。保留以获得迁移支持。
   cachedChangelog?: string
   mcpServers?: Record<string, McpServerConfig>
-  // claude.ai MCP connectors that have successfully connected at least once.
-  // Used to gate "connector unavailable" / "needs auth" startup notifications:
-  // a connector the user has actually used is worth flagging when it breaks,
-  // but an org-configured connector that's been needs-auth since day one is
-  // something the user has demonstrably ignored and shouldn't nag about.
+  // claude.ai MCP 连接器已成功连接至少一次。
+  // 用于控制“连接器不可用”/“需要身份验证”启动通知：
+  // 用户实际使用过的连接器在损坏时值得标记，
+  // 但是从第一天起就需要身份验证的组织配置连接器是
+  // 用户明显忽略了并且不应该抱怨的事情。
   claudeAiMcpEverConnected?: string[]
   preferredNotifChannel: NotificationChannel
   /**
-   * @deprecated. Use the Notification hook instead (docs/hooks.md).
+   * @deprecated。请改用通知挂钩 (docs/hooks.md)。
    */
   customNotifyCommand?: string
   verbose: boolean
@@ -221,103 +221,103 @@ export type GlobalConfig = {
     approved?: string[]
     rejected?: string[]
   }
-  primaryApiKey?: string // Primary API key for the user when no environment variable is set, set via oauth (TODO: rename)
+  primaryApiKey?: string // 未设置环境变量时用户的主 API 密钥，通过 oauth 设置（TODO：重命名）
   hasAcknowledgedCostThreshold?: boolean
-  hasSeenUndercoverAutoNotice?: boolean // ant-only: whether the one-time auto-undercover explainer has been shown
-  hasSeenUltraplanTerms?: boolean // ant-only: whether the one-time CCR terms notice has been shown in the ultraplan launch dialog
-  hasResetAutoModeOptInForDefaultOffer?: boolean // ant-only: one-shot migration guard, re-prompts churned auto-mode users
+  hasSeenUndercoverAutoNotice?: boolean // ant-only：是否显示一次性自动卧底解释器
+  hasSeenUltraplanTerms?: boolean // ant-only：一次性 CCR 条款通知是否已显示在 ultraplan 启动对话框中
+  hasResetAutoModeOptInForDefaultOffer?: boolean // ant-only：一次性迁移防护，重新提示流失的自动模式用户
   oauthAccount?: AccountInfo
-  iterm2KeyBindingInstalled?: boolean // Legacy - keeping for backward compatibility
+  iterm2KeyBindingInstalled?: boolean // 遗留 - 保留向后兼容性
   editorMode?: EditorMode
   bypassPermissionsModeAccepted?: boolean
   hasUsedBackslashReturn?: boolean
-  autoCompactEnabled: boolean // Controls whether auto-compact is enabled
-  showTurnDuration: boolean // Controls whether to show turn duration message (e.g., "Cooked for 1m 6s")
+  autoCompactEnabled: boolean // 控制是否启用自动压缩
+  showTurnDuration: boolean // 控制是否显示回合持续时间消息（例如“Cooked for 1m 6s”）
   /**
-   * @deprecated Use settings.env instead.
+   * @deprecated 请改用 settings.env。
    */
-  env: { [key: string]: string } // Environment variables to set for the CLI
-  hasSeenTasksHint?: boolean // Whether the user has seen the tasks hint
-  hasUsedStash?: boolean // Whether the user has used the stash feature (Ctrl+S)
-  hasUsedBackgroundTask?: boolean // Whether the user has backgrounded a task (Ctrl+B)
-  queuedCommandUpHintCount?: number // Counter for how many times the user has seen the queued command up hint
-  diffTool?: DiffTool // Which tool to use for displaying diffs (terminal or vscode)
+  env: { [key: string]: string } // 为 CLI 设置的环境变量
+  hasSeenTasksHint?: boolean // 用户是否看到任务提示
+  hasUsedStash?: boolean // 用户是否使用过stash功能（Ctrl+S）
+  hasUsedBackgroundTask?: boolean // 用户是否已将任务置于后台 (Ctrl+B)
+  queuedCommandUpHintCount?: number // 用户看到排队命令提示的次数的计数器
+  diffTool?: DiffTool // 使用哪个工具来显示差异（终端或 vscode）
 
-  // Terminal setup state tracking
+  // 终端设置状态跟踪
   iterm2SetupInProgress?: boolean
-  iterm2BackupPath?: string // Path to the backup file for iTerm2 preferences
-  appleTerminalBackupPath?: string // Path to the backup file for Terminal.app preferences
-  appleTerminalSetupInProgress?: boolean // Whether Terminal.app setup is currently in progress
+  iterm2BackupPath?: string // iTerm2 首选项的备份文件路径
+  appleTerminalBackupPath?: string // Terminal.app 首选项的备份文件路径
+  appleTerminalSetupInProgress?: boolean // Terminal.app 设置当前是否正在进行
 
-  // Key binding setup tracking
-  shiftEnterKeyBindingInstalled?: boolean // Whether Shift+Enter key binding is installed (for iTerm2 or VSCode)
-  optionAsMetaKeyInstalled?: boolean // Whether Option as Meta key is installed (for Terminal.app)
+  // 键绑定设置跟踪
+  shiftEnterKeyBindingInstalled?: boolean // 是否安装 Shift+Enter 键绑定（对于 iTerm2 或 VSCode）
+  optionAsMetaKeyInstalled?: boolean // 是否安装 Option 作为 Meta 键（对于 Terminal.app）
 
-  // IDE configurations
-  autoConnectIde?: boolean // Whether to automatically connect to IDE on startup if exactly one valid IDE is available
-  autoInstallIdeExtension?: boolean // Whether to automatically install IDE extensions when running from within an IDE
+  // IDE配置
+  autoConnectIde?: boolean // 如果只有一个有效的 IDE 可用，是否在启动时自动连接到 IDE
+  autoInstallIdeExtension?: boolean // 从 IDE 中运行时是否自动安装 IDE 扩展
 
-  // IDE dialogs
-  hasIdeOnboardingBeenShown?: Record<string, boolean> // Map of terminal name to whether IDE onboarding has been shown
-  ideHintShownCount?: number // Number of times the /ide command hint has been shown
-  hasIdeAutoConnectDialogBeenShown?: boolean // Whether the auto-connect IDE dialog has been shown
+  // IDE 对话框
+  hasIdeOnboardingBeenShown?: Record<string, boolean> // 终端名称与是否已显示 IDE 入门的映射
+  ideHintShownCount?: number // /ide 命令提示已显示的次数
+  hasIdeAutoConnectDialogBeenShown?: boolean // 是否显示自动连接IDE对话框
 
   tipsHistory: {
-    [tipId: string]: number // Key is tipId, value is the numStartups when tip was last shown
+    [tipId: string]: number // 键是tipId，值是最后一次显示tip时的numStartups
   }
 
-  // /buddy companion soul — bones regenerated from userId on read. See src/buddy/.
+  // /buddy 同伴灵魂 — 读取时从 userId 重新生成的骨骼。请参阅 src/buddy/。
   companion?: import('../buddy/types.js').StoredCompanion
   companionMuted?: boolean
 
-  // Feedback survey tracking
+  // 反馈调查跟踪
   feedbackSurveyState?: {
     lastShownTime?: number
   }
 
-  // Transcript share prompt tracking ("Don't ask again")
+  // 成绩单共享提示跟踪（“不要再问”）
   transcriptShareDismissed?: boolean
 
-  // Memory usage tracking
-  memoryUsageCount: number // Number of times user has added to memory
+  // 内存使用情况跟踪
+  memoryUsageCount: number // 用户添加到内存的次数
 
-  // Sonnet-1M configs
-  hasShownS1MWelcomeV2?: Record<string, boolean> // Whether the Sonnet-1M v2 welcome message has been shown per org
-  // Cache of Sonnet-1M subscriber access per org - key is org ID
-  // hasAccess means "hasAccessAsDefault" but the old name is kept for backward
+  // Sonnet-1M 配置
+  hasShownS1MWelcomeV2?: Record<string, boolean> // 是否已按组织显示 Sonnet-1M v2 欢迎消息
+  // 每个组织的 Sonnet-1M 订户访问缓存 - 密钥是组织 ID
+  // hasAccess 的意思是“hasAccessAsDefault”，但保留旧名称以供向后使用
   // compatibility.
   s1mAccessCache?: Record<
     string,
     { hasAccess: boolean; hasAccessNotAsDefault?: boolean; timestamp: number }
   >
-  // Cache of Sonnet-1M PayG access per org - key is org ID
-  // hasAccess means "hasAccessAsDefault" but the old name is kept for backward
+  // 每个组织的 Sonnet-1M PayG 访问缓存 - 密钥是组织 ID
+  // hasAccess 的意思是“hasAccessAsDefault”，但保留旧名称以供向后使用
   // compatibility.
   s1mNonSubscriberAccessCache?: Record<
     string,
     { hasAccess: boolean; hasAccessNotAsDefault?: boolean; timestamp: number }
   >
 
-  // Guest passes eligibility cache per org - key is org ID
+  // 访客通过每个组织的资格缓存 - 密钥是组织 ID
   passesEligibilityCache?: Record<
     string,
     ReferralEligibilityResponse & { timestamp: number }
   >
 
-  // Grove config cache per account - key is account UUID
+  // 每个帐户的 Grove 配置缓存 - 密钥是帐户 UUID
   groveConfigCache?: Record<
     string,
     { grove_enabled: boolean; timestamp: number }
   >
 
-  // Guest passes upsell tracking
-  passesUpsellSeenCount?: number // Number of times the guest passes upsell has been shown
-  hasVisitedPasses?: boolean // Whether the user has visited /passes command
-  passesLastSeenRemaining?: number // Last seen remaining_passes count — reset upsell when it increases
+  // 访客通行证追加销售跟踪
+  passesUpsellSeenCount?: number // 已显示客人通过追加销售的次数
+  hasVisitedPasses?: boolean // 用户是否访问过 /passes 命令
+  passesLastSeenRemaining?: number // 最后一次看到的剩余通行数 — 当增加时重置追加销售
 
-  // Overage credit grant upsell tracking (keyed by org UUID — multi-org users).
-  // Inlined shape (not import()) because config.ts is in the SDK build surface
-  // and the SDK bundler can't resolve CLI service modules.
+  // 超额信用赠款追加销售跟踪（由组织 UUID 键入 - 多组织用户）。
+  // 内联形状（不是 import()），因为 config.ts 位于 SDK 构建表面中
+  // 并且 SDK 捆绑程序无法解析 CLI 服务模块。
   overageCreditGrantCache?: Record<
     string,
     {
@@ -331,256 +331,256 @@ export type GlobalConfig = {
       timestamp: number
     }
   >
-  overageCreditUpsellSeenCount?: number // Number of times the overage credit upsell has been shown
-  hasVisitedExtraUsage?: boolean // Whether the user has visited /extra-usage — hides credit upsells
+  overageCreditUpsellSeenCount?: number // 超额信用追加销售已显示的次数
+  hasVisitedExtraUsage?: boolean // 用户是否访问过 /extra-usage — 隐藏信用追加销售
 
-  // Voice mode notice tracking
-  voiceNoticeSeenCount?: number // Number of times the voice-mode-available notice has been shown
-  voiceLangHintShownCount?: number // Number of times the /voice dictation-language hint has been shown
-  voiceLangHintLastLanguage?: string // Resolved STT language code when the hint was last shown — reset count when it changes
-  voiceFooterHintSeenCount?: number // Number of sessions the "hold X to speak" footer hint has been shown
+  // 语音模式通知跟踪
+  voiceNoticeSeenCount?: number // 语音模式可用通知已显示的次数
+  voiceLangHintShownCount?: number // 显示 /voice 听写语言提示的次数
+  voiceLangHintLastLanguage?: string // 解决了上次显示提示时的 STT 语言代码 — 当计数发生变化时重置计数
+  voiceFooterHintSeenCount?: number // 显示“按住 X 说话”页脚提示的会话数
 
-  // Opus 1M merge notice tracking
-  opus1mMergeNoticeSeenCount?: number // Number of times the opus-1m-merge notice has been shown
+  // Opus 1M 合并通知跟踪
+  opus1mMergeNoticeSeenCount?: number // opus-1m-merge 通知已显示的次数
 
-  // Experiment enrollment notice tracking (keyed by experiment id)
+  // 实验注册通知跟踪（由实验 ID 键入）
   experimentNoticesSeenCount?: Record<string, number>
 
-  // OpusPlan experiment config
-  hasShownOpusPlanWelcome?: Record<string, boolean> // Whether the OpusPlan welcome message has been shown per org
+  // OpusPlan 实验配置
+  hasShownOpusPlanWelcome?: Record<string, boolean> // 是否已按组织显示 OpusPlan 欢迎消息
 
-  // Queue usage tracking
-  promptQueueUseCount: number // Number of times use has used the prompt queue
+  // 队列使用情况跟踪
+  promptQueueUseCount: number // use 使用提示队列的次数
 
-  // Btw usage tracking
-  btwUseCount: number // Number of times user has used /btw
+  // 顺便说一句，使用情况跟踪
+  btwUseCount: number // 用户使用/btw的次数
 
-  // Plan mode usage tracking
-  lastPlanModeUse?: number // Timestamp of last plan mode usage
+  // 计划模式使用情况跟踪
+  lastPlanModeUse?: number // 上次计划模式使用的时间戳
 
-  // Subscription notice tracking
-  subscriptionNoticeCount?: number // Number of times the subscription notice has been shown
-  hasAvailableSubscription?: boolean // Cached result of whether user has a subscription available
-  subscriptionUpsellShownCount?: number // Number of times the subscription upsell has been shown (deprecated)
-  recommendedSubscription?: string // Cached config value from Statsig (deprecated)
+  // 订阅通知跟踪
+  subscriptionNoticeCount?: number // 订阅通知展示次数
+  hasAvailableSubscription?: boolean // 用户是否有可用订阅的缓存结果
+  subscriptionUpsellShownCount?: number // 订阅加售已显示的次数（已弃用）
+  recommendedSubscription?: string // 从 Statsig 缓存配置值（已弃用）
 
-  // Todo feature configuration
-  todoFeatureEnabled: boolean // Whether the todo feature is enabled
-  showExpandedTodos?: boolean // Whether to show todos expanded, even when empty
-  showSpinnerTree?: boolean // Whether to show the teammate spinner tree instead of pills
+  // 待办事项功能配置
+  todoFeatureEnabled: boolean // 是否启用待办事项功能
+  showExpandedTodos?: boolean // 是否显示展开的待办事项，即使是空的
+  showSpinnerTree?: boolean // 是否显示队友旋转树而不是药丸
 
-  // First start time tracking
-  firstStartTime?: string // ISO timestamp when Claude Code was first started on this machine
+  // 首次开始时间跟踪
+  firstStartTime?: string // Claude Code 首次在此计算机上启动时的 ISO 时间戳
 
-  messageIdleNotifThresholdMs: number // How long the user has to have been idle to get a notification that Claude is done generating
+  messageIdleNotifThresholdMs: number // 用户必须空闲多长时间才能收到 Claude 生成完毕的通知
 
-  githubActionSetupCount?: number // Number of times the user has set up the GitHub Action
-  slackAppInstallCount?: number // Number of times the user has clicked to install the Slack app
+  githubActionSetupCount?: number // 用户设置 GitHub Action 的次数
+  slackAppInstallCount?: number // 用户点击安装 Slack 应用程序的次数
 
-  // File checkpointing configuration
+  // 文件检查点配置
   fileCheckpointingEnabled: boolean
 
-  // Terminal progress bar configuration (OSC 9;4)
+  // 终端进度条配置（OSC 9;4）
   terminalProgressBarEnabled: boolean
 
-  // Terminal tab status indicator (OSC 21337). When on, emits a colored
-  // dot + status text to the tab sidebar and drops the spinner prefix
-  // from the title (the dot makes it redundant).
+  // 终端选项卡状态指示器 (OSC 21337)。打开时会发出彩色光
+  // 点 + 状态文本到选项卡侧边栏并删除微调器前缀
+  // 来自标题（点使其变得多余）。
   showStatusInTerminalTab?: boolean
 
-  // Push-notification toggles (set via /config). Default off — explicit opt-in required.
+  // 推送通知切换（通过 /config 设置）。默认关闭 — 需要明确选择加入。
   taskCompleteNotifEnabled?: boolean
   inputNeededNotifEnabled?: boolean
   agentPushNotifEnabled?: boolean
 
-  // Claude Code usage tracking
-  claudeCodeFirstTokenDate?: string // ISO timestamp of the user's first Claude Code OAuth token
+  // 克劳德代码使用情况跟踪
+  claudeCodeFirstTokenDate?: string // 用户第一个 Claude Code OAuth 令牌的 ISO 时间戳
 
-  // Model switch callout tracking (ant-only)
-  modelSwitchCalloutDismissed?: boolean // Whether user chose "Don't show again"
-  modelSwitchCalloutLastShown?: number // Timestamp of last shown (don't show for 24h)
+  // 模型切换标注跟踪（仅限 ant）
+  modelSwitchCalloutDismissed?: boolean // 用户是否选择“不再显示”
+  modelSwitchCalloutLastShown?: number // 最后显示的时间戳（24 小时内不显示）
   modelSwitchCalloutVersion?: string
 
-  // Effort callout tracking - shown once for Opus 4.6 users
-  effortCalloutDismissed?: boolean // v1 - legacy, read to suppress v2 for Pro users who already saw it
+  // 工作量标注跟踪 - 针对 Opus 4.6 用户显示一次
+  effortCalloutDismissed?: boolean // v1 - 旧版本，为已经看过 v2 的 Pro 用户阅读以抑制 v2
   effortCalloutV2Dismissed?: boolean
 
-  // Remote callout tracking - shown once before first bridge enable
+  // 远程标注跟踪 - 在第一个桥启用之前显示一次
   remoteDialogSeen?: boolean
 
-  // Cross-process backoff for initReplBridge's oauth_expired_unrefreshable skip.
-  // `expiresAt` is the dedup key — content-addressed, self-clears when /login
-  // replaces the token. `failCount` caps false positives: transient refresh
-  // failures (auth server 5xx, lock errors) get 3 retries before backoff kicks
-  // in, mirroring useReplBridge's MAX_CONSECUTIVE_INIT_FAILURES. Dead-token
-  // accounts cap at 3 config writes; healthy+transient-blip self-heals in ~210s.
+  // initReplBridge 的 oauth_expired_unrefreshable 跳过的跨进程退避。
+  // `expiresAt` 是去重键 — 内容寻址，在 /login 时自动清除
+  // 替换令牌。 `failCount` 限制误报：瞬时刷新
+  // 失败（身份验证服务器 5xx、锁定错误）在退避开始之前重试 3 次
+  // 中，镜像useReplBridge的MAX_CONSECUTIVE_INIT_FAILURES。死令牌
+  // 帐户上限为 3 次配置写入；健康+短暂现象会在约 210 秒内自愈。
   bridgeOauthDeadExpiresAt?: number
   bridgeOauthDeadFailCount?: number
 
-  // Desktop upsell startup dialog tracking
-  desktopUpsellSeenCount?: number // Total showings (max 3)
-  desktopUpsellDismissed?: boolean // "Don't ask again" picked
+  // 桌面追加销售启动对话框跟踪
+  desktopUpsellSeenCount?: number // 总放映次数（最多 3 次）
+  desktopUpsellDismissed?: boolean // 选择“不要再问”
 
-  // Idle-return dialog tracking
-  idleReturnDismissed?: boolean // "Don't ask again" picked
+  // 空闲返回对话框跟踪
+  idleReturnDismissed?: boolean // 选择“不要再问”
 
-  // Opus 4.5 Pro migration tracking
+  // Opus 4.5 Pro 迁移跟踪
   opusProMigrationComplete?: boolean
   opusProMigrationTimestamp?: number
 
-  // Sonnet 4.5 1m migration tracking
+  // Sonnet 4.5 1m 迁移跟踪
   sonnet1m45MigrationComplete?: boolean
 
-  // Opus 4.0/4.1 → current Opus migration (shows one-time notif)
+  // Opus 4.0/4.1 → 当前 Opus 迁移（显示一次性通知）
   legacyOpusMigrationTimestamp?: number
 
-  // Sonnet 4.5 → 4.6 migration (pro/max/team premium)
+  // Sonnet 4.5 → 4.6 迁移（pro/max/team premium）
   sonnet45To46MigrationTimestamp?: number
 
-  // Cached statsig gate values
+  // 缓存的 statsig 门值
   cachedStatsigGates: {
     [gateName: string]: boolean
   }
 
-  // Cached statsig dynamic configs
+  // 缓存的 statsig 动态配置
   cachedDynamicConfigs?: { [configName: string]: unknown }
 
-  // Cached GrowthBook feature values
+  // 缓存的 GrowthBook 特征值
   cachedGrowthBookFeatures?: { [featureName: string]: unknown }
 
-  // Local GrowthBook overrides (ant-only, set via /config Gates tab).
-  // Checked after env-var overrides but before the real resolved value.
+  // 本地 GrowthBook 覆盖（仅限 ant，通过 /config Gates 选项卡设置）。
+  // 在 env-var 覆盖之后但在实际解析值之前检查。
   growthBookOverrides?: { [featureName: string]: unknown }
 
-  // Emergency tip tracking - stores the last shown tip to prevent re-showing
+  // 紧急提示跟踪 - 存储最后显示的提示以防止重新显示
   lastShownEmergencyTip?: string
 
-  // File picker gitignore behavior
-  respectGitignore: boolean // Whether file picker should respect .gitignore files (default: true). Note: .ignore files are always respected
+  // 文件选择器 gitignore 行为
+  respectGitignore: boolean // 文件选择器是否应该尊重 .gitignore 文件（默认值：true）。注意：.ignore 文件始终受到尊重
 
-  // Copy command behavior
-  copyFullResponse: boolean // Whether /copy always copies the full response instead of showing the picker
+  // 复制命令行为
+  copyFullResponse: boolean // /copy 是否始终复制完整响应而不是显示选择器
 
-  // Fullscreen in-app text selection behavior
-  copyOnSelect?: boolean // Auto-copy to clipboard on mouse-up (undefined → true; lets cmd+c "work" via no-op)
+  // 全屏应用内文本选择行为
+  copyOnSelect?: boolean // 鼠标松开时自动复制到剪贴板（未定义 → true；让 cmd+c 通过无操作“工作”）
 
-  // GitHub repo path mapping for teleport directory switching
-  // Key: "owner/repo" (lowercase), Value: array of absolute paths where repo is cloned
+  // 用于传送目录切换的 GitHub 存储库路径映射
+  // 键：“owner/repo”（小写），值：克隆 repo 的绝对路径数组
   githubRepoPaths?: Record<string, string[]>
 
-  // Terminal emulator to launch for claude-cli:// deep links. Captured from
-  // TERM_PROGRAM during interactive sessions since the deep link handler runs
-  // headless (LaunchServices/xdg) with no TERM_PROGRAM set.
+  // 用于启动 claude-cli:// 深层链接的终端模拟器。捕获自
+  // 自深层链接处理程序运行以来，交互会话期间的 TERM_PROGRAM
+  // 无头 (LaunchServices/xdg)，未设置 TERM_PROGRAM。
   deepLinkTerminal?: string
 
-  // iTerm2 it2 CLI setup
-  iterm2It2SetupComplete?: boolean // Whether it2 setup has been verified
-  preferTmuxOverIterm2?: boolean // User preference to always use tmux over iTerm2 split panes
+  // iTerm2 it2 CLI 设置
+  iterm2It2SetupComplete?: boolean // it2设置是否已验证
+  preferTmuxOverIterm2?: boolean // 用户偏好始终使用 tmux 而不是 iTerm2 分割窗格
 
-  // Skill usage tracking for autocomplete ranking
+  // 自动完成排名的技能使用跟踪
   skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
-  // Official marketplace auto-install tracking
-  officialMarketplaceAutoInstallAttempted?: boolean // Whether auto-install was attempted
-  officialMarketplaceAutoInstalled?: boolean // Whether auto-install succeeded
+  // 官方市场自动安装跟踪
+  officialMarketplaceAutoInstallAttempted?: boolean // 是否尝试自动安装
+  officialMarketplaceAutoInstalled?: boolean // 自动安装是否成功
   officialMarketplaceAutoInstallFailReason?:
     | 'policy_blocked'
     | 'git_unavailable'
     | 'gcs_unavailable'
-    | 'unknown' // Reason for failure if applicable
-  officialMarketplaceAutoInstallRetryCount?: number // Number of retry attempts
-  officialMarketplaceAutoInstallLastAttemptTime?: number // Timestamp of last attempt
-  officialMarketplaceAutoInstallNextRetryTime?: number // Earliest time to retry again
+    | 'unknown' // 失败原因（如果适用）
+  officialMarketplaceAutoInstallRetryCount?: number // 重试次数
+  officialMarketplaceAutoInstallLastAttemptTime?: number // 最后一次尝试的时间戳
+  officialMarketplaceAutoInstallNextRetryTime?: number // 最早重试时间
 
-  // Claude in Chrome settings
-  hasCompletedClaudeInChromeOnboarding?: boolean // Whether Claude in Chrome onboarding has been shown
-  claudeInChromeDefaultEnabled?: boolean // Whether Claude in Chrome is enabled by default (undefined means platform default)
-  cachedChromeExtensionInstalled?: boolean // Cached result of whether Chrome extension is installed
+  // Chrome 设置中的克劳德
+  hasCompletedClaudeInChromeOnboarding?: boolean // Chrome 入门中是否已显示 Claude
+  claudeInChromeDefaultEnabled?: boolean // Chrome中的Claude是否默认启用（未定义表示平台默认）
+  cachedChromeExtensionInstalled?: boolean // Chrome扩展是否安装的缓存结果
 
-  // Chrome extension pairing state (persisted across sessions)
+  // Chrome 扩展程序配对状态（跨会话持续存在）
   chromeExtension?: {
     pairedDeviceId?: string
     pairedDeviceName?: string
   }
 
-  // LSP plugin recommendation preferences
-  lspRecommendationDisabled?: boolean // Disable all LSP plugin recommendations
-  lspRecommendationNeverPlugins?: string[] // Plugin IDs to never suggest
-  lspRecommendationIgnoredCount?: number // Track ignored recommendations (stops after 5)
+  // LSP插件推荐偏好
+  lspRecommendationDisabled?: boolean // 禁用所有 LSP 插件建议
+  lspRecommendationNeverPlugins?: string[] // 绝不建议的插件 ID
+  lspRecommendationIgnoredCount?: number // 跟踪被忽略的建议（5 后停止）
 
-  // Claude Code hint protocol state (<claude-code-hint /> tags from CLIs/SDKs).
-  // Nested by hint type so future types (docs, mcp, ...) slot in without new
-  // top-level keys.
+  // Claude Code 提示协议状态（来自 CLI/SDK 的 <claude-code-hint /> 标记）。
+  // 按提示类型嵌套，因此将来的类型（docs、mcp、...）无需新的插入
+  // 顶级键。
   claudeCodeHints?: {
-    // Plugin IDs the user has already been prompted for. Show-once semantics:
-    // recorded regardless of yes/no response, never re-prompted. Capped at
-    // 100 entries to bound config growth — past that, hints stop entirely.
+    // 已提示用户输入插件 ID。显示一次语义：
+    // 无论是/否响应都会记录下来，并且不会重新提示。上限为
+    // 100 个条目限制配置增长 — 超过该限制，提示将完全停止。
     plugin?: string[]
-    // User chose "don't show plugin installation hints again" from the dialog.
+    // 用户从对话框中选择“不再显示插件安装提示”。
     disabled?: boolean
   }
 
-  // Permission explainer configuration
-  permissionExplainerEnabled?: boolean // Enable Haiku-generated explanations for permission requests (default: true)
+  // 权限解释器配置
+  permissionExplainerEnabled?: boolean // 启用俳句生成的权限请求解释（默认值：true）
 
-  // Teammate spawn mode: 'auto' | 'tmux' | 'in-process'
-  teammateMode?: 'auto' | 'tmux' | 'in-process' // How to spawn teammates (default: 'auto')
-  // Model for new teammates when the tool call doesn't pass one.
-  // undefined = hardcoded Opus (backward-compat); null = leader's model; string = model alias/ID.
+  // 队友生成模式：“自动” | 'tmux' | 'tmux' | “进行中”
+  teammateMode?: 'auto' | 'tmux' | 'in-process' // 如何生成队友（默认值：“自动”）
+  // 当工具调用未通过时为新队友建模。
+  // undefined = 硬编码 Opus（向后兼容）； null = 领导者模型； string = 模型别名/ID。
   teammateDefaultModel?: string | null
 
-  // PR status footer configuration (feature-flagged via GrowthBook)
-  prStatusFooterEnabled?: boolean // Show PR review status in footer (default: true)
+  // PR 状态页脚配置（通过 GrowthBook 进行功能标记）
+  prStatusFooterEnabled?: boolean // 在页脚中显示 PR 审核状态（默认值：true）
 
-  // Tmux live panel visibility (ant-only, toggled via Enter on tmux pill)
+  // Tmux 实时面板可见性（仅限 ant，通过 tmux 药丸上的 Enter 进行切换）
   tungstenPanelVisible?: boolean
 
-  // Cached org-level fast mode status from the API.
-  // Used to detect cross-session changes and notify users.
+  // 从 API 缓存组织级快速模式状态。
+  // 用于检测跨会话更改并通知用户。
   penguinModeOrgEnabled?: boolean
 
-  // Epoch ms when background refreshes last ran (fast mode, quota, passes, client data).
-  // Used with tengu_cicada_nap_ms to throttle API calls
+  // 后台刷新上次运行时的纪元毫秒（快速模式、配额、通行证、客户端数据）。
+  // 与 tengu_cicada_nap_ms 一起使用来限制 API 调用
   startupPrefetchedAt?: number
 
-  // Run Remote Control at startup (requires BRIDGE_MODE)
-  // undefined = use default (see getRemoteControlAtStartup() for precedence)
+  // 启动时运行远程控制（需要 BRIDGE_MODE）
+  // undefined = 使用默认值（请参阅 getRemoteControlAtStartup() 了解优先顺序）
   remoteControlAtStartup?: boolean
 
-  // Cached extra usage disabled reason from the last API response
-  // undefined = no cache, null = extra usage enabled, string = disabled reason.
+  // 缓存了上次 API 响应中的额外使用禁用原因
+  // undefined = 无缓存，null = 启用额外使用，string = 禁用原因。
   cachedExtraUsageDisabledReason?: string | null
 
-  // Auto permissions notification tracking (ant-only)
-  autoPermissionsNotificationCount?: number // Number of times the auto permissions notification has been shown
+  // 自动权限通知跟踪（仅限 Ant）
+  autoPermissionsNotificationCount?: number // 自动权限通知显示的次数
 
-  // Speculation configuration (ant-only)
-  speculationEnabled?: boolean // Whether speculation is enabled (default: true)
+  // 推测配置（仅限 ant）
+  speculationEnabled?: boolean // 是否启用推测（默认：true）
 
 
-  // Client data for server-side experiments (fetched during bootstrap).
+  // 服务器端实验的客户端数据（在引导期间获取）。
   clientDataCache?: Record<string, unknown> | null
 
-  // Additional model options for the model picker (fetched during bootstrap).
+  // 模型选择器的附加模型选项（在引导期间获取）。
   additionalModelOptionsCache?: ModelOption[]
 
-  // Disk cache for /api/claude_code/organizations/metrics_enabled.
-  // Org-level settings change rarely; persisting across processes avoids a
-  // cold API call on every `claude -p` invocation.
+  // /api/claude_code/organizations/metrics_enabled 的磁盘缓存。
+  // 组织级别的设置很少改变；跨进程持久化可以避免
+  // 每次“claude -p”调用时都会进行冷 API 调用。
   metricsStatusCache?: {
     enabled: boolean
     timestamp: number
   }
 
-  // Version of the last-applied migration set. When equal to
-  // CURRENT_MIGRATION_VERSION, runMigrations() skips all sync migrations
-  // (avoiding 11× saveGlobalConfig lock+re-read on every startup).
+  // 最后应用的迁移集的版本。当等于
+  // CURRENT_MIGRATION_VERSION，runMigrations() 跳过所有同步迁移
+  // （避免每次启动时 11× saveGlobalConfig 锁定+重新读取）。
   migrationVersion?: number
 }
 
 /**
- * Factory for a fresh default GlobalConfig. Used instead of deep-cloning a
- * shared constant — the nested containers (arrays, records) are all empty, so
- * a factory gives fresh refs at zero clone cost.
+ * 全新默认 GlobalConfig 的工厂。使用而不是深度克隆
+ * 共享常量——嵌套容器（数组、记录）都是空的，所以
+ * 工厂以零克隆成本提供新鲜参考。
  */
 function createDefaultGlobalConfig(): GlobalConfig {
   return {
@@ -680,13 +680,13 @@ export const PROJECT_CONFIG_KEYS = [
 export type ProjectConfigKey = (typeof PROJECT_CONFIG_KEYS)[number]
 
 /**
- * Check if the user has already accepted the trust dialog for the cwd.
+ * 检查用户是否已接受 cwd 的信任对话框。
  *
- * This function traverses parent directories to check if a parent directory
- * had approval. Accepting trust for a directory implies trust for child
+ * 该函数遍历父目录，检查父目录是否存在
+ * 获得批准。接受对目录的信任意味着对子目录的信任
  * directories.
  *
- * @returns Whether the trust dialog has been accepted (i.e. "should not be shown")
+ * @returns 信任对话框是否已被接受（即“不应显示”）
  */
 let _trustAccepted = false
 
@@ -695,36 +695,36 @@ export function resetTrustDialogAcceptedCacheForTesting(): void {
 }
 
 export function checkHasTrustDialogAccepted(): boolean {
-  // Trust only transitions false→true during a session (never the reverse),
-  // so once true we can latch it. false is not cached — it gets re-checked
-  // on every call so that trust dialog acceptance is picked up mid-session.
-  // (lodash memoize doesn't fit here because it would also cache false.)
+  // 信任仅在会话期间从假→真转变（而不是相反），
+  // 所以一旦为真我们就可以锁定它。 false 不被缓存——它会被重新检查
+  // 在每次通话中，以便在会话中获取信任对话接受。
+  // （lodash memoize 不适合这里，因为它也会缓存 false。）
   return (_trustAccepted ||= computeTrustDialogAccepted())
 }
 
 function computeTrustDialogAccepted(): boolean {
-  // Check session-level trust (for home directory case where trust is not persisted)
-  // When running from home dir, trust dialog is shown but acceptance is stored
-  // in memory only. This allows hooks and other features to work during the session.
+  // 检查会话级信任（对于信任不持久的主目录情况）
+  // 从主目录运行时，会显示信任对话框，但会存储接受
+  // 仅在记忆中。这允许挂钩和其他功能在会话期间工作。
   if (getSessionTrustAccepted()) {
     return true
   }
 
   const config = getGlobalConfig()
 
-  // Always check where trust would be saved (git root or original cwd)
-  // This is the primary location where trust is persisted by saveCurrentProjectConfig
+  // 始终检查信任的保存位置（git root 或原始 cwd）
+  // 这是 saveCurrentProjectConfig 保存信任的主要位置
   const projectPath = getProjectPathForConfig()
   const projectConfig = config.projects?.[projectPath]
   if (projectConfig?.hasTrustDialogAccepted) {
     return true
   }
 
-  // Now check from current working directory and its parents
-  // Normalize paths for consistent JSON key lookup
+  // 现在检查当前工作目录及其父目录
+  // 标准化路径以实现一致的 JSON 键查找
   let currentPath = normalizePathForConfigKey(getCwd())
 
-  // Traverse all parent directories
+  // 遍历所有父目录
   while (true) {
     const pathConfig = config.projects?.[currentPath]
     if (pathConfig?.hasTrustDialogAccepted) {
@@ -732,7 +732,7 @@ function computeTrustDialogAccepted(): boolean {
     }
 
     const parentPath = normalizePathForConfigKey(resolve(currentPath, '..'))
-    // Stop if we've reached the root (when parent is same as current)
+    // 如果我们到达根则停止（当父级与当前相同时）
     if (parentPath === currentPath) {
       break
     }
@@ -743,11 +743,11 @@ function computeTrustDialogAccepted(): boolean {
 }
 
 /**
- * Check trust for an arbitrary directory (not the session cwd).
- * Walks up from `dir`, returning true if any ancestor has trust persisted.
- * Unlike checkHasTrustDialogAccepted, this does NOT consult session trust or
- * the memoized project path — use when the target dir differs from cwd (e.g.
- * /assistant installing into a user-typed path).
+ * 检查任意目录（不是会话 cwd）的信任。
+ * 从“dir”向上走，如果任何祖先的信任持续存在，则返回 true。
+ * 与 checkHasTrustDialogAccepted 不同，这不会咨询会话信任或
+ * 记忆的项目路径 - 当目标目录与 cwd 不同时使用（例如
+ * /assistant 安装到用户输入的路径中）。
  */
 export function isPathTrusted(dir: string): boolean {
   const config = getGlobalConfig()
@@ -760,7 +760,7 @@ export function isPathTrusted(dir: string): boolean {
   }
 }
 
-// We have to put this test code here because Jest doesn't support mocking ES modules :O
+// 我们必须把这个测试代码放在这里，因为 Jest 不支持模拟 ES 模块:O
 const TEST_GLOBAL_CONFIG_FOR_TESTING: GlobalConfig = {
   ...DEFAULT_GLOBAL_CONFIG,
   autoUpdates: false,
@@ -774,11 +774,11 @@ export function isProjectConfigKey(key: string): key is ProjectConfigKey {
 }
 
 /**
- * Detect whether writing `fresh` would lose auth/onboarding state that the
- * in-memory cache still has. This happens when `getConfig` hits a corrupted
- * or truncated file mid-write (from another process or a non-atomic fallback)
- * and returns DEFAULT_GLOBAL_CONFIG. Writing that back would permanently
- * wipe auth. See GH #3117.
+ * 检测写入“fresh”是否会丢失身份验证/登录状态
+ * 内存缓存仍然有。当“getConfig”遇到损坏时会发生这种情况
+ * 或在写入过程中截断的文件（来自另一个进程或非原子回退）
+ * 并返回DEFAULT_GLOBAL_CONFIG。写回将永久
+ * 擦除授权。参见 GH #3117。
  */
 function wouldLoseAuthState(fresh: {
   oauthAccount?: unknown
@@ -799,7 +799,7 @@ export function saveGlobalConfig(
 ): void {
   if (process.env.NODE_ENV === 'test') {
     const config = updater(TEST_GLOBAL_CONFIG_FOR_TESTING)
-    // Skip if no changes (same reference returned)
+    // 如果没有更改则跳过（返回相同的引用）
     if (config === TEST_GLOBAL_CONFIG_FOR_TESTING) {
       return
     }
@@ -814,7 +814,7 @@ export function saveGlobalConfig(
       createDefaultGlobalConfig,
       current => {
         const config = updater(current)
-        // Skip if no changes (same reference returned)
+        // 如果没有更改则跳过（返回相同的引用）
         if (config === current) {
           return current
         }
@@ -825,9 +825,9 @@ export function saveGlobalConfig(
         return written
       },
     )
-    // Only write-through if we actually wrote. If the auth-loss guard
-    // tripped (or the updater made no changes), the file is untouched and
-    // the cache is still valid -- touching it would corrupt the guard.
+    // 只有当我们真正写过时才写通。如果授权丢失守卫
+    // 跳闸（或更新程序未进行任何更改），文件未受影响并且
+    // 缓存仍然有效——触摸它会破坏守卫。
     if (didWrite && written) {
       writeThroughGlobalConfigCache(written)
     }

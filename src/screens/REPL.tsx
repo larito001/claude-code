@@ -93,7 +93,7 @@ import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
 import { errorMessage } from '../utils/errors.js';
 import { isHumanTurn } from '../utils/messagePredicates.js';
 import { logError } from '../utils/log.js';
-// Dead code elimination: conditional imports
+// 消除死代码：有条件导入
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const useVoiceIntegration: typeof import('../hooks/useVoiceIntegration.js').useVoiceIntegration = feature('VOICE_MODE') ? require('../hooks/useVoiceIntegration.js').useVoiceIntegration : () => ({
   stripTrailing: () => 0,
@@ -101,17 +101,17 @@ const useVoiceIntegration: typeof import('../hooks/useVoiceIntegration.js').useV
   resetAnchor: () => {}
 });
 const VoiceKeybindingHandler: typeof import('../hooks/useVoiceIntegration.js').VoiceKeybindingHandler = feature('VOICE_MODE') ? require('../hooks/useVoiceIntegration.js').VoiceKeybindingHandler : () => null;
-// Frustration detection is ant-only (dogfooding). Conditional require so external
-// builds eliminate the module entirely (including its two O(n) useMemos that run
-// on every messages change, plus the GrowthBook fetch).
+// 挫败感检测仅限于蚂蚁（dogfooding）。有条件要求如此外在
+// 构建完全消除了该模块（包括其运行的两个 O(n) useMemos
+// 每次消息更改时，加上 GrowthBook 获取）。
 const useFrustrationDetection: typeof import('../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection = "external" === 'ant' ? require('../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection : () => ({
   state: 'closed',
   handleTranscriptSelect: () => {}
 });
-// Ant-only org warning. Conditional require so the org UUID list is
-// eliminated from external builds (one UUID is on excluded-strings).
+// 仅 Ant 组织警告。有条件要求，因此组织 UUID 列表为
+// 从外部构建中消除（一个 UUID 位于排除字符串上）。
 const useAntOrgWarningNotification: typeof import('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification = "external" === 'ant' ? require('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification : () => {};
-// Dead code elimination: conditional import for coordinator mode
+// 消除死代码：协调器模式的条件导入
 const getCoordinatorUserContext: (mcpClients: ReadonlyArray<{
   name: string;
 }>, scratchpadDir?: string) => {
@@ -189,7 +189,7 @@ import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { useInboxPoller } from '../hooks/useInboxPoller.js';
-// Dead code elimination: conditional import for loop mode
+// 死代码消除：条件导入for循环模式
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/index.js') : null;
 const PROACTIVE_NO_OP_SUBSCRIBE = (_cb: () => void) => () => {};
@@ -275,7 +275,7 @@ import { IssueFlagBanner } from '../components/PromptInput/IssueFlagBanner.js';
 import { useIssueFlagBanner } from '../hooks/useIssueFlagBanner.js';
 import { CompanionSprite, CompanionFloatingBubble, MIN_COLS_FOR_FULL_SPRITE } from '../buddy/CompanionSprite.js';
 import { DevBar } from '../components/DevBar.js';
-// Session manager removed - using AppState now
+// 会话管理器已删除 - 现在使用 AppState
 import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js';
 import { REMOTE_SAFE_COMMANDS } from '../commands.js';
 import type { RemoteMessageContent } from '../utils/teleport/api.js';
@@ -288,25 +288,25 @@ import { setClipboard } from '../ink/termio/osc.js';
 import type { ScrollBoxHandle } from '../ink/components/ScrollBox.js';
 import { createAttachmentMessage, getQueuedCommandAttachments } from '../utils/attachments.js';
 
-// Stable empty array for hooks that accept MCPServerConnection[] — avoids
-// creating a new [] literal on every render in remote mode, which would
-// cause useEffect dependency changes and infinite re-render loops.
+// 接受 MCPServerConnection[] 的挂钩的稳定空数组 — 避免
+// 在远程模式下的每个渲染上创建一个新的 [] 文字，这将
+// 导致 useEffect 依赖项更改和无限重新渲染循环。
 const EMPTY_MCP_CLIENTS: MCPServerConnection[] = [];
 
-// Stable stub for useAssistantHistory's non-KAIROS branch — avoids a new
+// useAssistantHistory 的非 KAIROS 分支的稳定存根 — 避免了新的
 // function identity each render, which would break composedOnScroll's memo.
 const HISTORY_STUB = {
   maybeLoadOlder: (_: ScrollBoxHandle) => {}
 };
-// Window after a user-initiated scroll during which type-into-empty does NOT
-// repin to bottom. Josh Rosen's workflow: Claude emits long output → scroll
-// up to read the start → start typing → before this fix, snapped to bottom.
+// 用户启动滚动后的窗口，在此期间 type-in​​to-empty 不会
+// 重新固定到底部。 Josh Rosen 的工作流程：Claude 发出长输出 → 滚动
+// 向上阅读开始→开始输入→在此修复之前，捕捉到底部。
 // https://anthropic.slack.com/archives/C07VBSHV7EV/p1773545449871739
 const RECENT_SCROLL_REPIN_WINDOW_MS = 3000;
 
-// Use LRU cache to prevent unbounded memory growth
-// 100 files should be sufficient for most coding sessions while preventing
-// memory issues when working across many files in large projects
+// 使用LRU缓存来防止无限制的内存增长
+// 100 个文件对于大多数编码会话来说应该足够了，同时防止
+// 在大型项目中处理多个文件时出现内存问题
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -315,8 +315,8 @@ function median(values: number[]): number {
 }
 
 /**
- * Small component to display transcript mode footer with dynamic keybinding.
- * Must be rendered inside KeybindingSetup to access keybinding context.
+ * 用于显示带有动态键绑定的转录模式页脚的小组件。
+ * 必须在 KeybindingSetup 内呈现才能访问键绑定上下文。
  */
 function TranscriptModeFooter(t0) {
   const $ = _c(9);
@@ -1651,7 +1651,7 @@ export function REPL({
     setMessages(prev => [...prev, createSystemMessage(`Worktree creation took ${secs}s. For large repos, set \`worktree.sparsePaths\` in .claude/settings.json to check out only the directories you need — e.g. \`{"worktree": {"sparsePaths": ["src", "packages/foo"]}}\`.`, 'info')]);
   }, [setMessages]);
 
-  // Hide spinner when the only in-progress tool is Sleep
+  // 当唯一正在进行的工具是“睡眠”时隐藏微调器
   const onlySleepToolActive = useMemo(() => {
     const lastAssistant = messages.findLast(m => m.type === 'assistant');
     if (lastAssistant?.type !== 'assistant') return false;
@@ -1670,35 +1670,35 @@ export function REPL({
     setToolJSX
   });
   const showSpinner = (!toolJSX || toolJSX.showSpinner === true) && toolUseConfirmQueue.length === 0 && promptQueue.length === 0 && (
-  // Show spinner during input processing, API call, while teammates are running,
-  // or while pending task notifications are queued (prevents spinner bounce between consecutive notifications)
+  // 在输入处理、API 调用、队友运行时显示微调器，
+  // 或者在待处理的任务通知排队时（防止连续通知之间的旋转器反弹）
   isLoading || userInputOnProcessing || hasRunningTeammates ||
-  // Keep spinner visible while task notifications are queued for processing.
-  // Without this, the spinner briefly disappears between consecutive notifications
-  // (e.g., multiple background agents completing in rapid succession) because
-  // isLoading goes false momentarily between processing each one.
+  // 当任务通知排队等待处理时，保持微调器可见。
+  // 如果没有这个，微调器会在连续通知之间短暂消失
+  // （例如，多个后台代理快速连续完成）因为
+  // isLoading 在处理每个数据之间会暂时变为 false。
   getCommandQueueLength() > 0) &&
-  // Hide spinner when waiting for leader to approve permission request
+  // 等待领导批准权限请求时隐藏微调器
   !pendingWorkerRequest && !onlySleepToolActive && (
-  // Hide spinner when streaming text is visible (the text IS the feedback),
-  // but keep it when isBriefOnly suppresses the streaming text display
+  // 当流文本可见时隐藏微调器（文本是反馈），
+  // 但当 isBriefOnly 抑制流文本显示时保留它
   !visibleStreamingText || isBriefOnly);
 
-  // Check if any permission or ask question prompt is currently visible
-  // This is used to prevent the survey from opening while prompts are active
+  // 检查当前是否有任何权限或提问提示可见
+  // 这用于防止在提示处于活动状态时打开调查
   const hasActivePrompt = toolUseConfirmQueue.length > 0 || promptQueue.length > 0 || sandboxPermissionRequestQueue.length > 0 || elicitation.queue.length > 0 || workerSandboxPermissions.queue.length > 0;
   const feedbackSurveyOriginal = useFeedbackSurvey(messages, isLoading, submitCount, 'session', hasActivePrompt);
   const skillImprovementSurvey = useSkillImprovementSurvey(setMessages);
   const showIssueFlagBanner = useIssueFlagBanner(messages, submitCount);
 
-  // Wrap feedback survey handler to trigger auto-run /issue
+  // 包装反馈调查处理程序以触发自动运行/问题
   const feedbackSurvey = useMemo(() => ({
     ...feedbackSurveyOriginal,
     handleSelect: (selected: 'dismissed' | 'bad' | 'fine' | 'good') => {
-      // Reset the ref when a new survey response comes in
+      // 当收到新的调查回复时重置参考
       didAutoRunIssueRef.current = false;
       const showedTranscriptPrompt = feedbackSurveyOriginal.handleSelect(selected);
-      // Auto-run /issue for "bad" if transcript prompt wasn't shown
+      // 如果未显示转录提示，则自动运行/发出“错误”
       if (selected === 'bad' && !showedTranscriptPrompt && shouldAutoRunIssue('feedback_survey_bad')) {
         setAutoRunIssueReason('feedback_survey_bad');
         didAutoRunIssueRef.current = true;
@@ -1706,21 +1706,21 @@ export function REPL({
     }
   }), [feedbackSurveyOriginal]);
 
-  // Post-compact survey: shown after compaction if feature gate is enabled
+  // 压缩后调查：如果启用了功能门，则在压缩后显示
   const postCompactSurvey = usePostCompactSurvey(messages, isLoading, hasActivePrompt, {
     enabled: !isRemoteSession
   });
 
-  // Memory survey: shown when the assistant mentions memory and a memory file
-  // was read this conversation
+  // 内存调查：当助手提到内存和内存文件时显示
+  // 已阅读此对话
   const memorySurvey = useMemorySurvey(messages, isLoading, hasActivePrompt, {
     enabled: !isRemoteSession
   });
 
-  // Frustration detection: show transcript sharing prompt after detecting frustrated messages
+  // 沮丧检测：检测到沮丧的消息后显示成绩单共享提示
   const frustrationDetection = useFrustrationDetection(messages, isLoading, hasActivePrompt, feedbackSurvey.state !== 'closed' || postCompactSurvey.state !== 'closed' || memorySurvey.state !== 'closed');
 
-  // Initialize IDE integration
+  // 初始化 IDE 集成
   useIDEIntegration({
     autoConnectIdeFlag,
     ideToInstallExtension,
@@ -1735,19 +1735,19 @@ export function REPL({
   const resume = useCallback(async (sessionId: UUID, log: LogOption, entrypoint: ResumeEntrypoint) => {
     const resumeStart = performance.now();
     try {
-      // Deserialize messages to properly clean up the conversation
-      // This filters unresolved tool uses and adds a synthetic assistant message if needed
+      // 反序列化消息以正确清理对话
+      // 这会过滤未解决的工具使用情况，并根据需要添加合成助理消息
       const messages = deserializeMessages(log.messages);
 
-      // Match coordinator/normal mode to the resumed session
+      // 将协调器/正常模式与恢复的会话匹配
       if (feature('COORDINATOR_MODE')) {
         /* eslint-disable @typescript-eslint/no-require-imports */
         const coordinatorModule = require('../coordinator/coordinatorMode.js') as typeof import('../coordinator/coordinatorMode.js');
         /* eslint-enable @typescript-eslint/no-require-imports */
         const warning = coordinatorModule.matchSessionMode(log.mode);
         if (warning) {
-          // Re-derive agent definitions after mode switch so built-in agents
-          // reflect the new coordinator/normal mode
+          // 模式切换后重新派生代理定义，以便内置代理
+          // 反映新的协调器/普通模式
           /* eslint-disable @typescript-eslint/no-require-imports */
           const {
             getAgentDefinitionsWithOverrides,
@@ -1768,8 +1768,8 @@ export function REPL({
         }
       }
 
-      // Fire SessionEnd hooks for the current session before starting the
-      // resumed one, mirroring the /clear flow in conversation.ts.
+      // 在启动之前触发当前会话的 SessionEnd 挂钩
+      // 恢复其中之一，反映对话.ts 中的 /clear 流程。
       const sessionEndTimeoutMs = getSessionEndHookTimeoutMs();
       await executeSessionEndHooks('resume', {
         getAppState: () => store.getState(),
@@ -1778,17 +1778,17 @@ export function REPL({
         timeoutMs: sessionEndTimeoutMs
       });
 
-      // Process session start hooks for resume
+      // 用于恢复的进程会话启动挂钩
       const hookMessages = await processSessionStartHooks('resume', {
         sessionId,
         agentType: mainThreadAgentDefinition?.agentType,
         model: mainLoopModel
       });
 
-      // Append hook messages to the conversation
+      // 将挂钩消息附加到对话中
       messages.push(...hookMessages);
       // For forks, generate a new plan slug and copy the plan content so the
-      // original and forked sessions don't clobber each other's plan files.
+      // 原始会话和分叉会话不会破坏彼此的计划文件。
       // For regular resumes, reuse the original session's plan slug.
       if (entrypoint === 'fork') {
         void copyPlanForFork(log, asSessionId(sessionId));
@@ -1796,15 +1796,15 @@ export function REPL({
         void copyPlanForResume(log, asSessionId(sessionId));
       }
 
-      // Restore file history and attribution state from the resumed conversation
+      // 从恢复的对话中恢复文件历史记录和归属状态
       restoreSessionStateFromLog(log, setAppState);
       if (log.fileHistorySnapshots) {
         void copyFileHistoryForResume(log);
       }
 
-      // Restore agent setting from the resumed conversation
-      // Always reset to the new session's values (or clear if none),
-      // matching the standaloneAgentContext pattern below
+      // 从恢复的对话中恢复代理设置
+      // 始终重置为新会话的值（如果没有则清除），
+      // 匹配下面的standaloneAgentContext模式
       const {
         agentDefinition: restoredAgent
       } = restoreAgentFromSession(log.agentSetting, initialMainThreadAgentDefinition, agentDefinitions);
@@ -1814,66 +1814,66 @@ export function REPL({
         agent: restoredAgent?.agentType
       }));
 
-      // Restore standalone agent context from the resumed conversation
-      // Always reset to the new session's values (or clear if none)
+      // 从恢复的对话中恢复独立代理上下文
+      // 始终重置为新会话的值（如果没有则清除）
       setAppState(prev => ({
         ...prev,
         standaloneAgentContext: computeStandaloneAgentContext(log.agentName, log.agentColor)
       }));
       void updateSessionName(log.agentName);
 
-      // Restore read file state from the message history
+      // 从消息历史记录中恢复读取文件状态
       restoreReadFileState(messages, log.projectPath ?? getOriginalCwd());
 
-      // Clear any active loading state (no queryId since we're not in a query)
+      // 清除任何活动的加载状态（没有 queryId，因为我们不在查询中）
       resetLoadingState();
       setAbortController(null);
       setConversationId(sessionId);
 
-      // Get target session's costs BEFORE saving current session
-      // (saveCurrentSessionCosts overwrites the config, so we need to read first)
+      // 在保存当前会话之前获取目标会话的成本
+      // （saveCurrentSessionCosts会覆盖配置，所以我们需要先读取）
       const targetSessionCosts = getStoredSessionCosts(sessionId);
 
-      // Save current session's costs before switching to avoid losing accumulated costs
+      // 在切换之前保存当前会话的成本，以避免损失累积成本
       saveCurrentSessionCosts();
 
-      // Reset cost state for clean slate before restoring target session
+      // 在恢复目标会话之前重置成本状态以进行全新操作
       resetCostState();
 
       // Switch session (id + project dir atomically). fullPath may point to
-      // a different project (cross-worktree, /branch); null derives from
-      // current originalCwd.
+      // 不同的项目（跨工作树，/分支）； null 源自
+      // 当前原始Cwd。
       switchSession(asSessionId(sessionId), log.fullPath ? dirname(log.fullPath) : null);
-      // Rename asciicast recording to match the resumed session ID
+      // 重命名 asciicast 录音以匹配恢复的会话 ID
       const {
         renameRecordingForSession
       } = await import('../utils/asciicast.js');
       await renameRecordingForSession();
       await resetSessionFilePointer();
 
-      // Clear then restore session metadata so it's re-appended on exit via
-      // reAppendSessionMetadata. clearSessionMetadata must be called first:
-      // restoreSessionMetadata only sets-if-truthy, so without the clear,
-      // a session without an agent name would inherit the previous session's
-      // cached name and write it to the wrong transcript on first message.
+      // 清除然后恢复会话元数据，以便在退出时重新附加它
+      // 重新追加会话元数据。必须首先调用clearSessionMetadata：
+      // RestoreSessionMetadata 仅设置“if-truthy”，因此如果没有明确的，
+      // 没有代理名称的会话将继承前一个会话的
+      // 缓存名称并将其写入第一条消息的错误记录中。
       clearSessionMetadata();
       restoreSessionMetadata(log);
-      // Resumed sessions shouldn't re-title from mid-conversation context
-      // (same reasoning as the useRef seed), and the previous session's
-      // Haiku title shouldn't carry over.
+      // 恢复的会话不应在对话上下文中重新标题
+      // （与 useRef 种子的推理相同），以及上一个会话的
+      // 俳句标题不应延续。
       haikuTitleAttemptedRef.current = true;
       setHaikuTitle(undefined);
 
-      // Exit any worktree a prior /resume entered, then cd into the one
-      // this session was in. Without the exit, resuming from worktree B
-      // to non-worktree C leaves cwd/currentWorktreeSession stale;
-      // resuming B→C where C is also a worktree fails entirely
-      // (getCurrentWorktreeSession guard blocks the switch).
+      // 退出之前输入 /resume 的任何工作树，然后 cd 进入该工作树
+      // 该会话已进入。没有退出，从工作树 B 恢复
+      // 到非工作树 C 使 cwd/currentWorktreeSession 过时；
+      // 恢复 B→C（其中 C 也是工作树）完全失败
+      // （getCurrentWorktreeSession 防护阻止开关）。
       //
-      // Skipped for /branch: forkLog doesn't carry worktreeSession, so
-      // this would kick the user out of a worktree they're still working
-      // in. Same fork skip as processResumedConversation for the adopt —
-      // fork materializes its own file via recordTranscript on REPL mount.
+      // 跳过/branch：forkLog不携带worktreeSession，所以
+      // 这会将用户踢出他们仍在工作的工作树
+      // in. 与 processResumedConversation 相同的 fork 跳过用于采用 —
+      // fork 通过 REPL 安装上的 recordTranscript 实现自己的文件。
       if (entrypoint !== 'fork') {
         exitRestoredWorktree();
         restoreWorktreeForResume(log.worktreeSession);
@@ -1884,14 +1884,14 @@ export function REPL({
           setAppState
         });
       } else {
-        // Fork: same re-persist as /clear (conversation.ts). The clear
-        // above wiped currentSessionWorktree, forkLog doesn't carry it,
-        // and the process is still in the same worktree.
+        // Fork：与 /clear (conversation.ts) 相同的重新保留。清晰的
+        // 上面擦除了currentSessionWorktree，forkLog没有携带它，
+        // 并且该进程仍在同一工作树中。
         const ws = getCurrentWorktreeSession();
         if (ws) saveWorktreeState(ws);
       }
 
-      // Persist the current mode so future resumes know what mode this session was in
+      // 保留当前模式，以便将来恢复时知道本次会话处于什么模式
       if (feature('COORDINATOR_MODE')) {
         /* eslint-disable @typescript-eslint/no-require-imports */
         const {
@@ -1904,34 +1904,34 @@ export function REPL({
         saveMode(isCoordinatorMode() ? 'coordinator' : 'normal');
       }
 
-      // Restore target session's costs from the data we read earlier
+      // 从我们之前读取的数据恢复目标会话的成本
       if (targetSessionCosts) {
         setCostStateForRestore(targetSessionCosts);
       }
 
-      // Reconstruct replacement state for the resumed session. Runs after
-      // setSessionId so any NEW replacements post-resume write to the
-      // resumed session's tool-results dir. Gated on ref.current: the
-      // initial mount already read the feature flag, so we don't re-read
-      // it here (mid-session flag flips stay unobservable in both
-      // directions).
+      // 重建恢复会话的替换状态。之后运行
+      // setSessionId，以便任何新的替换后恢复写入
+      // 恢复会话的工具结果目录。门控参考电流：
+      // 初始安装已经读取了功能标志，因此我们不会重新读取
+      // 它在这里（会话中标志翻转在两个
+      // 方向）。
       //
-      // Skipped for in-session /branch: the existing ref is already correct
-      // (branch preserves tool_use_ids), so there's no need to reconstruct.
-      // createFork() does write content-replacement entries to the forked
-      // JSONL with the fork's sessionId, so `claude -r {forkId}` also works.
+      // 跳过会话中/分支：现有参考已经正确
+      // （分支保留tool_use_ids），因此无需重建。
+      // createFork() 确实将内容替换条目写入分叉
+      // JSONL 与 fork 的 sessionId，因此 `claude -r {forkId}` 也可以工作。
       if (contentReplacementStateRef.current && entrypoint !== 'fork') {
         contentReplacementStateRef.current = reconstructContentReplacementState(messages, log.contentReplacements ?? []);
       }
 
-      // Reset messages to the provided initial messages
-      // Use a callback to ensure we're not dependent on stale state
+      // 将消息重置为提供的初始消息
+      // 使用回调来确保我们不依赖于过时的状态
       setMessages(() => messages);
 
-      // Clear any active tool JSX
+      // 清除所有活动工具 JSX
       setToolJSX(null);
 
-      // Clear input to ensure no residual state
+      // 清除输入，确保无残留状态
       setInputValue('');
       logEvent('tengu_session_resumed', {
         entrypoint: entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1947,27 +1947,27 @@ export function REPL({
     }
   }, [resetLoadingState, setAppState]);
 
-  // Lazy init: useRef(createX()) would call createX on every render and
-  // discard the result. LRUCache construction inside FileStateCache is
-  // expensive (~170ms), so we use useState's lazy initializer to create
-  // it exactly once, then feed that stable reference into useRef.
+  // 延迟初始化：useRef(createX()) 会在每次渲染时调用 createX，并且
+  // 丢弃结果。 FileStateCache 内部的 LRUCache 构造是
+  // 昂贵（~170ms），所以我们使用 useState 的惰性初始化器来创建
+  // 它恰好一次，然后将稳定的引用输入到 useRef 中。
   const [initialReadFileState] = useState(() => createFileStateCacheWithSizeLimit(READ_FILE_STATE_CACHE_SIZE));
   const readFileState = useRef(initialReadFileState);
   const bashTools = useRef(new Set<string>());
   const bashToolsProcessedIdx = useRef(0);
-  // Session-scoped skill discovery tracking (feeds was_discovered on
-  // tengu_skill_tool_invocation). Must persist across getToolUseContext
-  // rebuilds within a session: turn-0 discovery writes via processUserInput
-  // before onQuery builds its own context, and discovery on turn N must
-  // still attribute a SkillTool call on turn N+k. Cleared in clearConversation.
+  // 会话范围的技能发现跟踪（提供 was_discovered 于
+  // 天狗_技能_工具_调用）。必须在 getToolUseContext 中持续存在
+  // 在会话中重建：turn-0 发现通过 processUserInput 写入
+  // 在 onQuery 构建自己的上下文之前，第 N 轮的发现必须
+  // 仍然归因于第 N+k 回合的 SkillTool 调用。在clearConversation 中清除。
   const discoveredSkillNamesRef = useRef(new Set<string>());
-  // Session-level dedup for nested_memory CLAUDE.md attachments.
-  // readFileState is a 100-entry LRU; once it evicts a CLAUDE.md path,
-  // the next discovery cycle re-injects it. Cleared in clearConversation.
+  // nested_memory CLAUDE.md 附件的会话级重复数据删除。
+  // readFileState 是一个 100 条目的 LRU；一旦它驱逐 CLAUDE.md 路径，
+  // 下一个发现周期会重新注入它。在clearConversation 中清除。
   const loadedNestedMemoryPathsRef = useRef(new Set<string>());
 
-  // Helper to restore read file state from messages (used for resume flows)
-  // This allows Claude to edit files that were read in previous sessions
+  // 从消息中恢复读取文件状态的帮助程序（用于恢复流程）
+  // 这允许克劳德编辑在之前的会话中读取的文件
   const restoreReadFileState = useCallback((messages: MessageType[], cwd: string) => {
     const extracted = extractReadFilesFromMessages(messages, cwd, READ_FILE_STATE_CACHE_SIZE);
     readFileState.current = mergeFileStateCaches(readFileState.current, extracted);
@@ -1976,9 +1976,9 @@ export function REPL({
     }
   }, []);
 
-  // Extract read file state from initialMessages on mount
-  // This handles CLI flag resume (--resume-session) and ResumeConversation screen
-  // where messages are passed as props rather than through the resume callback
+  // 从挂载时的初始消息中提取读取文件状态
+  // 这处理 CLI 标志恢复 (--resume-session) 和 ResumeConversation 屏幕
+  // 其中消息作为 props 传递，而不是通过恢复回调传递
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0) {
       restoreReadFileState(initialMessages, getOriginalCwd());
@@ -1988,7 +1988,7 @@ export function REPL({
         setAppState
       });
     }
-    // Only run on mount - initialMessages shouldn't change during component lifetime
+    // 仅在安装时运行 - 初始消息在组件生命周期内不应更改
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const {
@@ -1996,40 +1996,40 @@ export function REPL({
     reverify
   } = useApiKeyVerification();
 
-  // Auto-run /issue state
+  // 自动运行/发出状态
   const [autoRunIssueReason, setAutoRunIssueReason] = useState<AutoRunIssueReason | null>(null);
-  // Ref to track if autoRunIssue was triggered this survey cycle,
-  // so we can suppress the [1] follow-up prompt even after
-  // autoRunIssueReason is cleared.
+  // 参考跟踪此调查周期是否触发 autoRunIssue，
+  // 所以即使在之后我们也可以抑制 [1] 后续提示
+  // autoRunIssueReason 已清除。
   const didAutoRunIssueRef = useRef(false);
 
-  // State for exit feedback flow
+  // 退出反馈流状态
   const [exitFlow, setExitFlow] = useState<React.ReactNode>(null);
   const [isExiting, setIsExiting] = useState(false);
 
-  // Calculate if cost dialog should be shown
+  // 计算是否应显示成本对话框
   const showingCostDialog = !isLoading && showCostDialog;
 
-  // Determine which dialog should have focus (if any)
-  // Permission and interactive dialogs can show even when toolJSX is set,
-  // as long as shouldContinueAnimation is true. This prevents deadlocks when
-  // agents set background hints while waiting for user interaction.
+  // 确定哪个对话框应具有焦点（如果有）
+  // 即使设置了 toolJSX，也可以显示权限和交互式对话框，
+  // 只要 shouldContinueAnimation 为 true 即可。这可以防止死锁
+  // 代理在等待用户交互时设置后台提示。
   function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'model-switch' | 'undercover-callout' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | undefined {
-    // Exit states always take precedence
+    // 退出状态始终优先
     if (isExiting || exitFlow) return undefined;
 
-    // High priority dialogs (always show regardless of typing)
+    // 高优先级对话框（无论输入如何始终显示）
     if (isMessageSelectorVisible) return 'message-selector';
 
-    // Suppress interrupt dialogs while user is actively typing
+    // 当用户主动打字时抑制中断对话框
     if (isPromptInputActive) return undefined;
     if (sandboxPermissionRequestQueue[0]) return 'sandbox-permission';
 
-    // Permission/interactive dialogs (show unless blocked by toolJSX)
+    // 权限/交互对话框（除非被 toolJSX 阻止否则显示）
     const allowDialogsWithAnimation = !toolJSX || toolJSX.shouldContinueAnimation;
     if (allowDialogsWithAnimation && toolUseConfirmQueue[0]) return 'tool-permission';
     if (allowDialogsWithAnimation && promptQueue[0]) return 'prompt';
-    // Worker sandbox permission prompts (network access) from swarm workers
+    // 来自 Swarm Worker 的 Worker 沙箱权限提示（网络访问）
     if (allowDialogsWithAnimation && workerSandboxPermissions.queue[0]) return 'worker-sandbox-permission';
     if (allowDialogsWithAnimation && elicitation.queue[0]) return 'elicitation';
     if (allowDialogsWithAnimation && showingCostDialog) return 'cost';
@@ -2037,65 +2037,65 @@ export function REPL({
     if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanPendingChoice) return 'ultraplan-choice';
     if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanLaunchPending) return 'ultraplan-launch';
 
-    // Onboarding dialogs (special conditions)
+    // 入职对话框（特殊条件）
     if (allowDialogsWithAnimation && showIdeOnboarding) return 'ide-onboarding';
 
-    // Model switch callout (ant-only, eliminated from external builds)
+    // 模型切换标注（仅限 Ant，从外部构建中消除）
     if ("external" === 'ant' && allowDialogsWithAnimation && showModelSwitchCallout) return 'model-switch';
 
-    // Undercover auto-enable explainer (ant-only, eliminated from external builds)
+    // 卧底自动启用解释器（仅限蚂蚁，从外部构建中消除）
     if ("external" === 'ant' && allowDialogsWithAnimation && showUndercoverCallout) return 'undercover-callout';
 
-    // Effort callout (shown once for Opus 4.6 users when effort is enabled)
+    // 工作量标注（启用工作量后，Opus 4.6 用户将显示一次）
     if (allowDialogsWithAnimation && showEffortCallout) return 'effort-callout';
 
-    // Remote callout (shown once before first bridge enable)
+    // 远程标注（在第一个桥启用之前显示一次）
     if (allowDialogsWithAnimation && showRemoteCallout) return 'remote-callout';
 
-    // LSP plugin recommendation (lowest priority - non-blocking suggestion)
+    // LSP插件推荐（最低优先级-非阻塞建议）
     if (allowDialogsWithAnimation && lspRecommendation) return 'lsp-recommendation';
 
-    // Plugin hint from CLI/SDK stderr (same priority band as LSP rec)
+    // 来自 CLI/SDK stderr 的插件提示（与 LSP rec 相同的优先级带）
     if (allowDialogsWithAnimation && hintRecommendation) return 'plugin-hint';
 
-    // Desktop app upsell (max 3 launches, lowest priority)
+    // 桌面应用追加销售（最多启动 3 次，优先级最低）
     if (allowDialogsWithAnimation && showDesktopUpsellStartup) return 'desktop-upsell';
     return undefined;
   }
   const focusedInputDialog = getFocusedInputDialog();
 
-  // True when permission prompts exist but are hidden because the user is typing
+  // 当权限提示存在但由于用户正在键入而被隐藏时为 True
   const hasSuppressedDialogs = isPromptInputActive && (sandboxPermissionRequestQueue[0] || toolUseConfirmQueue[0] || promptQueue[0] || workerSandboxPermissions.queue[0] || elicitation.queue[0] || showingCostDialog);
 
-  // Keep ref in sync so timer callbacks can read the current value
+  // 保持 ref 同步，以便计时器回调可以读取当前值
   focusedInputDialogRef.current = focusedInputDialog;
 
-  // Immediately capture pause/resume when focusedInputDialog changes
-  // This ensures accurate timing even under high system load, rather than
-  // relying on the 100ms polling interval to detect state changes
+  // 当 focusInputDialog 发生变化时立即捕获暂停/恢复
+  // 即使在高系统负载下，这也能确保准确的计时，而不是
+  // 依靠100ms的轮询间隔来检测状态变化
   useEffect(() => {
     if (!isLoading) return;
     const isPaused = focusedInputDialog === 'tool-permission';
     const now = Date.now();
     if (isPaused && pauseStartTimeRef.current === null) {
-      // Just entered pause state - record the exact moment
+      // 刚刚进入暂停状态-记录确切的时刻
       pauseStartTimeRef.current = now;
     } else if (!isPaused && pauseStartTimeRef.current !== null) {
-      // Just exited pause state - accumulate paused time immediately
+      // 刚退出暂停状态-立即累计暂停时间
       totalPausedMsRef.current += now - pauseStartTimeRef.current;
       pauseStartTimeRef.current = null;
     }
   }, [focusedInputDialog, isLoading]);
 
-  // Re-pin scroll to bottom whenever the permission overlay appears or
-  // dismisses. Overlay now renders below messages inside the same
-  // ScrollBox (no remount), so we need an explicit scrollToBottom for:
-  //  - appear: user may have been scrolled up (sticky broken) — the
-  //    dialog is blocking and must be visible
-  //  - dismiss: user may have scrolled up to read context during the
-  //    overlay, and onScroll was suppressed so the pill state is stale
-  // useLayoutEffect so the re-pin commits before the Ink frame renders —
-  // no 1-frame flash of the wrong scroll position.
+  // 每当出现权限覆盖时，将滚动重新固定到底部或
+  // 驳回。覆盖现在在同一内容中呈现以下消息
+  // ScrollBox（无需重新安装），因此我们需要一个显式的scrollToBottom：
+  //  - 出现：用户可能已向上滚动（粘性损坏）-
+  //    对话框被阻塞并且必须可见
+  //  - 驳回：用户可能已向上滚动以阅读上下文
+  //    覆盖，并且 onScroll 被抑制，因此药丸状态已过时
+  // useLayoutEffect 以便在 Ink 帧渲染之前重新固定提交 —
+  // 没有错误滚动位置的 1 帧闪烁。
   const prevDialogRef = useRef(focusedInputDialog);
   useLayoutEffect(() => {
     const was = prevDialogRef.current === 'tool-permission';
@@ -2105,7 +2105,7 @@ export function REPL({
   }, [focusedInputDialog, repinScroll]);
   function onCancel() {
     if (focusedInputDialog === 'elicitation') {
-      // Elicitation dialog handles its own Escape, and closing it shouldn't affect any loading state.
+      // 诱导对话框处理其自己的转义，关闭它不应影响任何加载状态。
       return;
     }
     logForDebugging(`[onCancel] focusedInputDialog=${focusedInputDialog} streamMode=${streamMode}`);
@@ -4126,8 +4126,8 @@ export function REPL({
       process.stdout.write(`\nClaude Code has been suspended. Run \`fg\` to bring Claude Code back.\nNote: ctrl + z now suspends Claude Code, ctrl + _ undoes input.\n`);
     };
     const handleResume = () => {
-      // Force complete component tree replacement instead of terminal clear
-      // Ink now handles line count reset internally on SIGCONT
+      // 强制替换完整的组件树而不是清除终端
+      // Ink 现在可以在 SIGCONT 上内部处理行计数重置
       setRemountKey(prev => prev + 1);
     };
     internal_eventEmitter?.on('suspend', handleSuspend);
@@ -4138,35 +4138,35 @@ export function REPL({
     };
   }, [internal_eventEmitter]);
 
-  // Derive stop hook spinner suffix from messages state
+  // 从消息状态导出停止钩子微调器后缀
   const stopHookSpinnerSuffix = useMemo(() => {
     if (!isLoading) return null;
 
-    // Find stop hook progress messages
+    // 查找停止挂钩进度消息
     const progressMsgs = messages.filter((m): m is ProgressMessage<HookProgress> => m.type === 'progress' && m.data.type === 'hook_progress' && (m.data.hookEvent === 'Stop' || m.data.hookEvent === 'SubagentStop'));
     if (progressMsgs.length === 0) return null;
 
-    // Get the most recent stop hook execution
+    // 获取最近的停止钩子执行
     const currentToolUseID = progressMsgs.at(-1)?.toolUseID;
     if (!currentToolUseID) return null;
 
-    // Check if there's already a summary message for this execution (hooks completed)
+    // 检查是否已经有此执行的摘要消息（挂钩已完成）
     const hasSummaryForCurrentExecution = messages.some(m => m.type === 'system' && m.subtype === 'stop_hook_summary' && m.toolUseID === currentToolUseID);
     if (hasSummaryForCurrentExecution) return null;
     const currentHooks = progressMsgs.filter(p => p.toolUseID === currentToolUseID);
     const total = currentHooks.length;
 
-    // Count completed hooks
+    // 计算已完成的钩子数量
     const completedCount = count(messages, m => {
       if (m.type !== 'attachment') return false;
       const attachment = m.attachment;
       return 'hookEvent' in attachment && (attachment.hookEvent === 'Stop' || attachment.hookEvent === 'SubagentStop') && 'toolUseID' in attachment && attachment.toolUseID === currentToolUseID;
     });
 
-    // Check if any hook has a custom status message
+    // 检查是否有任何钩子具有自定义状态消息
     const customMessage = currentHooks.find(p => p.data.statusMessage)?.data.statusMessage;
     if (customMessage) {
-      // Use custom message with progress counter if multiple hooks
+      // 如果有多个挂钩，请使用带有进度计数器的自定义消息
       return total === 1 ? `${customMessage}…` : `${customMessage}… ${completedCount}/${total}`;
     }
 
