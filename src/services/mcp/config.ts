@@ -6,7 +6,6 @@ import { dirname, join, parse } from 'path'
 import { getPlatform } from 'src/utils/platform.js'
 import type { PluginError } from '../../types/plugin.js'
 import { getPluginErrorMessage } from '../../types/plugin.js'
-import { isClaudeInChromeMCPServer } from '../../utils/claudeInChrome/common.js'
 import {
   getCurrentProjectConfig,
   getGlobalConfig,
@@ -631,20 +630,6 @@ export async function addMcpConfig(
     throw new Error(
       `Invalid name ${name}. Names can only contain letters, numbers, hyphens, and underscores.`,
     )
-  }
-
-  // Block reserved server name "claude-in-chrome"
-  if (isClaudeInChromeMCPServer(name)) {
-    throw new Error(`Cannot add MCP server "${name}": this name is reserved.`)
-  }
-
-  if (feature('CHICAGO_MCP')) {
-    const { isComputerUseMCPServer } = await import(
-      '../../utils/computerUse/common.js'
-    )
-    if (isComputerUseMCPServer(name)) {
-      throw new Error(`Cannot add MCP server "${name}": this name is reserved.`)
-    }
   }
 
   // Block adding servers when enterprise MCP config exists (it has exclusive control)
@@ -1504,33 +1489,12 @@ export function areMcpConfigsAllowedWithEnterpriseMcpConfig(
 }
 
 /**
- * Built-in MCP server that defaults to disabled. Unlike user-configured servers
- * (opt-out via disabledMcpServers), this requires explicit opt-in via
- * enabledMcpServers. Shows up in /mcp as disabled until the user enables it.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
-const DEFAULT_DISABLED_BUILTIN = feature('CHICAGO_MCP')
-  ? (
-      require('../../utils/computerUse/common.js') as typeof import('../../utils/computerUse/common.js')
-    ).COMPUTER_USE_MCP_SERVER_NAME
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
-
-function isDefaultDisabledBuiltin(name: string): boolean {
-  return DEFAULT_DISABLED_BUILTIN !== null && name === DEFAULT_DISABLED_BUILTIN
-}
-
-/**
  * Check if an MCP server is disabled
  * @param name The name of the server
  * @returns true if the server is disabled
  */
 export function isMcpServerDisabled(name: string): boolean {
   const projectConfig = getCurrentProjectConfig()
-  if (isDefaultDisabledBuiltin(name)) {
-    const enabledServers = projectConfig.enabledMcpServers || []
-    return !enabledServers.includes(name)
-  }
   const disabledServers = projectConfig.disabledMcpServers || []
   return disabledServers.includes(name)
 }
@@ -1551,28 +1515,11 @@ function toggleMembership(
  * @param enabled Whether the server should be enabled
  */
 export function setMcpServerEnabled(name: string, enabled: boolean): void {
-  const isBuiltinStateChange =
-    isDefaultDisabledBuiltin(name) && isMcpServerDisabled(name) === enabled
-
   saveCurrentProjectConfig(current => {
-    if (isDefaultDisabledBuiltin(name)) {
-      const prev = current.enabledMcpServers || []
-      const next = toggleMembership(prev, name, enabled)
-      if (next === prev) return current
-      return { ...current, enabledMcpServers: next }
-    }
-
     const prev = current.disabledMcpServers || []
     const next = toggleMembership(prev, name, !enabled)
     if (next === prev) return current
     return { ...current, disabledMcpServers: next }
   })
 
-  if (isBuiltinStateChange) {
-    logEvent('tengu_builtin_mcp_toggle', {
-      serverName:
-        name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      enabled,
-    })
-  }
 }

@@ -424,11 +424,6 @@ export type GlobalConfig = {
   officialMarketplaceAutoInstallLastAttemptTime?: number // 最后一次尝试的时间戳
   officialMarketplaceAutoInstallNextRetryTime?: number // 最早重试时间
 
-  // Chrome 设置中的克劳德
-  hasCompletedClaudeInChromeOnboarding?: boolean // Chrome 入门中是否已显示 Claude
-  claudeInChromeDefaultEnabled?: boolean // Chrome中的Claude是否默认启用（未定义表示平台默认）
-  cachedChromeExtensionInstalled?: boolean // Chrome扩展是否安装的缓存结果
-
   // Chrome 扩展程序配对状态（跨会话持续存在）
   chromeExtension?: {
     pairedDeviceId?: string
@@ -578,8 +573,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'terminalProgressBarEnabled',
   'showStatusInTerminalTab',
   'respectGitignore',
-  'claudeInChromeDefaultEnabled',
-  'hasCompletedClaudeInChromeOnboarding',
   'lspRecommendationDisabled',
   'lspRecommendationNeverPlugins',
   'lspRecommendationIgnoredCount',

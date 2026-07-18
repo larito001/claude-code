@@ -5,59 +5,99 @@
  * Run: bun run config
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
-import { join, basename, dirname } from 'path'
-import { homedir } from 'os'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, rmdirSync } from 'fs'
+import { join, dirname, resolve, relative, isAbsolute } from 'path'
+import { getClaudeConfigHomeDir } from '../src/utils/envUtils.js'
+import { getSettingsFilePathForSource } from '../src/utils/settings/settings.js'
+import { getAutoMemPath } from '../src/memdir/paths.js'
+import { getOriginalCwd } from '../src/bootstrap/state.js'
 
 const PORT = Number(process.env.CONFIG_PORT) || 3456
-const HOME = homedir()
-const CLAUDE_DIR = join(HOME, '.claude')
-const CWD = process.cwd()
+const CWD = getOriginalCwd()
+const APP_ROOT = resolve(import.meta.dir, '..')
+const CLAUDE_DIR = getClaudeConfigHomeDir()
+
+type ConfigScope = 'user' | 'project'
+type ClaudeMdTarget = 'user' | 'project' | 'projectDotClaude' | 'local'
 
 // --- Path Helpers ---
 
 function getUserSettingsPath() {
-  return join(CLAUDE_DIR, 'settings.json')
+  return getSettingsFilePathForSource('userSettings')
 }
 
 function getProjectSettingsPath() {
-  return join(CWD, '.claude', 'settings.json')
+  return getSettingsFilePathForSource('projectSettings')
 }
 
 function getLocalSettingsPath() {
-  return join(CWD, '.claude', 'settings.local.json')
+  return getSettingsFilePathForSource('localSettings')
 }
 
 function getMcpConfigPath() {
   return join(CWD, '.mcp.json')
 }
 
-function getAgentsDir() {
-  return join(CWD, '.claude', 'agents')
+function getAgentsDir(scope: ConfigScope = 'project') {
+  return join(scope === 'user' ? CLAUDE_DIR : join(CWD, '.claude'), 'agents')
 }
 
-function getSkillsDir() {
-  return join(CWD, '.claude', 'skills')
+function getSkillsDir(scope: ConfigScope = 'project') {
+  return join(scope === 'user' ? CLAUDE_DIR : join(CWD, '.claude'), 'skills')
 }
 
 function getMemoryDir() {
-  // Find project memory directory
-  const sanitized = CWD.replace(/\//g, '-').replace(/^-/, '')
-  return join(CLAUDE_DIR, 'projects', sanitized, 'memory')
+  return getAutoMemPath()
 }
 
 function getBundlePolyfillPath() {
-  return join(CWD, 'node_modules', 'bundle', 'index.js')
+  return join(APP_ROOT, 'node_modules', 'bundle', 'index.js')
 }
 
-function getClaudeMdPath() {
-  if (existsSync(join(CWD, '.claude', 'CLAUDE.md'))) return join(CWD, '.claude', 'CLAUDE.md')
-  if (existsSync(join(CWD, 'CLAUDE.md'))) return join(CWD, 'CLAUDE.md')
-  return join(CWD, 'CLAUDE.md') // default create location
+function getClaudeMdPaths(): Record<ClaudeMdTarget, string> {
+  return {
+    user: join(CLAUDE_DIR, 'CLAUDE.md'),
+    project: join(CWD, 'CLAUDE.md'),
+    projectDotClaude: join(CWD, '.claude', 'CLAUDE.md'),
+    local: join(CWD, 'CLAUDE.local.md'),
+  }
 }
 
-function getRulesDir() {
-  return join(CWD, '.claude', 'rules')
+function getLegacyClaudeMdPath() {
+  const paths = getClaudeMdPaths()
+  if (existsSync(paths.projectDotClaude)) return paths.projectDotClaude
+  return paths.project
+}
+
+function getRulesDir(scope: ConfigScope = 'project') {
+  return join(scope === 'user' ? CLAUDE_DIR : join(CWD, '.claude'), 'rules')
+}
+
+function parseScope(value: unknown): ConfigScope | null {
+  if (value === undefined) return 'project'
+  return value === 'user' || value === 'project' ? value : null
+}
+
+function portableName(value: unknown, stripMd = false): string | null {
+  if (typeof value !== 'string') return null
+  let name = value.trim()
+  if (stripMd && name.toLowerCase().endsWith('.md')) name = name.slice(0, -3)
+  if (!name || name.length > 128 || name === '.' || name === '..' || name.endsWith('.')) return null
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) return null
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) return null
+  return name
+}
+
+function resolveWithin(root: string, ...parts: string[]) {
+  const rootPath = resolve(root)
+  const target = resolve(rootPath, ...parts)
+  const rel = relative(rootPath, target)
+  if (rel.startsWith('..') || isAbsolute(rel)) throw new Error('Path escapes configured directory')
+  return target
+}
+
+function badRequest(message: string) {
+  return Response.json({ error: message }, { status: 400 })
 }
 
 // --- File I/O Helpers ---
@@ -90,6 +130,10 @@ function writeTextSafe(path: string, content: string) {
   writeFileSync(path, content)
 }
 
+function removeDirIfEmpty(path: string) {
+  if (existsSync(path) && readdirSync(path).length === 0) rmdirSync(path)
+}
+
 function listMdFiles(dir: string): Array<{ name: string; path: string; content: string }> {
   if (!existsSync(dir)) return []
   const results: Array<{ name: string; path: string; content: string }> = []
@@ -99,9 +143,8 @@ function listMdFiles(dir: string): Array<{ name: string; path: string; content: 
         const p = join(dir, entry.name)
         results.push({ name: entry.name, path: p, content: readTextSafe(p) })
       } else if (entry.isDirectory()) {
-        // Check for SKILL.md or agent .md inside subdirectory
+        // Check for SKILL.md or other Markdown files inside subdirectory
         const skillMd = join(dir, entry.name, 'SKILL.md')
-        const agentMd = join(dir, entry.name + '.md')
         if (existsSync(skillMd)) {
           results.push({ name: entry.name, path: skillMd, content: readTextSafe(skillMd) })
         } else {
@@ -125,9 +168,9 @@ function parseFeatureFlags(): Record<string, boolean> {
   const content = readTextSafe(getBundlePolyfillPath())
   const flags: Record<string, boolean> = {}
   const allFlags = [
-    'KAIROS', 'PROACTIVE', 'BRIDGE_MODE', 'VOICE_MODE', 'COORDINATOR_MODE',
+    'KAIROS', 'PROACTIVE', 'COORDINATOR_MODE',
     'TRANSCRIPT_CLASSIFIER', 'BASH_CLASSIFIER', 'BUDDY', 'WEB_BROWSER_TOOL',
-    'CHICAGO_MCP', 'AGENT_TRIGGERS', 'ULTRAPLAN', 'MONITOR_TOOL', 'TEAMMEM',
+    'AGENT_TRIGGERS', 'MONITOR_TOOL', 'TEAMMEM',
     'EXTRACT_MEMORIES', 'MCP_SKILLS', 'REVIEW_ARTIFACT', 'CONNECTOR_TEXT',
     'DOWNLOAD_USER_SETTINGS', 'MESSAGE_ACTIONS', 'KAIROS_CHANNELS', 'KAIROS_GITHUB_WEBHOOKS',
   ]
@@ -144,16 +187,12 @@ function writeFeatureFlags(flags: Record<string, boolean>) {
   const descriptions: Record<string, string> = {
     KAIROS: 'Assistant / daily-log mode',
     PROACTIVE: 'Proactive autonomous mode',
-    BRIDGE_MODE: 'VS Code / JetBrains IDE bridge',
-    VOICE_MODE: 'Voice input via native audio capture',
     COORDINATOR_MODE: 'Multi-agent swarm coordinator',
     TRANSCRIPT_CLASSIFIER: 'Auto-mode permission classifier',
     BASH_CLASSIFIER: 'Bash command safety classifier',
     BUDDY: 'Companion sprite animation',
     WEB_BROWSER_TOOL: 'In-process web browser tool',
-    CHICAGO_MCP: 'Computer Use (screen control)',
     AGENT_TRIGGERS: 'Scheduled cron agents',
-    ULTRAPLAN: 'Ultra-detailed planning mode',
     MONITOR_TOOL: 'MCP server monitoring',
     TEAMMEM: 'Shared team memory',
     EXTRACT_MEMORIES: 'Background memory extraction agent',
@@ -239,41 +278,66 @@ async function handleAPI(req: Request): Promise<Response> {
 
   // --- Agents ---
   if (path === '/api/agents' && req.method === 'GET') {
-    return Response.json(listMdFiles(getAgentsDir()))
+    return Response.json((['user', 'project'] as const).flatMap(scope =>
+      listMdFiles(getAgentsDir(scope)).map(agent => ({ ...agent, scope })),
+    ))
   }
 
   if (path === '/api/agents' && req.method === 'POST') {
-    const body = await req.json() as { name: string; content: string }
-    const agentPath = join(getAgentsDir(), body.name.endsWith('.md') ? body.name : `${body.name}.md`)
+    const body = await req.json() as { name?: unknown; content?: unknown; scope?: unknown }
+    const scope = parseScope(body.scope)
+    const name = portableName(body.name, true)
+    if (!scope) return badRequest('Invalid scope')
+    if (!name) return badRequest('Invalid portable agent name')
+    if (typeof body.content !== 'string') return badRequest('Invalid content')
+    const agentPath = resolveWithin(getAgentsDir(scope), `${name}.md`)
     writeTextSafe(agentPath, body.content)
     return Response.json({ ok: true })
   }
 
   if (path === '/api/agents' && req.method === 'DELETE') {
-    const body = await req.json() as { name: string }
-    const agentPath = join(getAgentsDir(), body.name.endsWith('.md') ? body.name : `${body.name}.md`)
+    const body = await req.json() as { name?: unknown; scope?: unknown }
+    const scope = parseScope(body.scope)
+    const name = portableName(body.name, true)
+    if (!scope) return badRequest('Invalid scope')
+    if (!name) return badRequest('Invalid portable agent name')
+    const agentPath = resolveWithin(getAgentsDir(scope), `${name}.md`)
     if (existsSync(agentPath)) unlinkSync(agentPath)
+    removeDirIfEmpty(getAgentsDir(scope))
     return Response.json({ ok: true })
   }
 
   // --- Skills ---
   if (path === '/api/skills' && req.method === 'GET') {
-    return Response.json(listMdFiles(getSkillsDir()))
+    return Response.json((['user', 'project'] as const).flatMap(scope =>
+      listMdFiles(getSkillsDir(scope)).map(skill => ({ ...skill, scope })),
+    ))
   }
 
   if (path === '/api/skills' && req.method === 'POST') {
-    const body = await req.json() as { name: string; content: string }
-    const skillDir = join(getSkillsDir(), body.name)
-    const skillPath = join(skillDir, 'SKILL.md')
+    const body = await req.json() as { name?: unknown; content?: unknown; scope?: unknown }
+    const scope = parseScope(body.scope)
+    const name = portableName(body.name)
+    if (!scope) return badRequest('Invalid scope')
+    if (!name) return badRequest('Invalid portable skill name')
+    if (typeof body.content !== 'string') return badRequest('Invalid content')
+    const skillDir = resolveWithin(getSkillsDir(scope), name)
+    const skillPath = resolveWithin(skillDir, 'SKILL.md')
     writeTextSafe(skillPath, body.content)
     return Response.json({ ok: true })
   }
 
   if (path === '/api/skills' && req.method === 'DELETE') {
-    const body = await req.json() as { name: string }
-    const skillDir = join(getSkillsDir(), body.name)
-    const skillPath = join(skillDir, 'SKILL.md')
+    const body = await req.json() as { name?: unknown; scope?: unknown }
+    const scope = parseScope(body.scope)
+    const name = portableName(body.name)
+    if (!scope) return badRequest('Invalid scope')
+    if (!name) return badRequest('Invalid portable skill name')
+    const skillDir = resolveWithin(getSkillsDir(scope), name)
+    const skillPath = resolveWithin(skillDir, 'SKILL.md')
     if (existsSync(skillPath)) unlinkSync(skillPath)
+    removeDirIfEmpty(skillDir)
+    removeDirIfEmpty(getSkillsDir(scope))
     return Response.json({ ok: true })
   }
 
@@ -284,14 +348,25 @@ async function handleAPI(req: Request): Promise<Response> {
 
   // --- CLAUDE.md ---
   if (path === '/api/claudemd' && req.method === 'GET') {
-    const claudeMd = readTextSafe(getClaudeMdPath())
-    const rules = listMdFiles(getRulesDir())
-    return Response.json({ claudeMd, path: getClaudeMdPath(), rules })
+    const paths = getClaudeMdPaths()
+    const files = Object.fromEntries(Object.entries(paths).map(([target, filePath]) => [
+      target,
+      { path: filePath, content: readTextSafe(filePath) },
+    ]))
+    const legacyPath = getLegacyClaudeMdPath()
+    const rules = (['user', 'project'] as const).flatMap(scope =>
+      listMdFiles(getRulesDir(scope)).map(rule => ({ ...rule, scope })),
+    )
+    return Response.json({ claudeMd: readTextSafe(legacyPath), path: legacyPath, files, rules })
   }
 
   if (path === '/api/claudemd' && req.method === 'POST') {
-    const body = await req.json() as { content: string }
-    writeTextSafe(getClaudeMdPath(), body.content)
+    const body = await req.json() as { content?: unknown; target?: unknown }
+    if (typeof body.content !== 'string') return badRequest('Invalid content')
+    const paths = getClaudeMdPaths()
+    const target = body.target === undefined ? getLegacyClaudeMdPath() : paths[body.target as ClaudeMdTarget]
+    if (!target) return badRequest('Invalid CLAUDE.md target')
+    writeTextSafe(target, body.content)
     return Response.json({ ok: true })
   }
 
@@ -299,12 +374,20 @@ async function handleAPI(req: Request): Promise<Response> {
   if (path === '/api/info' && req.method === 'GET') {
     return Response.json({
       cwd: CWD,
-      home: HOME,
       claudeDir: CLAUDE_DIR,
-      agentsDir: getAgentsDir(),
-      skillsDir: getSkillsDir(),
+      settingsPaths: {
+        user: getUserSettingsPath(),
+        project: getProjectSettingsPath(),
+        local: getLocalSettingsPath(),
+      },
+      agentsDir: getAgentsDir('project'),
+      agentsDirs: { user: getAgentsDir('user'), project: getAgentsDir('project') },
+      skillsDir: getSkillsDir('project'),
+      skillsDirs: { user: getSkillsDir('user'), project: getSkillsDir('project') },
       memoryDir: getMemoryDir(),
       mcpConfigPath: getMcpConfigPath(),
+      claudeMdPaths: getClaudeMdPaths(),
+      rulesDirs: { user: getRulesDir('user'), project: getRulesDir('project') },
       bundlePath: getBundlePolyfillPath(),
     })
   }
@@ -320,6 +403,7 @@ const HTML_PATH = join(import.meta.dir, 'index.html')
 
 const server = Bun.serve({
   port: PORT,
+  hostname: '127.0.0.1',
   async fetch(req) {
     const url = new URL(req.url)
 
@@ -347,7 +431,7 @@ console.log(`
 `)
 
 // Try to open browser
-try {
+if (process.env.CONFIG_UI_NO_OPEN !== '1') try {
   const { exec } = require('child_process')
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
   exec(`${cmd} http://localhost:${server.port}`)

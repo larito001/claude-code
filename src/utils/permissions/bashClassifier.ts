@@ -1,4 +1,5 @@
-// Stub for external builds - classifier permissions feature is ANT-ONLY
+import { feature } from 'bun:bundle'
+import type { ToolPermissionContext } from '../../Tool.js'
 
 export const PROMPT_PREFIX = 'prompt:'
 
@@ -12,9 +13,13 @@ export type ClassifierResult = {
 export type ClassifierBehavior = 'deny' | 'ask' | 'allow'
 
 export function extractPromptDescription(
-  _ruleContent: string | undefined,
+  ruleContent: string | undefined,
 ): string | null {
-  return null
+  if (!ruleContent) return null
+  const trimmed = ruleContent.trim()
+  if (!trimmed.toLowerCase().startsWith(PROMPT_PREFIX)) return null
+  const description = trimmed.slice(PROMPT_PREFIX.length).trim()
+  return description || null
 }
 
 export function createPromptRuleContent(description: string): string {
@@ -22,40 +27,85 @@ export function createPromptRuleContent(description: string): string {
 }
 
 export function isClassifierPermissionsEnabled(): boolean {
-  return false
+  return feature('BASH_CLASSIFIER') ? true : false
 }
 
-export function getBashPromptDenyDescriptions(_context: unknown): string[] {
-  return []
+function getPromptDescriptions(
+  rules: ToolPermissionContext['alwaysAllowRules'],
+): string[] {
+  return [...new Set(Object.values(rules).flatMap(sourceRules =>
+    (sourceRules ?? []).flatMap(rule => {
+      const description = extractPromptDescription(rule)
+      return description ? [description] : []
+    }),
+  ))]
 }
 
-export function getBashPromptAskDescriptions(_context: unknown): string[] {
-  return []
+export function getBashPromptDenyDescriptions(
+  context: ToolPermissionContext,
+): string[] {
+  return getPromptDescriptions(context.alwaysDenyRules)
 }
 
-export function getBashPromptAllowDescriptions(_context: unknown): string[] {
-  return []
+export function getBashPromptAskDescriptions(
+  context: ToolPermissionContext,
+): string[] {
+  return getPromptDescriptions(context.alwaysAskRules)
+}
+
+export function getBashPromptAllowDescriptions(
+  context: ToolPermissionContext,
+): string[] {
+  return getPromptDescriptions(context.alwaysAllowRules)
 }
 
 export async function classifyBashCommand(
-  _command: string,
+  command: string,
   _cwd: string,
-  _descriptions: string[],
+  descriptions: string[],
   _behavior: ClassifierBehavior,
-  _signal: AbortSignal,
+  signal: AbortSignal,
   _isNonInteractiveSession: boolean,
 ): Promise<ClassifierResult> {
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+  }
+
+  const normalizedCommand = normalizeForMatch(command)
+  const matchedDescription = descriptions.find(description => {
+    const normalizedDescription = normalizeForMatch(description)
+    return normalizedDescription.length >= 4 &&
+      normalizedCommand.includes(normalizedDescription)
+  })
+
+  if (matchedDescription) {
+    return {
+      matches: true,
+      matchedDescription,
+      confidence: 'high',
+      reason: 'The normalized command contains the configured prompt rule.',
+    }
+  }
+
   return {
     matches: false,
-    confidence: 'high',
-    reason: 'This feature is disabled',
+    confidence: 'low',
+    reason: 'No conservative local match was found.',
   }
 }
 
+function normalizeForMatch(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+}
+
 export async function generateGenericDescription(
-  _command: string,
+  command: string,
   specificDescription: string | undefined,
-  _signal: AbortSignal,
+  signal: AbortSignal,
 ): Promise<string | null> {
-  return specificDescription || null
+  if (signal.aborted) return null
+  const description = specificDescription?.trim()
+  if (description) return description
+  const normalized = command.replace(/\s+/g, ' ').trim()
+  return normalized ? `run: ${normalized.slice(0, 160)}` : null
 }

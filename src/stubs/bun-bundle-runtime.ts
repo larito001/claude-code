@@ -10,7 +10,6 @@ const ENABLED_FEATURES = new Set<string>([
   // 'TRANSCRIPT_CLASSIFIER', // Auto-mode classifier
   // 'BUDDY',               // Companion sprite
   // 'WEB_BROWSER_TOOL',    // Web browser tool
-  // 'CHICAGO_MCP',         // Computer use MCP
   // 'DAEMON',              // Daemon mode
 ])
 

@@ -122,8 +122,6 @@ type State = {
   inMemoryErrorLog: Array<{ error: string; timestamp: string }>
   // Session-only plugins from --plugin-dir flag
   inlinePlugins: Array<string>
-  // Explicit --chrome / --no-chrome flag value (undefined = not set on CLI)
-  chromeFlagOverride: boolean | undefined
   // Use cowork_plugins directory instead of plugins (--cowork flag or env var)
   useCoworkPlugins: boolean
   // Session-only bypass permissions mode flag (not persisted)
@@ -335,8 +333,6 @@ function getInitialState(): State {
     inMemoryErrorLog: [],
     // Session-only plugins from --plugin-dir flag
     inlinePlugins: [],
-    // Explicit --chrome / --no-chrome flag value (undefined = not set on CLI)
-    chromeFlagOverride: undefined,
     // Use cowork_plugins directory instead of plugins
     useCoworkPlugins: false,
     // Session-only bypass permissions mode flag (not persisted)
@@ -1189,14 +1185,6 @@ export function getInlinePlugins(): Array<string> {
   return STATE.inlinePlugins
 }
 
-export function setChromeFlagOverride(value: boolean | undefined): void {
-  STATE.chromeFlagOverride = value
-}
-
-export function getChromeFlagOverride(): boolean | undefined {
-  return STATE.chromeFlagOverride
-}
-
 export function setUseCoworkPlugins(value: boolean): void {
   STATE.useCoworkPlugins = value
   resetSettingsCache()
@@ -1675,4 +1663,3 @@ export function getPromptId(): string | null {
 export function setPromptId(id: string | null): void {
   STATE.promptId = id
 }
-

@@ -21,7 +21,7 @@
 ### 前置条件
 
 - [Bun](https://bun.sh) >= 1.3.x
-- 有效的 `ANTHROPIC_API_KEY`
+- `.env` 中配置有效的 `DEEPSEEK_API_KEY`（开发入口会映射给 Anthropic 兼容 SDK）
 
 ### 安装与运行
 
@@ -32,8 +32,8 @@ cd claude-code
 # 安装依赖（postinstall 会自动创建 bun:bundle polyfill）
 bun install
 
-# 直接运行
-bun src/entrypoints/cli.tsx -p "your prompt here" --output-format text
+# 直接运行（自动读取 .env）
+bun run dev -- -p "your prompt here" --output-format text
 ```
 
 ### 构建（可选）
@@ -56,7 +56,7 @@ bun src/entrypoints/cli.tsx -p "your prompt here" --output-format json
 bun src/entrypoints/cli.tsx
 ```
 
-> **注意**：此裁剪版仅支持 `ANTHROPIC_API_KEY`，不包含 Claude/Anthropic 网页登录、订阅认证或登出流程。
+> **注意**：此裁剪版只使用 API Key，不包含 Claude/Anthropic 网页登录、订阅认证、Claude in Chrome 或 Computer Use 流程。
 
 ---
 
@@ -71,21 +71,15 @@ bun src/entrypoints/cli.tsx
 | `package.json` | 根据约 1,900 个源文件逆向整理出的 60+ npm 依赖 |
 | `tsconfig.json` | TypeScript 配置（ESNext、JSX、Bun bundler 模块解析） |
 | `bunfig.toml` | Bun 运行时配置 |
-| `scripts/postinstall.sh` | 在 `bun install` 后自动创建 `bun:bundle` 运行时 polyfill |
+| `scripts/postinstall.ts` | 跨平台地在 `bun install` 后创建 `bun:bundle` 运行时 polyfill |
 | `.gitignore` | 排除 `node_modules/`、`dist/` 和锁文件 |
 
-### Stub 模块（已创建）
+### 依赖适配与裁剪
 
-原始源码导入了许多泄露内容未包含的 Anthropic 内部包和功能门控模块。项目为此提供最小化 stub，使构建能够完成：
-
-| 类别 | 数量 | 示例 |
-|------|------|------|
-| Anthropic 内部包（`@ant/*`） | 4 | computer-use-mcp、computer-use-swift、claude-for-chrome-mcp |
-| 原生扩展 | 3 | color-diff-napi、audio-capture-napi、modifiers-napi |
-| 云服务商 SDK | 6 | Bedrock/Foundry/Vertex SDK、AWS STS、Azure Identity |
-| OpenTelemetry 导出器 | 10 | OTLP gRPC/HTTP/Proto 导出器 |
-| 其他可选包 | 2 | sharp、turndown |
-| 功能门控的源模块 | 约 90 | 未包含在 source map 中的工具、命令、服务和组件 |
+- Sharp、Turndown、Bedrock/Foundry/Vertex、AWS/Azure 与 OpenTelemetry 已接入公开正式包。
+- `color-diff-napi` 已替换为项目内 TypeScript 实现。
+- Claude in Chrome、Computer Use 及其 `@ant/*` 私有依赖已沿入口、UI、配置和 MCP 调用链删除。
+- `audio-capture-napi` 无调用方，已删除；`modifiers-napi` 改为跨平台可降级的可选能力。
 
 ### 源码修复
 
@@ -131,7 +125,7 @@ src/
 ├── components/           # React/Ink 终端 UI
 ├── hooks/                # React Hooks
 ├── coordinator/          # 多代理编排
-└── stubs/                # 缺失内部依赖的 stub 包
+└── stubs/                # 少量运行时兼容模块
 ```
 
 ### 关键系统
