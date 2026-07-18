@@ -29,6 +29,7 @@
     "smoke:release": "bun run build && bun --env-file=.env run scripts/smoke-release.ts",
     "smoke:session": "bun --env-file=.env run scripts/smoke-session.ts",
     "smoke:ui": "bun run scripts/smoke-ui.ts",
+    "smoke:all": "bun run check && bun run smoke:core && bun run smoke:extensions && bun run smoke:ui && bun run smoke:api && bun run smoke:session && bun run smoke:release",
     "check": "bun run typecheck && bun run build && bun run smoke",
     "config": "bun run config-ui/server.ts"
   },
