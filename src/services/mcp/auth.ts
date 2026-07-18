@@ -31,7 +31,6 @@ import { createServer, type Server } from 'http'
 import { join } from 'path'
 import { parse } from 'url'
 import xss from 'xss'
-import { MCP_CLIENT_METADATA_URL } from '../../constants/oauth.js'
 import { openBrowser } from '../../utils/browser.js'
 import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
 import { errorMessage, getErrnoCode } from '../../utils/errors.js'
@@ -1448,7 +1447,7 @@ export class ClaudeAuthProvider implements OAuthClientProvider {
       logMCPDebug(this.serverName, `Using CIMD URL from env: ${override}`)
       return override
     }
-    return MCP_CLIENT_METADATA_URL
+    return undefined
   }
 
   setMetadata(

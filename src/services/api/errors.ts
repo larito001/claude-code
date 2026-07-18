@@ -15,14 +15,7 @@ import type {
   UserMessage,
 } from 'src/types/message.js'
 import { getAnthropicApiKeyWithSource } from 'src/utils/auth.js'
-import {
-  createAssistantAPIErrorMessage,
-  NO_RESPONSE_REQUESTED,
-} from 'src/utils/messages.js'
-import {
-  getDefaultMainLoopModelSetting,
-  isNonCustomOpusModel,
-} from 'src/utils/model/model.js'
+import { createAssistantAPIErrorMessage } from 'src/utils/messages.js'
 import { getModelStrings } from 'src/utils/model/modelStrings.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
@@ -38,12 +31,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import {
-  type ClaudeAILimits,
-  getRateLimitErrorMessage,
-  type OverageDisabledReason,
-} from '../claudeAiLimits.js'
-import { shouldProcessRateLimits } from '../rateLimitMocking.js' // Used for /mock-limits command
 import { extractConnectionErrorDetails, formatAPIError } from './errorUtils.js'
 
 export const API_ERROR_MESSAGE_PREFIX = 'API Error'
@@ -51,7 +38,7 @@ export const API_ERROR_MESSAGE_PREFIX = 'API Error'
 export function startsWithApiErrorPrefix(text: string): boolean {
   return (
     text.startsWith(API_ERROR_MESSAGE_PREFIX) ||
-    text.startsWith(`Check ANTHROPIC_API_KEY · ${API_ERROR_MESSAGE_PREFIX}`)
+    text.startsWith(`Check DEEPSEEK_API_KEY · ${API_ERROR_MESSAGE_PREFIX}`)
   )
 }
 export const PROMPT_TOO_LONG_ERROR_MESSAGE = 'Prompt is too long'
@@ -148,13 +135,11 @@ export function isMediaSizeErrorMessage(msg: AssistantMessage): boolean {
 }
 export const CREDIT_BALANCE_TOO_LOW_ERROR_MESSAGE = 'Credit balance is too low'
 export const INVALID_API_KEY_ERROR_MESSAGE =
-  'Missing API key · Set ANTHROPIC_API_KEY and restart'
+  'Missing API key · Set DEEPSEEK_API_KEY in .env and restart'
 export const INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL =
-  'Invalid API key · Fix external API key'
+  'Invalid API key · Update DEEPSEEK_API_KEY in .env'
 export const ORG_DISABLED_ERROR_MESSAGE_ENV_KEY =
-  'Your ANTHROPIC_API_KEY belongs to a disabled organization · Update or unset the environment variable'
-export const CCR_AUTH_ERROR_MESSAGE =
-  'Authentication error · This may be a temporary network issue, please try again'
+  'The configured API key belongs to a disabled organization · Update the key in .env'
 export const REPEATED_529_ERROR_MESSAGE = 'Repeated 529 Overloaded errors'
 export const CUSTOM_OFF_SWITCH_MESSAGE =
   'Opus is experiencing high load, please use /model to switch to Sonnet'
@@ -186,15 +171,6 @@ export function getRequestTooLargeErrorMessage(): string {
     ? `Request too large (${limits}). Try with a smaller file.`
     : `Request too large (${limits}). Double press esc to go back and try with a smaller file.`
 }
-/**
- * Check if we're in CCR (Claude Code Remote) mode.
- * In CCR mode, auth is handled via JWTs provided by the infrastructure,
- * not via /login. Transient auth errors should suggest retrying, not logging in.
- */
-function isCCRMode(): boolean {
-  return isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)
-}
-
 // Temp helper to log tool_use/tool_result mismatch errors
 function logToolUseToolResultMismatch(
   toolUseId: string,
@@ -439,85 +415,14 @@ export function getAssistantMessageFromError(
     })
   }
 
-  if (
-    error instanceof APIError &&
-    error.status === 429 &&
-    shouldProcessRateLimits(false)
-  ) {
-    // Check if this is the new API with multiple rate limit headers
-    const rateLimitType = error.headers?.get?.(
-      'anthropic-ratelimit-unified-representative-claim',
-    ) as 'five_hour' | 'seven_day' | 'seven_day_opus' | null
-
-    const overageStatus = error.headers?.get?.(
-      'anthropic-ratelimit-unified-overage-status',
-    ) as 'allowed' | 'allowed_warning' | 'rejected' | null
-
-    // If we have the new headers, use the new message generation
-    if (rateLimitType || overageStatus) {
-      // Build limits object from error headers to determine the appropriate message
-      const limits: ClaudeAILimits = {
-        status: 'rejected',
-        unifiedRateLimitFallbackAvailable: false,
-        isUsingOverage: false,
-      }
-
-      // Extract rate limit information from headers
-      const resetHeader = error.headers?.get?.(
-        'anthropic-ratelimit-unified-reset',
-      )
-      if (resetHeader) {
-        limits.resetsAt = Number(resetHeader)
-      }
-
-      if (rateLimitType) {
-        limits.rateLimitType = rateLimitType
-      }
-
-      if (overageStatus) {
-        limits.overageStatus = overageStatus
-      }
-
-      const overageResetHeader = error.headers?.get?.(
-        'anthropic-ratelimit-unified-overage-reset',
-      )
-      if (overageResetHeader) {
-        limits.overageResetsAt = Number(overageResetHeader)
-      }
-
-      const overageDisabledReason = error.headers?.get?.(
-        'anthropic-ratelimit-unified-overage-disabled-reason',
-      ) as OverageDisabledReason | null
-      if (overageDisabledReason) {
-        limits.overageDisabledReason = overageDisabledReason
-      }
-
-      // Use the new message format for all new API rate limits
-      const specificErrorMessage = getRateLimitErrorMessage(limits, model)
-      if (specificErrorMessage) {
-        return createAssistantAPIErrorMessage({
-          content: specificErrorMessage,
-          error: 'rate_limit',
-        })
-      }
-
-      // If getRateLimitErrorMessage returned null, it means the fallback mechanism
-      // will handle this silently (e.g., Opus -> Sonnet fallback for eligible users).
-      // Return NO_RESPONSE_REQUESTED so no error is shown to the user, but the
-      // message is still recorded in conversation history for Claude to see.
-      return createAssistantAPIErrorMessage({
-        content: NO_RESPONSE_REQUESTED,
-        error: 'rate_limit',
-      })
-    }
-
+  if (error instanceof APIError && error.status === 429) {
     // No quota headers — this is NOT a quota limit. Surface what the API actually
     // said instead of a generic "Rate limit reached". Entitlement rejections
     // (e.g. 1M context without Extra Usage) and infra capacity 429s land here.
     if (error.message.includes('Extra usage is required for long context')) {
       const hint = getIsNonInteractiveSession()
-        ? 'enable extra usage at claude.ai/settings/usage, or use --model to switch to standard context'
-        : 'run /extra-usage to enable, or /model to switch to standard context'
+        ? 'use --model to select a standard-context model'
+        : 'use /model to select a standard-context model'
       return createAssistantAPIErrorMessage({
         content: `${API_ERROR_MESSAGE_PREFIX}: Extra usage is required for 1M context · ${hint}`,
         error: 'rate_limit',
@@ -528,8 +433,10 @@ export function getAssistantMessageFromError(
     const stripped = error.message.replace(/^429\s+/, '')
     const innerMessage = stripped.match(/"message"\s*:\s*"([^"]*)"/)?.[1]
     const detail = innerMessage || stripped
+    const retryAfter = error.headers?.get?.('retry-after')
+    const retryHint = retryAfter ? ` Retry after ${retryAfter} seconds.` : ''
     return createAssistantAPIErrorMessage({
-      content: `${API_ERROR_MESSAGE_PREFIX}: Request rejected (429) · ${detail || 'this may be a temporary capacity issue — check status.anthropic.com'}`,
+      content: `${API_ERROR_MESSAGE_PREFIX}: Rate limit exceeded (429).${retryHint}${detail ? ` ${detail}` : ''}`,
       error: 'rate_limit',
     })
   }
@@ -661,25 +568,14 @@ export function getAssistantMessageFromError(
       }
     }
 
-    if (process.env.USER_TYPE === 'ant') {
-      const baseMessage = `API Error: 400 ${error.message}\n\nRun /share and post the JSON file to ${MACRO.FEEDBACK_CHANNEL}.`
-      const rewindInstruction = getIsNonInteractiveSession()
-        ? ''
-        : ' Then, use /rewind to recover the conversation.'
-      return createAssistantAPIErrorMessage({
-        content: baseMessage + rewindInstruction,
-        error: 'invalid_request',
-      })
-    } else {
-      const baseMessage = 'API Error: 400 due to tool use concurrency issues.'
-      const rewindInstruction = getIsNonInteractiveSession()
-        ? ''
-        : ' Run /rewind to recover the conversation.'
-      return createAssistantAPIErrorMessage({
-        content: baseMessage + rewindInstruction,
-        error: 'invalid_request',
-      })
-    }
+    const baseMessage = 'API Error: 400 due to tool use concurrency issues.'
+    const rewindInstruction = getIsNonInteractiveSession()
+      ? ''
+      : ' Run /rewind to recover the conversation.'
+    return createAssistantAPIErrorMessage({
+      content: baseMessage + rewindInstruction,
+      error: 'invalid_request',
+    })
   }
 
   if (
@@ -709,43 +605,6 @@ export function getAssistantMessageFromError(
     })
   }
 
-  // Check for invalid model name error for subscription users trying to use Opus
-  if (
-    false &&
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.toLowerCase().includes('invalid model name') &&
-    (isNonCustomOpusModel(model) || model === 'opus')
-  ) {
-    return createAssistantAPIErrorMessage({
-      content:
-        'Claude Opus is unavailable for the current API key.',
-      error: 'invalid_request',
-    })
-  }
-
-  // Check for invalid model name error for Ant users. Claude Code may be
-  // defaulting to a custom internal-only model for Ants, and there might be
-  // Ants using new or unknown org IDs that haven't been gated in.
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    !process.env.ANTHROPIC_MODEL &&
-    error instanceof Error &&
-    error.message.toLowerCase().includes('invalid model name')
-  ) {
-    // Get organization ID from config - only use OAuth account data when actively using OAuth
-    const orgId = undefined?.organizationUuid
-    const baseMsg = `[ANT-ONLY] Your org isn't gated into the \`${model}\` model. Either run \`claude\` with \`ANTHROPIC_MODEL=${getDefaultMainLoopModelSetting()}\``
-    const msg = orgId
-      ? `${baseMsg} or share your orgId (${orgId}) in ${MACRO.FEEDBACK_CHANNEL} for help getting access.`
-      : `${baseMsg} or reach out in ${MACRO.FEEDBACK_CHANNEL} for help getting access.`
-
-    return createAssistantAPIErrorMessage({
-      content: msg,
-      error: 'invalid_request',
-    })
-  }
-
   if (
     error instanceof Error &&
     error.message.includes('Your credit balance is too low')
@@ -755,24 +614,16 @@ export function getAssistantMessageFromError(
       error: 'billing_error',
     })
   }
-  // "Organization has been disabled" — commonly a stale ANTHROPIC_API_KEY
-  // from a previous employer/project overriding subscription auth. Only handle
-  // the env-var case; apiKeyHelper and /login-managed keys mean the active
-  // auth's org is genuinely disabled with no dormant fallback to point at.
+  // Give API-key users a direct remediation for disabled organizations.
   if (
     error instanceof APIError &&
     error.status === 400 &&
     error.message.toLowerCase().includes('organization has been disabled')
   ) {
     const { source } = getAnthropicApiKeyWithSource()
-    // getAnthropicApiKeyWithSource conflates the env var with FD-passed keys
-    // under the same source value, and in CCR mode OAuth stays active despite
-    // the env var. The three guards ensure we only blame the env var when it's
-    // actually set and actually on the wire.
     if (
       source === 'ANTHROPIC_API_KEY' &&
-      process.env.ANTHROPIC_API_KEY &&
-      !false
+      process.env.ANTHROPIC_API_KEY
     ) {
       return createAssistantAPIErrorMessage({
         error: 'invalid_request',
@@ -785,14 +636,6 @@ export function getAssistantMessageFromError(
     error instanceof Error &&
     error.message.toLowerCase().includes('x-api-key')
   ) {
-    // In CCR mode, auth is via JWTs - this is likely a transient network issue
-    if (isCCRMode()) {
-      return createAssistantAPIErrorMessage({
-        error: 'authentication_failed',
-        content: CCR_AUTH_ERROR_MESSAGE,
-      })
-    }
-
     // Check if the API key is from an external source
     const { source } = getAnthropicApiKeyWithSource()
     const isExternalSource =
@@ -806,50 +649,16 @@ export function getAssistantMessageFromError(
     })
   }
 
-  // Check for OAuth token revocation error
-  if (
-    error instanceof APIError &&
-    error.status === 403 &&
-    error.message.includes('OAuth token has been revoked')
-  ) {
-    return createAssistantAPIErrorMessage({
-      error: 'authentication_failed',
-      content: getTokenRevokedErrorMessage(),
-    })
-  }
-
-  // Check for OAuth organization not allowed error
-  if (
-    error instanceof APIError &&
-    (error.status === 401 || error.status === 403) &&
-    error.message.includes(
-      'OAuth authentication is currently not allowed for this organization',
-    )
-  ) {
-    return createAssistantAPIErrorMessage({
-      error: 'authentication_failed',
-      content: getOauthOrgNotAllowedErrorMessage(),
-    })
-  }
-
   // Generic handler for other 401/403 authentication errors
   if (
     error instanceof APIError &&
     (error.status === 401 || error.status === 403)
   ) {
-    // In CCR mode, auth is via JWTs - this is likely a transient network issue
-    if (isCCRMode()) {
-      return createAssistantAPIErrorMessage({
-        error: 'authentication_failed',
-        content: CCR_AUTH_ERROR_MESSAGE,
-      })
-    }
-
     return createAssistantAPIErrorMessage({
       error: 'authentication_failed',
       content: getIsNonInteractiveSession()
         ? `Failed to authenticate. ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`
-        : `Check ANTHROPIC_API_KEY · ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`,
+        : `Check DEEPSEEK_API_KEY in .env · ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`,
     })
   }
 
@@ -1075,24 +884,6 @@ export function classifyAPIError(error: unknown): string {
     error.message.toLowerCase().includes('x-api-key')
   ) {
     return 'invalid_api_key'
-  }
-
-  if (
-    error instanceof APIError &&
-    error.status === 403 &&
-    error.message.includes('OAuth token has been revoked')
-  ) {
-    return 'token_revoked'
-  }
-
-  if (
-    error instanceof APIError &&
-    (error.status === 401 || error.status === 403) &&
-    error.message.includes(
-      'OAuth authentication is currently not allowed for this organization',
-    )
-  ) {
-    return 'oauth_org_not_allowed'
   }
 
   // Generic auth errors

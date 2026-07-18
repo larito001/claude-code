@@ -254,16 +254,14 @@ export async function validatePluginManifest(
   if (result.success) {
     const manifest = result.data
 
-    // Warn if name isn't strict kebab-case. CC's schema only rejects spaces,
-    // but the Claude.ai marketplace sync rejects non-kebab names. Surfacing
-    // this here lets authors catch it in CI before the sync fails on them.
+    // Warn if name isn't strict kebab-case so plugin packages stay portable
+    // across registries and CI validation.
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(manifest.name)) {
       warnings.push({
         path: 'name',
         message:
-          `Plugin name "${manifest.name}" is not kebab-case. Claude Code accepts ` +
-          `it, but the Claude.ai marketplace sync requires kebab-case ` +
-          `(lowercase letters, digits, and hyphens only, e.g., "my-plugin").`,
+          `Plugin name "${manifest.name}" is not kebab-case. Portable registries ` +
+          `require lowercase letters, digits, and hyphens (for example, "my-plugin").`,
       })
     }
 

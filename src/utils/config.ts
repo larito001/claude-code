@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { randomBytes } from 'crypto'
 import { unwatchFile, watchFile } from 'fs'
 import memoize from 'lodash-es/memoize.js'
@@ -8,9 +8,6 @@ import { getOriginalCwd, getSessionTrustAccepted } from '../bootstrap/state.js'
 import { getAutoMemEntrypoint } from '../memdir/paths.js'
 import { logEvent } from '../services/analytics/index.js'
 import type { McpServerConfig } from '../services/mcp/types.js'
-import type {
-  ReferralEligibilityResponse,
-} from '../types/claudeAccount.js'
 import { getCwd } from '../utils/cwd.js'
 import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
@@ -37,7 +34,6 @@ const teamMemPaths = feature('TEAMMEM')
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import type { ImageDimensions } from './imageResizer.js'
-import type { ModelOption } from './model/modelOptions.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 
 // 重入防护：防止 getConfig → logEvent → getGlobalConfig → getConfig
@@ -126,8 +122,6 @@ export type ProjectConfig = {
     sessionId: string
     hookBased?: boolean
   }
-  /** “克劳德远程控制”多会话的生成模式。通过首次运行对话框或“w”切换设置。 */
-  remoteControlSpawnMode?: 'same-dir' | 'worktree'
 }
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
@@ -185,26 +179,14 @@ export type GlobalConfig = {
   // @deprecated - 迁移到 ~/.claude/cache/changelog.md。保留以获得迁移支持。
   cachedChangelog?: string
   mcpServers?: Record<string, McpServerConfig>
-  // claude.ai MCP 连接器已成功连接至少一次。
-  // 用于控制“连接器不可用”/“需要身份验证”启动通知：
-  // 用户实际使用过的连接器在损坏时值得标记，
-  // 但是从第一天起就需要身份验证的组织配置连接器是
-  // 用户明显忽略了并且不应该抱怨的事情。
-  claudeAiMcpEverConnected?: string[]
   preferredNotifChannel: NotificationChannel
   /**
    * @deprecated。请改用通知挂钩 (docs/hooks.md)。
    */
   customNotifyCommand?: string
   verbose: boolean
-  customApiKeyResponses?: {
-    approved?: string[]
-    rejected?: string[]
-  }
-  primaryApiKey?: string // 未设置环境变量时用户的主 API 密钥，通过 oauth 设置（TODO：重命名）
   hasAcknowledgedCostThreshold?: boolean
-  hasSeenUndercoverAutoNotice?: boolean // ant-only：是否显示一次性自动卧底解释器
-  hasResetAutoModeOptInForDefaultOffer?: boolean // ant-only：一次性迁移防护，重新提示流失的自动模式用户
+  hasResetAutoModeOptInForDefaultOffer?: boolean // One-time migration guard for the auto-mode prompt.
   iterm2KeyBindingInstalled?: boolean // 遗留 - 保留向后兼容性
   editorMode?: EditorMode
   bypassPermissionsModeAccepted?: boolean
@@ -244,9 +226,6 @@ export type GlobalConfig = {
     [tipId: string]: number // 键是tipId，值是最后一次显示tip时的numStartups
   }
 
-  // /buddy 同伴灵魂 — 读取时从 userId 重新生成的骨骼。请参阅 src/buddy/。
-  companion?: import('../buddy/types.js').StoredCompanion
-  companionMuted?: boolean
 
   // 反馈调查跟踪
   feedbackSurveyState?: {
@@ -276,17 +255,7 @@ export type GlobalConfig = {
     { hasAccess: boolean; hasAccessNotAsDefault?: boolean; timestamp: number }
   >
 
-  // 访客通过每个组织的资格缓存 - 密钥是组织 ID
-  passesEligibilityCache?: Record<
-    string,
-    ReferralEligibilityResponse & { timestamp: number }
-  >
-
   // 每个帐户的 Grove 配置缓存 - 密钥是帐户 UUID
-  groveConfigCache?: Record<
-    string,
-    { grove_enabled: boolean; timestamp: number }
-  >
 
   hasVisitedExtraUsage?: boolean // 用户是否访问过 /extra-usage — 隐藏信用追加销售
 
@@ -308,12 +277,6 @@ export type GlobalConfig = {
   // 计划模式使用情况跟踪
   lastPlanModeUse?: number // 上次计划模式使用的时间戳
 
-  // 订阅通知跟踪
-  subscriptionNoticeCount?: number // 订阅通知展示次数
-  hasAvailableSubscription?: boolean // 用户是否有可用订阅的缓存结果
-  subscriptionUpsellShownCount?: number // 订阅加售已显示的次数（已弃用）
-  recommendedSubscription?: string // 从 Statsig 缓存配置值（已弃用）
-
   // 待办事项功能配置
   todoFeatureEnabled: boolean // 是否启用待办事项功能
   showExpandedTodos?: boolean // 是否显示展开的待办事项，即使是空的
@@ -323,9 +286,6 @@ export type GlobalConfig = {
   firstStartTime?: string // Claude Code 首次在此计算机上启动时的 ISO 时间戳
 
   messageIdleNotifThresholdMs: number // 用户必须空闲多长时间才能收到 Claude 生成完毕的通知
-
-  githubActionSetupCount?: number // 用户设置 GitHub Action 的次数
-  slackAppInstallCount?: number // 用户点击安装 Slack 应用程序的次数
 
   // 文件检查点配置
   fileCheckpointingEnabled: boolean
@@ -338,28 +298,10 @@ export type GlobalConfig = {
   // 来自标题（点使其变得多余）。
   showStatusInTerminalTab?: boolean
 
-  // 克劳德代码使用情况跟踪
-  claudeCodeFirstTokenDate?: string // 用户第一个 Claude Code OAuth 令牌的 ISO 时间戳
-
-  // 模型切换标注跟踪（仅限 ant）
-  modelSwitchCalloutDismissed?: boolean // 用户是否选择“不再显示”
-  modelSwitchCalloutLastShown?: number // 最后显示的时间戳（24 小时内不显示）
-  modelSwitchCalloutVersion?: string
-
-  // 工作量标注跟踪 - 针对 Opus 4.6 用户显示一次
-  effortCalloutDismissed?: boolean // v1 - 旧版本，为已经看过 v2 的 Pro 用户阅读以抑制 v2
-  effortCalloutV2Dismissed?: boolean
-
-  // 桌面追加销售启动对话框跟踪
-  desktopUpsellSeenCount?: number // 总放映次数（最多 3 次）
-  desktopUpsellDismissed?: boolean // 选择“不要再问”
-
   // 空闲返回对话框跟踪
   idleReturnDismissed?: boolean // 选择“不要再问”
 
   // Opus 4.5 Pro 迁移跟踪
-  opusProMigrationComplete?: boolean
-  opusProMigrationTimestamp?: number
 
   // Sonnet 4.5 1m 迁移跟踪
   sonnet1m45MigrationComplete?: boolean
@@ -367,23 +309,8 @@ export type GlobalConfig = {
   // Opus 4.0/4.1 → 当前 Opus 迁移（显示一次性通知）
   legacyOpusMigrationTimestamp?: number
 
-  // Sonnet 4.5 → 4.6 迁移（pro/max/team premium）
-  sonnet45To46MigrationTimestamp?: number
-
-  // 缓存的 statsig 门值
-  cachedStatsigGates: {
-    [gateName: string]: boolean
-  }
-
-  // 缓存的 statsig 动态配置
-  cachedDynamicConfigs?: { [configName: string]: unknown }
-
-  // 缓存的 GrowthBook 特征值
-  cachedGrowthBookFeatures?: { [featureName: string]: unknown }
-
-  // 本地 GrowthBook 覆盖（仅限 ant，通过 /config Gates 选项卡设置）。
-  // 在 env-var 覆盖之后但在实际解析值之前检查。
-  growthBookOverrides?: { [featureName: string]: unknown }
+  // 本地功能配置覆盖。环境变量 CLAUDE_CODE_FEATURE_OVERRIDES 优先。
+  featureOverrides?: { [featureName: string]: unknown }
 
   // 紧急提示跟踪 - 存储最后显示的提示以防止重新显示
   lastShownEmergencyTip?: string
@@ -404,7 +331,6 @@ export type GlobalConfig = {
   // 用于启动 claude-cli:// 深层链接的终端模拟器。捕获自
   // 自深层链接处理程序运行以来，交互会话期间的 TERM_PROGRAM
   // 无头 (LaunchServices/xdg)，未设置 TERM_PROGRAM。
-  deepLinkTerminal?: string
 
   // iTerm2 it2 CLI 设置
   iterm2It2SetupComplete?: boolean // it2设置是否已验证
@@ -459,41 +385,20 @@ export type GlobalConfig = {
   // PR 状态页脚配置（通过 GrowthBook 进行功能标记）
   prStatusFooterEnabled?: boolean // 在页脚中显示 PR 审核状态（默认值：true）
 
-  // Tmux 实时面板可见性（仅限 ant，通过 tmux 药丸上的 Enter 进行切换）
-  tungstenPanelVisible?: boolean
-
   // 从 API 缓存组织级快速模式状态。
   // 用于检测跨会话更改并通知用户。
-  penguinModeOrgEnabled?: boolean
+  fastModeApiEnabled?: boolean
 
   // 后台刷新上次运行时的纪元毫秒（快速模式、配额、通行证、客户端数据）。
   // 与 tengu_cicada_nap_ms 一起使用来限制 API 调用
   startupPrefetchedAt?: number
 
-  // 缓存了上次 API 响应中的额外使用禁用原因
-  // undefined = 无缓存，null = 启用额外使用，string = 禁用原因。
-  cachedExtraUsageDisabledReason?: string | null
-
-  // 自动权限通知跟踪（仅限 Ant）
+  // 自动权限通知跟踪
   autoPermissionsNotificationCount?: number // 自动权限通知显示的次数
 
-  // 推测配置（仅限 ant）
+  // 推测配置
   speculationEnabled?: boolean // 是否启用推测（默认：true）
 
-
-  // 服务器端实验的客户端数据（在引导期间获取）。
-  clientDataCache?: Record<string, unknown> | null
-
-  // 模型选择器的附加模型选项（在引导期间获取）。
-  additionalModelOptionsCache?: ModelOption[]
-
-  // /api/claude_code/organizations/metrics_enabled 的磁盘缓存。
-  // 组织级别的设置很少改变；跨进程持久化可以避免
-  // 每次“claude -p”调用时都会进行冷 API 调用。
-  metricsStatusCache?: {
-    enabled: boolean
-    timestamp: number
-  }
 
   // 最后应用的迁移集的版本。当等于
   // CURRENT_MIGRATION_VERSION，runMigrations() 跳过所有同步迁移
@@ -522,10 +427,6 @@ function createDefaultGlobalConfig(): GlobalConfig {
     hasUsedBackgroundTask: false,
     queuedCommandUpHintCount: 0,
     diffTool: 'auto',
-    customApiKeyResponses: {
-      approved: [],
-      rejected: [],
-    },
     env: {},
     tipsHistory: {},
     memoryUsageCount: 0,
@@ -538,9 +439,6 @@ function createDefaultGlobalConfig(): GlobalConfig {
     autoInstallIdeExtension: true,
     fileCheckpointingEnabled: true,
     terminalProgressBarEnabled: true,
-    cachedStatsigGates: {},
-    cachedDynamicConfigs: {},
-    cachedGrowthBookFeatures: {},
     respectGitignore: true,
     copyFullResponse: false,
   }
@@ -691,11 +589,9 @@ export function isProjectConfigKey(key: string): key is ProjectConfigKey {
 }
 
 /**
- * 检测写入“fresh”是否会丢失身份验证/登录状态
- * 内存缓存仍然有。当“getConfig”遇到损坏时会发生这种情况
- * 或在写入过程中截断的文件（来自另一个进程或非原子回退）
- * 并返回DEFAULT_GLOBAL_CONFIG。写回将永久
- * 擦除授权。参见 GH #3117。
+ * Detect whether a fresh read would lose completed onboarding state that is
+ * still present in the in-memory cache. This protects against truncated or
+ * concurrently written configuration files being written back as defaults.
  */
 function wouldLoseOnboardingState(fresh: {
   hasCompletedOnboarding?: boolean
@@ -739,9 +635,8 @@ export function saveGlobalConfig(
         return written
       },
     )
-    // 只有当我们真正写过时才写通。如果授权丢失守卫
-    // 跳闸（或更新程序未进行任何更改），文件未受影响并且
-    // 缓存仍然有效——触摸它会破坏守卫。
+    // Update the cache only after a successful write. If the onboarding-state
+    // guard trips, the file and the valid cache must remain untouched.
     if (didWrite && written) {
       writeThroughGlobalConfigCache(written)
     }
@@ -752,17 +647,17 @@ export function saveGlobalConfig(
     // Fall back to non-locked version on error. This fallback is a race
     // window: if another process is mid-write (or the file got truncated),
     // getConfig returns defaults. Refuse to write those over a good cached
-    // config to avoid wiping auth. See GH #3117.
+    // config to avoid wiping completed onboarding state.
     const currentConfig = getConfig(
       getGlobalClaudeFile(),
       createDefaultGlobalConfig,
     )
     if (wouldLoseOnboardingState(currentConfig)) {
       logForDebugging(
-        'saveGlobalConfig fallback: re-read config is missing auth that cache has; refusing to write. See GH #3117.',
+        'saveGlobalConfig fallback: re-read config lost completed onboarding state; refusing to write.',
         { level: 'error' },
       )
-      logEvent('tengu_config_auth_loss_prevented', {})
+      logEvent('tengu_config_onboarding_state_loss_prevented', {})
       return
     }
     const config = updater(currentConfig)
@@ -790,8 +685,8 @@ let lastReadFileStats: { mtime: number; size: number } | null = null
 let configCacheHits = 0
 let configCacheMisses = 0
 // Session-total count of actual disk writes to the global config file.
-// Exposed for ant-only dev diagnostics (see inc-4552) so anomalous write
-// rates surface in the UI before they corrupt ~/.claude.json.
+// Exposed for local diagnostics so anomalous write rates surface in the UI
+// before they corrupt the global configuration file.
 let globalConfigWriteCount = 0
 
 export function getGlobalConfigWriteCount(): number {
@@ -999,19 +894,6 @@ export function getGlobalConfig(): GlobalConfig {
   }
 }
 
-export function getCustomApiKeyStatus(
-  truncatedApiKey: string,
-): 'approved' | 'rejected' | 'new' {
-  const config = getGlobalConfig()
-  if (config.customApiKeyResponses?.approved?.includes(truncatedApiKey)) {
-    return 'approved'
-  }
-  if (config.customApiKeyResponses?.rejected?.includes(truncatedApiKey)) {
-    return 'rejected'
-  }
-  return 'new'
-}
-
 function saveConfig<A extends object>(
   file: string,
   config: A,
@@ -1115,10 +997,10 @@ function saveConfigWithLock<A extends object>(
     const currentConfig = getConfig(file, createDefault)
     if (file === getGlobalClaudeFile() && wouldLoseOnboardingState(currentConfig)) {
       logForDebugging(
-        'saveConfigWithLock: re-read config is missing auth that cache has; refusing to write to avoid wiping ~/.claude.json. See GH #3117.',
+        'saveConfigWithLock: re-read config lost completed onboarding state; refusing to write.',
         { level: 'error' },
       )
-      logEvent('tengu_config_auth_loss_prevented', {})
+      logEvent('tengu_config_onboarding_state_loss_prevented', {})
       return false
     }
 
@@ -1571,10 +1453,10 @@ export function saveCurrentProjectConfig(
     const config = getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
     if (wouldLoseOnboardingState(config)) {
       logForDebugging(
-        'saveCurrentProjectConfig fallback: re-read config is missing auth that cache has; refusing to write. See GH #3117.',
+        'saveCurrentProjectConfig fallback: re-read config lost completed onboarding state; refusing to write.',
         { level: 'error' },
       )
-      logEvent('tengu_config_auth_loss_prevented', {})
+      logEvent('tengu_config_onboarding_state_loss_prevented', {})
       return
     }
     const currentProjectConfig =
@@ -1694,7 +1576,7 @@ export function getMemoryPath(memoryType: MemoryType): string {
   if (feature('TEAMMEM')) {
     return teamMemPaths!.getTeamMemEntrypoint()
   }
-  return '' // unreachable in external builds where TeamMem is not in MemoryType
+  return '' // Unreachable when MemoryType is exhaustively handled.
 }
 
 export function getManagedClaudeRulesDir(): string {

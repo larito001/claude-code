@@ -54,14 +54,14 @@ let cachedPaneBackendExecutor: TeammateExecutor | null = null
 let inProcessFallbackActive = false
 
 /**
- * Placeholder for TmuxBackend - will be replaced with actual implementation.
- * This allows the registry to compile before the backend implementations exist.
+ * Lazy registration slot for TmuxBackend. Dynamic registration avoids a
+ * circular import while still storing the concrete implementation class.
  */
 let TmuxBackendClass: (new () => PaneBackend) | null = null
 
 /**
- * Placeholder for ITermBackend - will be replaced with actual implementation.
- * This allows the registry to compile before the backend implementations exist.
+ * Lazy registration slot for ITermBackend. Dynamic registration avoids a
+ * circular import while still storing the concrete implementation class.
  */
 let ITermBackendClass: (new () => PaneBackend) | null = null
 

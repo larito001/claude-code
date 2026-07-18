@@ -1,5 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
-import { feature } from 'bun:bundle';
+import { feature } from 'src/utils/features.js';
 import React, { useContext, useEffect, useEffectEvent, useState, useSyncExternalStore } from 'react';
 import { MailboxProvider } from '../context/mailbox.js';
 import { useSettingsChange } from '../hooks/useSettingsChange.js';
@@ -138,9 +138,6 @@ export function useAppState(selector) {
     t0 = () => {
       const state = store.getState();
       const selected = selector(state);
-      if (false && state === selected) {
-        throw new Error(`Your selector in \`useAppState(${selector.toString()})\` returned the original state, which is not allowed. You must instead return a property for optimised rendering.`);
-      }
       return selected;
     };
     $[0] = selector;

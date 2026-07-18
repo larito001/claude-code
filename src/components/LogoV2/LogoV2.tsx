@@ -1,12 +1,10 @@
 import { c as _c } from "react/compiler-runtime";
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import * as React from 'react';
 import { Box, Text, color } from '../../ink.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { stringWidth } from '../../ink/stringWidth.js';
 import { getLayoutMode, calculateLayoutDimensions, calculateOptimalLeftWidth, formatWelcomeMessage, truncatePath, getRecentActivitySync, getRecentReleaseNotesSync, getLogoDisplayData } from '../../utils/logoV2Utils.js';
 import { truncate } from '../../utils/format.js';
-import { getDisplayPath } from '../../utils/file.js';
 import { Clawd } from './Clawd.js';
 import { FeedColumn } from './FeedColumn.js';
 import { createRecentActivityFeed, createWhatsNewFeed, createProjectOnboardingFeed } from './feedConfigs.js';
@@ -19,15 +17,11 @@ import { getSteps, shouldShowProjectOnboarding, incrementProjectOnboardingSeenCo
 import { CondensedLogo } from './CondensedLogo.js';
 import { OffscreenFreeze } from '../OffscreenFreeze.js';
 import { checkForReleaseNotesSync } from '../../utils/releaseNotes.js';
-import { getDumpPromptsPath } from 'src/services/api/dumpPrompts.js';
 import { isEnvTruthy } from 'src/utils/envUtils.js';
-import { getStartupPerfLogPath, isDetailedProfilingEnabled } from 'src/utils/startupProfiler.js';
 import { EmergencyTip } from './EmergencyTip.js';
 import { Opus1mMergeNotice } from './Opus1mMergeNotice.js';
-import { feature } from 'bun:bundle';
 
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
-import { plural } from '../../utils/stringUtils.js';
 import { useAppState } from '../../state/AppState.js';
 import { getEffortSuffix } from '../../utils/effort.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
@@ -168,28 +162,9 @@ export function LogoV2() {
     } else {
       t18 = $[24];
     }
-    let t19;
-    let t20;
-    let t21;
-    let t22;
-    if ($[25] === Symbol.for("react.memo_cache_sentinel")) {
-      t19 = false && !process.env.DEMO_VERSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>Use /issue to report model behavior issues</Text></Box>;
-      t20 = false && !process.env.DEMO_VERSION && <Box paddingLeft={2} flexDirection="column"><Text color="warning">[ANT-ONLY] Logs:</Text><Text dimColor={true}>API calls: {getDisplayPath(getDumpPromptsPath())}</Text><Text dimColor={true}>Debug logs: {getDisplayPath(getDebugLogPath())}</Text>{isDetailedProfilingEnabled() && <Text dimColor={true}>Startup Perf: {getDisplayPath(getStartupPerfLogPath())}</Text>}</Box>;
-      t21 = false && <GateOverridesWarning />;
-      t22 = false && <ExperimentEnrollmentNotice />;
-      $[25] = t19;
-      $[26] = t20;
-      $[27] = t21;
-      $[28] = t22;
-    } else {
-      t19 = $[25];
-      t20 = $[26];
-      t21 = $[27];
-      t22 = $[28];
-    }
     let t23;
     if ($[29] !== t18) {
-      t23 = <>{t11}{t12}{t13}{t14}{t15}{t16}{t17}{t18}{t19}{t20}{t21}{t22}</>;
+      t23 = <>{t11}{t12}{t13}{t14}{t15}{t16}{t17}{t18}</>;
       $[29] = t18;
       $[30] = t23;
     } else {
@@ -266,18 +241,7 @@ export function LogoV2() {
     } else {
       t17 = $[41];
     }
-    let t18;
-    let t19;
-    if ($[42] === Symbol.for("react.memo_cache_sentinel")) {
-      t18 = false && <GateOverridesWarning />;
-      t19 = false && <ExperimentEnrollmentNotice />;
-      $[42] = t18;
-      $[43] = t19;
-    } else {
-      t18 = $[42];
-      t19 = $[43];
-    }
-    return <><OffscreenFreeze><Box flexDirection="column" borderStyle="round" borderColor="claude" borderText={t11} paddingX={1} paddingY={1} alignItems="center" width={columns}><Text bold={true}>{welcomeMessage}</Text>{t12}{t13}<Text dimColor={true}>{billingType}</Text><Text dimColor={true}>{agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}</Text></Box></OffscreenFreeze>{t14}{t15}{t16}{t17}{t18}{t19}</>;
+    return <><OffscreenFreeze><Box flexDirection="column" borderStyle="round" borderColor="claude" borderText={t11} paddingX={1} paddingY={1} alignItems="center" width={columns}><Text bold={true}>{welcomeMessage}</Text>{t12}{t13}<Text dimColor={true}>{billingType}</Text><Text dimColor={true}>{agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}</Text></Box></OffscreenFreeze>{t14}{t15}{t16}{t17}</>;
   }
   const welcomeMessage_0 = formatWelcomeMessage(username);
   const modelLine = `${modelDisplayName} · ${billingType}`;
@@ -445,28 +409,9 @@ export function LogoV2() {
   } else {
     t36 = $[85];
   }
-  let t37;
-  let t38;
-  let t39;
-  let t40;
-  if ($[86] === Symbol.for("react.memo_cache_sentinel")) {
-    t37 = false && !process.env.DEMO_VERSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>Use /issue to report model behavior issues</Text></Box>;
-    t38 = false && !process.env.DEMO_VERSION && <Box paddingLeft={2} flexDirection="column"><Text color="warning">[ANT-ONLY] Logs:</Text><Text dimColor={true}>API calls: {getDisplayPath(getDumpPromptsPath())}</Text><Text dimColor={true}>Debug logs: {getDisplayPath(getDebugLogPath())}</Text>{isDetailedProfilingEnabled() && <Text dimColor={true}>Startup Perf: {getDisplayPath(getStartupPerfLogPath())}</Text>}</Box>;
-    t39 = false && <GateOverridesWarning />;
-    t40 = false && <ExperimentEnrollmentNotice />;
-    $[86] = t37;
-    $[87] = t38;
-    $[88] = t39;
-    $[89] = t40;
-  } else {
-    t37 = $[86];
-    t38 = $[87];
-    t39 = $[88];
-    t40 = $[89];
-  }
   let t41;
   if ($[90] !== t28 || $[91] !== t35 || $[92] !== t36) {
-    t41 = <>{t28}{t29}{t30}{t31}{t32}{t33}{t34}{t35}{t36}{t37}{t38}{t39}{t40}</>;
+    t41 = <>{t28}{t29}{t30}{t31}{t32}{t33}{t34}{t35}{t36}</>;
     $[90] = t28;
     $[91] = t35;
     $[92] = t36;

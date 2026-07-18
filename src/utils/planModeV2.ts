@@ -10,21 +10,7 @@ export function getPlanModeV2AgentCount(): number {
     }
   }
 
-  const subscriptionType = null
-  const rateLimitTier = null
-
-  if (
-    subscriptionType === 'max' &&
-    rateLimitTier === 'default_claude_max_20x'
-  ) {
-    return 3
-  }
-
-  if (subscriptionType === 'enterprise' || subscriptionType === 'team') {
-    return 3
-  }
-
-  return 1
+  return 3
 }
 
 export function getPlanModeV2ExploreAgentCount(): number {
@@ -44,12 +30,9 @@ export function getPlanModeV2ExploreAgentCount(): number {
 /**
  * Check if plan mode interview phase is enabled.
  *
- * Config: ant=always_on, external=tengu_plan_mode_interview_phase gate, envVar=true
+ * Controlled by environment override or remote feature configuration.
  */
 export function isPlanModeInterviewPhaseEnabled(): boolean {
-  // Always on for ants
-  if (process.env.USER_TYPE === 'ant') return true
-
   const env = process.env.CLAUDE_CODE_PLAN_MODE_INTERVIEW_PHASE
   if (isEnvTruthy(env)) return true
   if (isEnvDefinedFalsy(env)) return false

@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle';
+import { feature } from 'src/utils/features.js';
 import type { UUID } from 'crypto';
 import figures from 'figures';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -49,7 +49,7 @@ type ResponseValue = 'yes-bypass-permissions' | 'yes-accept-edits' | 'yes-accept
 
 /**
  * Build permission updates for plan approval, including prompt-based rules if provided.
- * Prompt-based rules are only added when classifier permissions are enabled (Ant-only).
+ * Prompt-based rules are added only when classifier permissions are enabled.
  */
 export function buildPermissionUpdates(mode: PermissionMode, allowedPrompts?: AllowedPrompt[]): PermissionUpdate[] {
   const updates: PermissionUpdate[] = [{
@@ -58,7 +58,7 @@ export function buildPermissionUpdates(mode: PermissionMode, allowedPrompts?: Al
     destination: 'session'
   }];
 
-  // Add prompt-based permission rules if provided (Ant-only feature)
+  // Add prompt-based permission rules when provided.
   if (isClassifierPermissionsEnabled() && allowedPrompts && allowedPrompts.length > 0) {
     updates.push({
       type: 'addRules',
@@ -182,7 +182,7 @@ export function ExitPlanModePermissionRequest({
   const inputPlan = isV2 ? undefined : toolUseConfirm.input.plan as string | undefined;
   const planFilePath = isV2 ? getPlanFilePath() : undefined;
 
-  // Extract allowed prompts requested by the plan (Ant-only feature)
+  // Extract allowed prompts requested by the plan.
   const allowedPrompts = toolUseConfirm.input.allowedPrompts as AllowedPrompt[] | undefined;
 
   // Get the raw plan to check if it's empty
@@ -324,11 +324,6 @@ export function ExitPlanModePermissionRequest({
         hasFeedback: !!acceptFeedback
       });
 
-      // Set initial message - REPL will handle context clear and fresh query
-      // Add verification instruction if the feature is enabled
-      // Dead code elimination: CLAUDE_CODE_VERIFY_PLAN='false' in external builds, so === 'true' check allows Bun to eliminate the string
-      const verificationInstruction = undefined === 'true' ? `\n\nIMPORTANT: When you have finished implementing the plan, you MUST call the "VerifyPlanExecution" tool directly (NOT the ${AGENT_TOOL_NAME} tool or an agent) to trigger background verification.` : '';
-
       // Capture the transcript path before context is cleared (session ID will be regenerated)
       const transcriptPath = getTranscriptPath();
       const transcriptHint = `\n\nIf you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: ${transcriptPath}`;
@@ -339,7 +334,7 @@ export function ExitPlanModePermissionRequest({
         initialMessage: {
           message: {
             ...createUserMessage({
-              content: `Implement the following plan:\n\n${currentPlan}${verificationInstruction}${transcriptHint}${teamHint}${feedbackSuffix}`
+              content: `Implement the following plan:\n\n${currentPlan}${transcriptHint}${teamHint}${feedbackSuffix}`
             }),
             planContent: currentPlan
           },

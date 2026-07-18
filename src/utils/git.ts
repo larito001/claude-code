@@ -795,7 +795,7 @@ export async function preserveGitStateForIssue(): Promise<PreservedGitState | nu
     const remoteBaseSha = mergeBase.trim()
 
     // All 5 commands below depend only on remoteBaseSha — run them in parallel.
-    // ~5×90ms serial → ~90ms parallel on Bun native (used by /issue and /share).
+    // ~5×90ms serial → ~90ms parallel on Bun native for patch generation.
     const [
       { stdout: patch },
       untrackedFiles,

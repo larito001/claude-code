@@ -12,7 +12,6 @@ import { getModelStrings } from 'src/utils/model/modelStrings.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import {
   getIsNonInteractiveSession,
-  preferThirdPartyAuthentication,
 } from '../bootstrap/state.js'
 import {
   checkStsCallerIdentity,
@@ -26,12 +25,11 @@ import {
   getGlobalConfig,
   saveGlobalConfig,
 } from './config.js'
-import { logAntError, logForDebugging } from './debug.js'
+import { logDebugError, logForDebugging } from './debug.js'
 import {
   getClaudeConfigHomeDir,
   isBareMode,
   isEnvTruthy,
-  isRunningOnHomespace,
 } from './envUtils.js'
 import { errorMessage } from './errors.js'
 import { execSyncWithDefaults_DEPRECATED } from './execFileNoThrow.js'
@@ -241,7 +239,7 @@ async function _runAndCache(
       _apiKeyHelperCache = { ..._apiKeyHelperCache, timestamp: Date.now() }
       return _apiKeyHelperCache.value
     }
-    // Cold cache or prior error — cache ' ' so callers don't fall back to OAuth
+    // Cold cache or prior error: cache a sentinel to avoid repeated execution.
     _apiKeyHelperCache = { value: ' ', timestamp: Date.now() }
     return ' '
   } finally {
@@ -263,9 +261,9 @@ async function _executeApiKeyHelper(
     const hasTrust = checkHasTrustDialogAccepted()
     if (!hasTrust && !isNonInteractiveSession) {
       const error = new Error(
-        `Security: apiKeyHelper executed before workspace trust is confirmed. If you see this message, post in ${MACRO.FEEDBACK_CHANNEL}.`,
+        'Security: apiKeyHelper was blocked because workspace trust is not confirmed.',
       )
-      logAntError('apiKeyHelper invoked before trust check', error)
+      logDebugError('apiKeyHelper invoked before trust check', error)
       logEvent('tengu_apiKeyHelper_missing_trust11', {})
       return null
     }
@@ -338,9 +336,9 @@ async function runAwsAuthRefresh(): Promise<boolean> {
     const hasTrust = checkHasTrustDialogAccepted()
     if (!hasTrust && !getIsNonInteractiveSession()) {
       const error = new Error(
-        `Security: awsAuthRefresh executed before workspace trust is confirmed. If you see this message, post in ${MACRO.FEEDBACK_CHANNEL}.`,
+        'Security: awsAuthRefresh was blocked because workspace trust is not confirmed.',
       )
-      logAntError('awsAuthRefresh invoked before trust check', error)
+      logDebugError('awsAuthRefresh invoked before trust check', error)
       logEvent('tengu_awsAuthRefresh_missing_trust', {})
       return false
     }
@@ -435,9 +433,9 @@ async function getAwsCredsFromCredentialExport(): Promise<{
     const hasTrust = checkHasTrustDialogAccepted()
     if (!hasTrust && !getIsNonInteractiveSession()) {
       const error = new Error(
-        `Security: awsCredentialExport executed before workspace trust is confirmed. If you see this message, post in ${MACRO.FEEDBACK_CHANNEL}.`,
+        'Security: awsCredentialExport was blocked because workspace trust is not confirmed.',
       )
-      logAntError('awsCredentialExport invoked before trust check', error)
+      logDebugError('awsCredentialExport invoked before trust check', error)
       logEvent('tengu_awsCredentialExport_missing_trust', {})
       return null
     }
@@ -602,9 +600,9 @@ async function runGcpAuthRefresh(): Promise<boolean> {
     const hasTrust = checkHasTrustDialogAccepted()
     if (!hasTrust && !getIsNonInteractiveSession()) {
       const error = new Error(
-        `Security: gcpAuthRefresh executed before workspace trust is confirmed. If you see this message, post in ${MACRO.FEEDBACK_CHANNEL}.`,
+        'Security: gcpAuthRefresh was blocked because workspace trust is not confirmed.',
       )
-      logAntError('gcpAuthRefresh invoked before trust check', error)
+      logDebugError('gcpAuthRefresh invoked before trust check', error)
       logEvent('tengu_gcpAuthRefresh_missing_trust', {})
       return false
     }
@@ -771,9 +769,6 @@ export function is1PApiCustomer(): boolean {
   )
 }
 
-export function getSubscriptionName(): string {
-  return 'Claude API'
-}
 /** Check if using third-party services (Bedrock or Vertex or Foundry) */
 export function isUsing3PServices(): boolean {
   return !!(
@@ -885,15 +880,11 @@ export function getOtelHeadersFromHelper(): Record<string, string> {
   }
 }
 
-export type UserAccountInfo = {
-  subscription?: string
-  tokenSource?: string
+export type ApiCredentialInfo = {
   apiKeySource?: ApiKeySource
-  organization?: string
-  email?: string
 }
 
-export function getAccountInformation(): UserAccountInfo | undefined {
+export function getApiCredentialInformation(): ApiCredentialInfo | undefined {
   if (getAPIProvider() !== 'firstParty') return undefined
   const { key, source } = getAnthropicApiKeyWithSource()
   return key ? { apiKeySource: source } : {}

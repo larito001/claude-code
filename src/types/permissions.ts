@@ -6,7 +6,7 @@
  * 以避免循环依赖。
  */
 
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 
 // ============================================================================

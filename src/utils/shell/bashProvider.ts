@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { access } from 'fs/promises'
 import { tmpdir as osTmpdir } from 'os'
 import { join as nativeJoin } from 'path'
@@ -218,10 +218,7 @@ export async function createBashShellProvider(
       //
       // See tmuxSocket.ts for the full isolation architecture documentation.
       const commandUsesTmux = command.includes('tmux')
-      if (
-        process.env.USER_TYPE === 'ant' &&
-        (hasTmuxToolBeenUsed() || commandUsesTmux)
-      ) {
+      if (hasTmuxToolBeenUsed() || commandUsesTmux) {
         await ensureSocketInitialized()
       }
       const claudeTmuxEnv = getClaudeTmuxEnv()

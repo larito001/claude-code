@@ -12,7 +12,7 @@ import type { BuiltInAgentDefinition } from '../loadAgentsDir.js'
 import { EXPLORE_AGENT } from './exploreAgent.js'
 
 function getPlanV2SystemPrompt(): string {
-  // Ant-native builds alias find/grep to embedded bfs/ugrep and remove the
+  // Embedded-search builds alias find/grep to bundled bfs/ugrep and remove the
   // dedicated Glob/Grep tools, so point at find/grep instead.
   const searchToolsHint = hasEmbeddedSearchTools()
     ? `\`find\`, \`grep\`, and ${FILE_READ_TOOL_NAME}`

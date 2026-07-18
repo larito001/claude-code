@@ -157,7 +157,7 @@ export const getHookEventMetadata = memoize(
           'Input to command is JSON with session end reason.\nExit code 0 - command completes successfully\nOther exit codes - show stderr to user only',
         matcherMetadata: {
           fieldToMatch: 'reason',
-          values: ['clear', 'logout', 'prompt_input_exit', 'other'],
+          values: ['clear', 'resume', 'prompt_input_exit', 'other'],
         },
       },
       PermissionRequest: {
@@ -343,14 +343,14 @@ export function groupHooksByEventAndMatcher(
               pluginName: matcher.pluginId,
             })
           }
-        } else if (process.env.USER_TYPE === 'ant') {
+        } else {
           eventGroup[matcherKey] ??= []
           for (const _hook of matcher.hooks) {
             eventGroup[matcherKey].push({
               event: hookEvent,
               config: {
                 type: 'command',
-                command: '[ANT-ONLY] Built-in Hook',
+                command: '[Built-in Hook]',
               },
               matcher: matcher.matcher,
               source: 'builtinHook',

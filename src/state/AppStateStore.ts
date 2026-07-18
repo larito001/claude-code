@@ -77,12 +77,7 @@ export type SpeculationState =
 
 export const IDLE_SPECULATION_STATE: SpeculationState = { status: 'idle' }
 
-export type FooterItem =
-  | 'tasks'
-  | 'tmux'
-  | 'bagel'
-  | 'teams'
-  | 'companion'
+export type FooterItem = 'tasks' | 'teams'
 
 export type AppState = DeepImmutable<{
   settings: SettingsJson
@@ -91,7 +86,6 @@ export type AppState = DeepImmutable<{
   mainLoopModelForSession: ModelSetting
   statusLineText: string | undefined
   expandedView: 'none' | 'tasks' | 'teammates'
-  isBriefOnly: boolean
   // Optional - only present when ENABLE_AGENT_SWARMS is true (for dead code elimination)
   showTeammateMessagePreview?: boolean
   selectedIPAgentIndex: number
@@ -101,8 +95,7 @@ export type AppState = DeepImmutable<{
   coordinatorTaskIndex: number
   viewSelectionMode: 'none' | 'selecting-agent' | 'viewing-agent'
   // Which footer pill is focused (arrow-key navigation below the prompt).
-  // Lives in AppState so pill components rendered outside PromptInput
-  // (CompanionSprite in REPL.tsx) can read their own focused state.
+  // Lives in AppState so footer pill components share one focused state.
   footerSelection: FooterItem | null
   toolPermissionContext: ToolPermissionContext
   spinnerTip?: string
@@ -118,10 +111,6 @@ export type AppState = DeepImmutable<{
   foregroundedTaskId?: string
   // Task ID of in-process teammate whose transcript is being viewed (undefined = leader's view)
   viewingAgentTaskId?: string
-  // Latest companion reaction from the friend observer (src/buddy/observer.ts)
-  companionReaction?: string
-  // Timestamp of last /buddy pet — CompanionSprite renders hearts while recent
-  companionPetAt?: number
   // TODO (ashwin): see if we can use utility-types DeepReadonly for this
   mcp: {
     clients: MCPServerConnection[]
@@ -181,28 +170,6 @@ export type AppState = DeepImmutable<{
   thinkingEnabled: boolean | undefined
   promptSuggestionEnabled: boolean
   sessionHooks: SessionHooksState
-  tungstenActiveSession?: {
-    sessionName: string
-    socketName: string
-    target: string // The tmux target (e.g., "session:window.pane")
-  }
-  tungstenLastCapturedTime?: number // Timestamp when frame was captured for model
-  tungstenLastCommand?: {
-    command: string // The command string to display (e.g., "Enter", "echo hello")
-    timestamp: number // When the command was sent
-  }
-  // Sticky tmux panel visibility — mirrors globalConfig.tungstenPanelVisible for reactivity.
-  tungstenPanelVisible?: boolean
-  // Transient auto-hide at turn end — separate from tungstenPanelVisible so the
-  // pill stays in the footer (user can reopen) but the panel content doesn't take
-  // screen space when idle. Cleared on next Tmux tool use or user toggle. NOT persisted.
-  tungstenPanelAutoHidden?: boolean
-  // WebBrowser tool (codename bagel): pill visible in footer
-  bagelActive?: boolean
-  // WebBrowser tool: current page URL shown in pill label
-  bagelUrl?: string
-  // WebBrowser tool: sticky panel visibility toggle
-  bagelPanelVisible?: boolean
   // REPL tool VM context - persists across REPL calls for state sharing
   replContext?: {
     vmContext: import('vm').Context
@@ -297,14 +264,6 @@ export type AppState = DeepImmutable<{
   }
   speculation: SpeculationState
   speculationSessionTimeSavedMs: number
-  skillImprovement: {
-    suggestion: {
-      skillName: string
-      updates: { section: string; change: string; reason: string }[]
-    } | null
-  }
-  // Auth version - incremented on login/logout to trigger re-fetching of auth-dependent data
-  authVersion: number
   // Initial message to process (from CLI args or plan mode exit)
   // When set, REPL will process the message and trigger a query
   initialMessage: {
@@ -314,13 +273,6 @@ export type AppState = DeepImmutable<{
     // Session-scoped permission rules from plan mode (e.g., "run tests", "install dependencies")
     allowedPrompts?: AllowedPrompt[]
   } | null
-  // Pending plan verification state (set when exiting plan mode)
-  // Used by VerifyPlanExecution tool to trigger background verification
-  pendingPlanVerification?: {
-    plan: string
-    verificationStarted: boolean
-    verificationCompleted: boolean
-  }
   // Denial tracking for classifier modes (YOLO, headless, etc.) - falls back to prompting when limits exceeded
   denialTracking?: DenialTrackingState
   // Active overlays (Select dialogs, etc.) for Escape key coordination
@@ -360,7 +312,6 @@ export function getDefaultAppState(): AppState {
     mainLoopModelForSession: null,
     statusLineText: undefined,
     expandedView: 'none',
-    isBriefOnly: false,
     showTeammateMessagePreview: false,
     selectedIPAgentIndex: -1,
     coordinatorTaskIndex: -1,
@@ -425,10 +376,6 @@ export function getDefaultAppState(): AppState {
     },
     speculation: IDLE_SPECULATION_STATE,
     speculationSessionTimeSavedMs: 0,
-    skillImprovement: {
-      suggestion: null,
-    },
-    authVersion: 0,
     initialMessage: null,
     effortValue: undefined,
     activeOverlays: new Set<string>(),

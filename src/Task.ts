@@ -7,8 +7,6 @@ export type TaskType =
   | 'local_bash'
   | 'local_agent'
   | 'in_process_teammate'
-  | 'local_workflow'
-  | 'monitor_mcp'
   | 'dream'
 
 export type TaskStatus =
@@ -61,8 +59,6 @@ export type LocalShellSpawnInput = {
   timeout?: number
   toolUseId?: string
   agentId?: AgentId
-  /** UI display variant: description-as-label, dialog title, status bar pill. */
-  kind?: 'bash' | 'monitor'
 }
 
 // What getTaskByType dispatches for: kill. spawn/render were never
@@ -79,8 +75,6 @@ const TASK_ID_PREFIXES: Record<string, string> = {
   local_bash: 'b', // Keep as 'b' for backward compatibility
   local_agent: 'a',
   in_process_teammate: 't',
-  local_workflow: 'w',
-  monitor_mcp: 'm',
   dream: 'd',
 }
 

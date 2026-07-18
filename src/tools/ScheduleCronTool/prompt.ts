@@ -1,9 +1,6 @@
-import { feature } from 'bun:bundle'
-import { getFeatureValue_CACHED_WITH_REFRESH } from '../../services/analytics/growthbook.js'
+import { feature } from 'src/utils/features.js'
 import { DEFAULT_CRON_JITTER_CONFIG } from '../../utils/cronTasks.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
-
-const KAIROS_CRON_REFRESH_MS = 5 * 60 * 1000
 
 export const DEFAULT_MAX_AGE_DAYS =
   DEFAULT_CRON_JITTER_CONFIG.recurringMaxAgeMs / (24 * 60 * 60 * 1000)
@@ -11,7 +8,7 @@ export const DEFAULT_MAX_AGE_DAYS =
 /**
  * Unified gate for the cron scheduling system. Combines the build-time
  * `feature('AGENT_TRIGGERS')` flag (dead code elimination) with the runtime
- * `tengu_kairos_cron` GrowthBook gate on a 5-minute refresh window.
+ * local CLAUDE_CODE_DISABLE_CRON override.
  *
  * Called from Tool.isEnabled() (lazy, post-init) and inside useEffect /
  * imperative setup, never at module scope — so the disk cache has had a
@@ -26,31 +23,25 @@ export const DEFAULT_MAX_AGE_DAYS =
  *
  * `CLAUDE_CODE_DISABLE_CRON` is a local override that wins over GB.
  */
-export function isKairosCronEnabled(): boolean {
-  return feature('AGENT_TRIGGERS')
-    ? !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_CRON) &&
-        getFeatureValue_CACHED_WITH_REFRESH(
-          'tengu_kairos_cron',
-          true,
-          KAIROS_CRON_REFRESH_MS,
-        )
-    : false
+export function isCronSchedulingEnabled(): boolean {
+  return (
+    feature('AGENT_TRIGGERS') &&
+    !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_CRON)
+  )
 }
 
 /**
  * Kill switch for disk-persistent (durable) cron tasks. Narrower than
- * {@link isKairosCronEnabled} — flipping this off forces `durable: false` at
+ * {@link isCronSchedulingEnabled} — disabling this forces `durable: false` at
  * the call() site, leaving session-only cron (in-memory, GA) untouched.
  *
  * Defaults to `true` so Bedrock/Vertex/Foundry and DISABLE_TELEMETRY users get
  * durable cron. Does NOT consult CLAUDE_CODE_DISABLE_CRON (that kills the whole
- * scheduler via isKairosCronEnabled).
+ * scheduler via isCronSchedulingEnabled).
  */
 export function isDurableCronEnabled(): boolean {
-  return getFeatureValue_CACHED_WITH_REFRESH(
-    'tengu_kairos_cron_durable',
-    true,
-    KAIROS_CRON_REFRESH_MS,
+  return !isEnvTruthy(
+    process.env.CLAUDE_CODE_DISABLE_DURABLE_CRON,
   )
 }
 

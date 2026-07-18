@@ -3,7 +3,7 @@
  * Tracks access to session memory and transcript files via Read, Grep, Glob tools.
  * Also tracks memdir file access via Read, Grep, Glob, Edit, and Write tools.
  */
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { registerHookCallbacks } from '../bootstrap/state.js'
 import type { HookInput, HookJSONOutput } from '../entrypoints/agentSdkTypes.js'
 import {
@@ -25,20 +25,12 @@ import {
   detectSessionFileType,
   detectSessionPatternType,
   isAutoMemFile,
-  memoryScopeForPath,
 } from './memoryFileDetection.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
   ? (require('../memdir/teamMemPaths.js') as typeof import('../memdir/teamMemPaths.js'))
   : null
-const teamMemWatcher = feature('TEAMMEM')
-  ? (require('../services/teamMemorySync/watcher.js') as typeof import('../services/teamMemorySync/watcher.js'))
-  : null
-const memoryShapeTelemetry = feature('MEMORY_SHAPE_TELEMETRY')
-  ? (require('../memdir/memoryShapeTelemetry.js') as typeof import('../memdir/memoryShapeTelemetry.js'))
-  : null
-
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { getSubagentLogName } from './agentContext.js'
 
@@ -198,28 +190,10 @@ async function handleSessionFileAccess(
         break
       case FILE_EDIT_TOOL_NAME:
         logEvent('tengu_team_mem_file_edit', { ...subagentProps })
-        teamMemWatcher?.notifyTeamMemoryWrite()
         break
       case FILE_WRITE_TOOL_NAME:
         logEvent('tengu_team_mem_file_write', { ...subagentProps })
-        teamMemWatcher?.notifyTeamMemoryWrite()
         break
-    }
-  }
-
-  if (feature('MEMORY_SHAPE_TELEMETRY') && filePath) {
-    const scope = memoryScopeForPath(filePath)
-    if (
-      scope !== null &&
-      (input.tool_name === FILE_EDIT_TOOL_NAME ||
-        input.tool_name === FILE_WRITE_TOOL_NAME)
-    ) {
-      memoryShapeTelemetry!.logMemoryWriteShape(
-        input.tool_name,
-        input.tool_input,
-        filePath,
-        scope,
-      )
     }
   }
 

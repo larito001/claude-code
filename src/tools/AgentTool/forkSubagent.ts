@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { BetaToolUseBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { randomUUID } from 'crypto'
 import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
@@ -24,7 +24,7 @@ import type { BuiltInAgentDefinition } from './loadAgentsDir.js'
  *   the parent's full conversation context and system prompt
  * - All agent spawns run in the background (async) for a unified
  *   `<task-notification>` interaction model
- * - `/fork <directive>` slash command is available
+ * - Agent calls may omit `subagent_type` to fork the current context
  *
  * Mutually exclusive with coordinator mode — coordinator already owns the
  * orchestration role and has its own delegation model.

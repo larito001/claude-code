@@ -1,10 +1,3 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
-/**
- * 确保此处介绍的任何模型代号也添加到
- * script/excluded-strings.txt 以避免泄漏它们。包装任何代号字符串
- * 带有 process.env.USER_TYPE === 'ant' 的文字，用于 Bun 删除代号
- * 在消除死代码期间
- */
 import { getMainLoopModelOverride } from '../../bootstrap/state.js'
 import {
   has1mContext,
@@ -159,36 +152,9 @@ export function getRuntimeMainLoopModel(params: {
   return mainLoopModel
 }
 
-/**
- * 获取默认主循环模型设置。
- *
- * 这处理内置默认值：
- * - 适用于 Max 和 Team Premium 用户的 Opus
- * - 适用于所有其他用户的 Sonnet 4.6（包括 Team Standard、Pro、Enterprise）
- *
- * @returns 使用的默认模型设置
- */
+/** Return the default main-loop model for the active API provider. */
 export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
-  // Ants 默认为标志配置中的 defaultModel，如果未配置则为 Opus 1M
-  if (process.env.USER_TYPE === 'ant') {
-    return (
-      getAntModelOverrideConfig()?.defaultModel ??
-      getDefaultOpusModel() + '[1m]'
-    )
-  }
-
-  // Max 用户默认获得 Opus
-  if (false) {
-    return getDefaultOpusModel() + (isOpus1mMergeEnabled() ? '[1m]' : '')
-  }
-
-  // Team Premium 获得 Opus（与 Max 相同）
-  if (false) {
-    return getDefaultOpusModel() + (isOpus1mMergeEnabled() ? '[1m]' : '')
-  }
-
-  // PAYG（1P 和 3P）、Enterprise、Team Standard 和 Pro 默认使用 Sonnet
-  // 请注意，PAYG (3P) 可能默认为较旧的 Sonnet 模型
+  // API-key and cloud providers use their configured Sonnet model by default.
   return getDefaultSonnetModel()
 }
 
@@ -275,19 +241,6 @@ export function getCanonicalName(fullModelName: ModelName): ModelShortName {
   return firstPartyNameToCanonical(resolveOverriddenModel(fullModelName))
 }
 
-// @[MODEL LAUNCH]：更新向用户显示的默认模型描述字符串。
-export function getClaudeAiUserDefaultModelDescription(
-  fastMode = false,
-): string {
-  if (false || false) {
-    if (isOpus1mMergeEnabled()) {
-      return `Opus 4.6 with 1M context · Most capable for complex work${fastMode ? getOpus46PricingSuffix(true) : ''}`
-    }
-    return `Opus 4.6 · Most capable for complex work${fastMode ? getOpus46PricingSuffix(true) : ''}`
-  }
-  return 'Sonnet 4.6 · Best for everyday tasks'
-}
-
 export function renderDefaultModelSetting(
   setting: ModelName | ModelAlias,
 ): string {
@@ -305,20 +258,7 @@ export function getOpus46PricingSuffix(fastMode: boolean): string {
 }
 
 export function isOpus1mMergeEnabled(): boolean {
-  if (
-    is1mContextDisabled() ||
-    false ||
-    getAPIProvider() !== 'firstParty'
-  ) {
-    return false
-  }
-  // Fail closed when a subscriber's subscription type is unknown. The VS Code
-  // config-loading subprocess can have OAuth tokens with valid scopes but no
-  // subscriptionType field (stale or partial refresh). Without this guard,
-  // isProSubscriber() returns false for such users and the merge leaks
-  // opus[1m] into the model dropdown — the API then rejects it with a
-  // misleading "rate limit reached" error.
-  if (false && null === null) {
+  if (is1mContextDisabled() || getAPIProvider() !== 'firstParty') {
     return false
   }
   return true
@@ -376,33 +316,10 @@ export function getPublicModelDisplayName(model: ModelName): string | null {
   }
 }
 
-function maskModelCodename(baseName: string): string {
-  // Mask only the first dash-separated segment (the codename), preserve the rest
-  // e.g. capybara-v2-fast → cap*****-v2-fast
-  const [codename = '', ...rest] = baseName.split('-')
-  const masked =
-    codename.slice(0, 3) + '*'.repeat(Math.max(0, codename.length - 3))
-  return [masked, ...rest].join('-')
-}
-
 export function renderModelName(model: ModelName): string {
   const publicName = getPublicModelDisplayName(model)
   if (publicName) {
     return publicName
-  }
-  if (process.env.USER_TYPE === 'ant') {
-    const resolved = parseUserSpecifiedModel(model)
-    const antModel = resolveAntModel(model)
-    if (antModel) {
-      const baseName = antModel.model.replace(/\[1m\]$/i, '')
-      const masked = maskModelCodename(baseName)
-      const suffix = has1mContext(resolved) ? '[1m]' : ''
-      return masked + suffix
-    }
-    if (resolved !== model) {
-      return `${model} (${resolved})`
-    }
-    return resolved
   }
   return model
 }
@@ -463,7 +380,7 @@ export function parseUserSpecifiedModel(
   }
 
   // Opus 4/4.1 are no longer available on the first-party API (same as
-  // Claude.ai) — silently remap to the current Opus default. The 'opus'
+  // legacy aliases) — silently remap to the current Opus default. The 'opus'
   // alias already resolves to 4.6, so the only users on these explicit
   // strings pinned them in settings/env/--model/SDK before 4.5 launched.
   // 3P providers may not yet have 4.6 capacity, so pass through unchanged.
@@ -473,21 +390,6 @@ export function parseUserSpecifiedModel(
     isLegacyModelRemapEnabled()
   ) {
     return getDefaultOpusModel() + (has1mTag ? '[1m]' : '')
-  }
-
-  if (process.env.USER_TYPE === 'ant') {
-    const has1mAntTag = has1mContext(normalizedModel)
-    const baseAntModel = normalizedModel.replace(/\[1m]$/i, '').trim()
-
-    const antModel = resolveAntModel(baseAntModel)
-    if (antModel) {
-      const suffix = has1mAntTag ? '[1m]' : ''
-      return antModel.model + suffix
-    }
-
-    // Fall through to the alias string if we cannot load the config. The API calls
-    // will fail with this string, but we should hear about it through feedback and
-    // can tell the user to restart/wait for flag cache refresh to get the latest values.
   }
 
   // Preserve original case for custom model names (e.g., Azure Foundry deployment IDs)
@@ -548,11 +450,6 @@ export function isLegacyModelRemapEnabled(): boolean {
 
 export function modelDisplayString(model: ModelSetting): string {
   if (model === null) {
-    if (process.env.USER_TYPE === 'ant') {
-      return `Default for Ants (${renderDefaultModelSetting(getDefaultMainLoopModelSetting())})`
-    } else if (false) {
-      return `Default (${getClaudeAiUserDefaultModelDescription()})`
-    }
     return `Default (${getDefaultMainLoopModel()})`
   }
   const resolvedModel = parseUserSpecifiedModel(model)

@@ -1,4 +1,4 @@
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import { feature } from './features.js'
 import { logEvent } from '../services/analytics/index.js'
 import type {
   ConnectedMCPServer,
@@ -32,15 +32,12 @@ export type ClientSideInstruction = {
  * (rebuilt every turn; cache-busts on late connect).
  *
  * Env override for local testing: CLAUDE_CODE_MCP_INSTR_DELTA=true/false
- * wins over both ant bypass and the GrowthBook gate.
+ * overrides the normal feature setting.
  */
 export function isMcpInstructionsDeltaEnabled(): boolean {
   if (isEnvTruthy(process.env.CLAUDE_CODE_MCP_INSTR_DELTA)) return true
   if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_MCP_INSTR_DELTA)) return false
-  return (
-    process.env.USER_TYPE === 'ant' ||
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_basalt_3kr', false)
-  )
+  return feature('MCP_INSTRUCTIONS_DELTA')
 }
 
 /**

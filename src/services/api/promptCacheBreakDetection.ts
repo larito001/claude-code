@@ -47,23 +47,15 @@ type PreviousState = {
   /** AFK_MODE_BETA_HEADER presence — should NOT break cache anymore
    *  (sticky-on latched in claude.ts). Tracked to verify the fix. */
   autoModeActive: boolean
-  /** Overage state flip — should NOT break cache anymore (eligibility is
-   *  latched session-stable in should1hCacheTTL). Tracked to verify the fix. */
-  isUsingOverage: boolean
-  /** Cache-editing beta header presence — should NOT break cache anymore
-   *  (sticky-on latched in claude.ts). Tracked to verify the fix. */
-  cachedMCEnabled: boolean
-  /** Resolved effort (env → options → model default). Goes into output_config
-   *  or anthropic_internal.effort_override. */
+  /** Resolved effort (environment, options, or model default). */
   effortValue: string
-  /** Hash of getExtraBodyParams() — catches CLAUDE_CODE_EXTRA_BODY and
-   *  anthropic_internal changes. */
+  /** Hash of getExtraBodyParams(); catches CLAUDE_CODE_EXTRA_BODY changes. */
   extraBodyHash: number
   callCount: number
   pendingChanges: PendingChanges | null
   prevCacheReadTokens: number | null
-  /** Set when cached microcompact sends cache_edits deletions. Cache reads
-   *  will legitimately drop — this is expected, not a break. */
+  /** Set when local compaction removes cached content. Cache reads will
+   *  legitimately drop — this is expected, not a break. */
   cacheDeletionsPending: boolean
   buildDiffableContent: () => string
 }
@@ -77,8 +69,6 @@ type PendingChanges = {
   globalCacheStrategyChanged: boolean
   betasChanged: boolean
   autoModeChanged: boolean
-  overageChanged: boolean
-  cachedMCChanged: boolean
   effortChanged: boolean
   extraBodyChanged: boolean
   addedToolCount: number
@@ -234,8 +224,6 @@ export type PromptStateSnapshot = {
   globalCacheStrategy?: string
   betas?: readonly string[]
   autoModeActive?: boolean
-  isUsingOverage?: boolean
-  cachedMCEnabled?: boolean
   effortValue?: string | number
   extraBodyParams?: unknown
 }
@@ -256,8 +244,6 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
       globalCacheStrategy = '',
       betas = [],
       autoModeActive = false,
-      isUsingOverage = false,
-      cachedMCEnabled = false,
       effortValue,
       extraBodyParams,
     } = snapshot
@@ -313,8 +299,6 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
         globalCacheStrategy,
         betas: sortedBetas,
         autoModeActive,
-        isUsingOverage,
-        cachedMCEnabled,
         effortValue: effortStr,
         extraBodyHash,
         callCount: 1,
@@ -340,8 +324,6 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
       sortedBetas.length !== prev.betas.length ||
       sortedBetas.some((b, i) => b !== prev.betas[i])
     const autoModeChanged = autoModeActive !== prev.autoModeActive
-    const overageChanged = isUsingOverage !== prev.isUsingOverage
-    const cachedMCChanged = cachedMCEnabled !== prev.cachedMCEnabled
     const effortChanged = effortStr !== prev.effortValue
     const extraBodyChanged = extraBodyHash !== prev.extraBodyHash
 
@@ -354,8 +336,6 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
       globalCacheStrategyChanged ||
       betasChanged ||
       autoModeChanged ||
-      overageChanged ||
-      cachedMCChanged ||
       effortChanged ||
       extraBodyChanged
     ) {
@@ -385,8 +365,6 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
         globalCacheStrategyChanged,
         betasChanged,
         autoModeChanged,
-        overageChanged,
-        cachedMCChanged,
         effortChanged,
         extraBodyChanged,
         addedToolCount: addedTools.length,
@@ -419,8 +397,6 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
     prev.globalCacheStrategy = globalCacheStrategy
     prev.betas = sortedBetas
     prev.autoModeActive = autoModeActive
-    prev.isUsingOverage = isUsingOverage
-    prev.cachedMCEnabled = cachedMCEnabled
     prev.effortValue = effortStr
     prev.extraBodyHash = extraBodyHash
     prev.buildDiffableContent = lazyDiffableContent
@@ -546,12 +522,6 @@ export async function checkResponseForCacheBreak(
       if (changes.autoModeChanged) {
         parts.push('auto mode toggled')
       }
-      if (changes.overageChanged) {
-        parts.push('overage state changed (TTL latched, no flip)')
-      }
-      if (changes.cachedMCChanged) {
-        parts.push('cached microcompact toggled')
-      }
       if (changes.effortChanged) {
         parts.push(
           `effort changed (${changes.prevEffortValue || 'default'} → ${changes.newEffortValue || 'default'})`,
@@ -596,8 +566,6 @@ export async function checkResponseForCacheBreak(
       globalCacheStrategyChanged: changes?.globalCacheStrategyChanged ?? false,
       betasChanged: changes?.betasChanged ?? false,
       autoModeChanged: changes?.autoModeChanged ?? false,
-      overageChanged: changes?.overageChanged ?? false,
-      cachedMCChanged: changes?.cachedMCChanged ?? false,
       effortChanged: changes?.effortChanged ?? false,
       extraBodyChanged: changes?.extraBodyChanged ?? false,
       addedToolCount: changes?.addedToolCount ?? 0,
@@ -643,9 +611,8 @@ export async function checkResponseForCacheBreak(
         '') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })
 
-    // Write diff file for ant debugging via --debug. The path is included in
-    // the summary log so ants can find it (DevBar UI removed — event data
-    // flows reliably to BQ for analytics).
+    // Write a diff file when --debug is enabled. The path is included in the
+    // summary log for local diagnostics.
     let diffPath: string | undefined
     if (changes?.buildPrevDiffableContent) {
       diffPath = await writeCacheBreakDiff(
@@ -666,7 +633,7 @@ export async function checkResponseForCacheBreak(
 }
 
 /**
- * Call when cached microcompact sends cache_edits deletions.
+ * Call when local compaction removes content from the cached prefix.
  * The next API response will have lower cache read tokens — that's
  * expected, not a cache break.
  */

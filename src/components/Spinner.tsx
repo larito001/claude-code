@@ -1,14 +1,8 @@
 import { c as _c } from "react/compiler-runtime";
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { Box, Text } from '../ink.js';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { computeGlimmerIndex, computeShimmerSegments, SHIMMER_INTERVAL_MS } from './Spinner/utils.js';
-import { feature } from 'bun:bundle';
-import { getKairosActive, getUserMsgOptIn } from '../bootstrap/state.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js';
-import { isEnvTruthy } from '../utils/envUtils.js';
-import { count } from '../utils/array.js';
+import { feature } from 'src/utils/features.js';
 import sample from 'lodash-es/sample.js';
 import { formatDuration, formatNumber, formatSecondsShort } from '../utils/format.js';
 import type { Theme } from 'src/utils/theme.js';
@@ -20,12 +14,10 @@ import { useTasksV2 } from '../hooks/useTasksV2.js';
 import type { Task } from '../utils/tasks.js';
 import { useAppState } from '../state/AppState.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
-import { stringWidth } from '../ink/stringWidth.js';
 import { getDefaultCharacters, type SpinnerMode } from './Spinner/index.js';
 import { SpinnerAnimationRow } from './Spinner/SpinnerAnimationRow.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { isInProcessTeammateTask } from '../tasks/InProcessTeammateTask/types.js';
-import { isBackgroundTask } from '../tasks/types.js';
 import { getAllInProcessTeammateTasks } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js';
 import { getEffortSuffix } from '../utils/effort.js';
 import { getMainLoopModel } from '../utils/model/model.js';
@@ -56,30 +48,7 @@ type Props = {
   leaderIsIdle?: boolean;
 };
 
-// Thin wrapper: branches on isBriefOnly so the two variants have independent
-// hook call chains. Without this split, toggling /brief mid-render would
-// violate Rules of Hooks (the inner variant calls ~10 more hooks).
-export function SpinnerWithVerb(props: Props): React.ReactNode {
-  const isBriefOnly = useAppState(s => s.isBriefOnly);
-  // REPL overrides isBriefOnly→false when viewing a teammate transcript
-  // (see isBriefOnly={viewedTeammateTask ? false : isBriefOnly}). That
-  // prop isn't threaded here, so replicate the gate from the store —
-  // teammate view needs the real spinner (which shows teammate status).
-  const viewingAgentTaskId = useAppState(s_0 => s_0.viewingAgentTaskId);
-  // Hoisted to mount-time — this component re-renders at animation framerate.
-  const briefEnvEnabled = feature('KAIROS') || feature('KAIROS_BRIEF') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_BRIEF), []) : false;
-
-  // Runtime gate mirrors isBriefEnabled() but inlined — importing from
-  // BriefTool.ts would leak tool-name strings into external builds. Single
-  // spinner instance → hooks stay unconditional (two subs, negligible).
-  if ((feature('KAIROS') || feature('KAIROS_BRIEF')) && (getKairosActive() || getUserMsgOptIn() && (briefEnvEnabled || getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false))) && isBriefOnly && !viewingAgentTaskId) {
-    return <BriefSpinner mode={props.mode} overrideMessage={props.overrideMessage} />;
-  }
-  return <SpinnerWithVerbInner {...props} />;
-}
-function SpinnerWithVerbInner({
+export function SpinnerWithVerb({
   mode,
   loadingStartTimeRef,
   totalPausedMsRef,
@@ -213,16 +182,6 @@ function SpinnerWithVerbInner({
   const messageColor = overrideColor ?? defaultColor;
   const shimmerColor = overrideShimmerColor ?? defaultShimmerColor;
 
-  // Compute TTFT string here (off the 50ms animation clock) and pass to
-  // SpinnerAnimationRow so it folds into the `(thought for Ns · ...)` status
-  // line instead of taking a separate row. apiMetricsRef is a ref so this
-  // doesn't trigger re-renders; we pick up updates on the parent's ~25x/turn
-  // re-render cadence, same as the old ApiMetricsLine did.
-  let ttftText: string | null = null;
-  if ("external" === 'ant' && apiMetricsRef?.current && apiMetricsRef.current.length > 0) {
-    ttftText = computeTtftText(apiMetricsRef.current);
-  }
-
   // When leader is idle but teammates are running (and we're viewing the leader),
   // show a static dim idle display instead of the animated spinner — otherwise
   // useStalledAnimation detects no new tokens after 3s and turns the spinner red.
@@ -258,7 +217,7 @@ function SpinnerWithVerbInner({
   const showBtwTip = tipsEnabled && elapsedSnapshot > 30_000 && !getGlobalConfig().btwUseCount;
   const effectiveTip = contextTipsActive ? undefined : showClearTip && !nextTask ? 'Use /clear to start fresh when switching topics and free up context' : showBtwTip && !nextTask ? "Use /btw to ask a quick side question without interrupting Claude's current work" : spinnerTip;
 
-  // Budget text (ant-only) — shown above the tip line
+  // Optional token-budget text shown above the tip line.
   let budgetText: string | null = null;
   if (feature('TOKEN_BUDGET')) {
     const budget = getCurrentTurnTokenBudget();
@@ -298,82 +257,6 @@ function SpinnerWithVerbInner({
             </MessageResponse>}
         </Box> : null}
     </Box>;
-}
-
-// Brief/assistant mode spinner: single status line. PromptInput drops its
-// own marginTop when isBriefOnly is active, so this component owns the
-// 2-row footprint between messages and input. Footprint is [blank, content]
-// — one blank row above (breathing room under the messages list), spinner
-// flush against the input bar. PromptInput's absolute-positioned
-// Notifications overlay compensates with marginTop=-2 in brief mode
-// (PromptInput.tsx:~2928) so it floats into the blank row above the
-// spinner, not over the spinner content. Paired with BriefIdleStatus which
-// keeps the same footprint when idle.
-type BriefSpinnerProps = {
-  mode: SpinnerMode;
-  overrideMessage?: string | null;
-};
-function BriefSpinner({ mode, overrideMessage }: BriefSpinnerProps) {
-  const settings = useSettings()
-  const reducedMotion = settings.prefersReducedMotion ?? false
-  const [randomVerb] = useState(() => sample(getSpinnerVerbs()) ?? 'Working')
-  const verb = overrideMessage ?? randomVerb
-  const [, time] = useAnimationFrame(reducedMotion ? null : 120)
-  const runningCount = useAppState(state =>
-    count(Object.values(state.tasks), isBackgroundTask),
-  )
-  const { columns } = useTerminalSize()
-
-  useEffect(() => {
-    const operationId = 'spinner-' + mode
-    activityManager.startCLIActivity(operationId)
-    return () => activityManager.endCLIActivity(operationId)
-  }, [mode])
-
-  const dotFrame = Math.floor(time / 300) % 3
-  const dots = reducedMotion ? '…  ' : '.'.repeat(dotFrame + 1).padEnd(3)
-  const verbWidth = stringWidth(verb)
-  const glimmerIndex = reducedMotion
-    ? -100
-    : computeGlimmerIndex(Math.floor(time / SHIMMER_INTERVAL_MS), verbWidth)
-  const { before, shimmer, after } = computeShimmerSegments(verb, glimmerIndex)
-  const rightText = runningCount > 0 ? `${runningCount} in background` : ''
-  const pad = Math.max(
-    1,
-    columns - 2 - verbWidth - 3 - stringWidth(rightText),
-  )
-
-  return (
-    <Box flexDirection="row" width="100%" marginTop={1} paddingLeft={2}>
-      {before ? <Text dimColor>{before}</Text> : null}
-      {shimmer ? <Text>{shimmer}</Text> : null}
-      {after ? <Text dimColor>{after}</Text> : null}
-      <Text dimColor>{dots}</Text>
-      {rightText ? (
-        <>
-          <Text>{' '.repeat(pad)}</Text>
-          <Text color="subtle">{rightText}</Text>
-        </>
-      ) : null}
-    </Box>
-  )
-}
-
-export function BriefIdleStatus() {
-  const runningCount = useAppState(state =>
-    count(Object.values(state.tasks), isBackgroundTask),
-  )
-  const { columns } = useTerminalSize()
-  if (runningCount === 0) return <Box height={2} />
-
-  const rightText = `${runningCount} in background`
-  const pad = Math.max(1, columns - 2 - stringWidth(rightText))
-  return (
-    <Box marginTop={1} paddingLeft={2}>
-      <Text>{' '.repeat(pad)}</Text>
-      <Text color="subtle">{rightText}</Text>
-    </Box>
-  )
 }
 
 export function Spinner() {

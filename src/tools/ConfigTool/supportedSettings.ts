@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import {
   EDITOR_MODES,
   NOTIFICATION_CHANNELS,
@@ -130,16 +130,12 @@ export const SUPPORTED_SETTINGS: Record<string, SettingConfig> = {
       'How to spawn teammates: "tmux" for traditional tmux, "in-process" for same process, "auto" to choose automatically',
     options: TEAMMATE_MODES,
   },
-  ...(process.env.USER_TYPE === 'ant'
-    ? {
-        classifierPermissionsEnabled: {
-          source: 'settings' as const,
-          type: 'boolean' as const,
-          description:
-            'Enable AI-based classification for Bash(prompt:...) permission rules',
-        },
-      }
-    : {}),
+  classifierPermissionsEnabled: {
+    source: 'settings',
+    type: 'boolean',
+    description:
+      'Enable AI-based classification for Bash(prompt:...) permission rules',
+  },
 }
 
 export function isSupported(key: string): boolean {

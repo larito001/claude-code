@@ -6,8 +6,6 @@ import { logError } from './log.js'
 
 export type Platform = 'macos' | 'windows' | 'wsl' | 'linux' | 'unknown'
 
-export const SUPPORTED_PLATFORMS: Platform[] = ['macos', 'wsl']
-
 export const getPlatform = memoize((): Platform => {
   try {
     if (process.platform === 'darwin') {

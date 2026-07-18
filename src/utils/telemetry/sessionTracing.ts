@@ -6,16 +6,14 @@
  * interaction span, which contains operation spans (LLM requests, tool calls, etc.).
  *
  * Requirements:
- * - Enhanced telemetry is enabled via feature('ENHANCED_TELEMETRY_BETA')
+ * - Enhanced telemetry is explicitly enabled through an environment variable.
  * - Configure OTEL_TRACES_EXPORTER (console, otlp, etc.)
  */
 
-import { feature } from 'bun:bundle'
 import { context as otelContext, type Span, trace } from '@opentelemetry/api'
 import { AsyncLocalStorage } from 'async_hooks'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import type { AssistantMessage, UserMessage } from '../../types/message.js'
-import { isEnvDefinedFalsy, isEnvTruthy } from '../envUtils.js'
+import { isEnvTruthy } from '../envUtils.js'
 import { getTelemetryAttributes } from '../telemetryAttributes.js'
 import {
   addBetaInteractionAttributes,
@@ -121,25 +119,13 @@ function ensureCleanupInterval(): void {
 
 /**
  * Check if enhanced telemetry is enabled.
- * Priority: env var override > ant build > GrowthBook gate
+ * This is disabled by default because traces can include detailed runtime data.
  */
 export function isEnhancedTelemetryEnabled(): boolean {
-  if (feature('ENHANCED_TELEMETRY_BETA')) {
-    const env =
-      process.env.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA ??
-      process.env.ENABLE_ENHANCED_TELEMETRY_BETA
-    if (isEnvTruthy(env)) {
-      return true
-    }
-    if (isEnvDefinedFalsy(env)) {
-      return false
-    }
-    return (
-      process.env.USER_TYPE === 'ant' ||
-      getFeatureValue_CACHED_MAY_BE_STALE('enhanced_telemetry_beta', false)
-    )
-  }
-  return false
+  const env =
+    process.env.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA ??
+    process.env.ENABLE_ENHANCED_TELEMETRY_BETA
+  return isEnvTruthy(env)
 }
 
 /**
@@ -364,8 +350,6 @@ export function endLLMRequestSpan(
     modelResponse?: string
     /** Text output from the model (non-thinking content) */
     modelOutput?: string
-    /** Thinking/reasoning output from the model */
-    thinkingOutput?: string
     /** Whether the output included tool calls (look at tool spans for details) */
     hasToolCall?: boolean
     /** Time to first token in milliseconds */
@@ -451,7 +435,7 @@ export function endLLMRequestSpan(
     if (metadata.ttftMs !== undefined)
       endAttributes['ttft_ms'] = metadata.ttftMs
 
-    // Add experimental response attributes (model_output, thinking_output)
+    // Add explicitly enabled detailed response attributes.
     addBetaLLMResponseAttributes(endAttributes, metadata)
   }
 

@@ -21,7 +21,6 @@ export type QueryConfig = {
     // once per query() call stays within the existing contract.
     streamingToolExecution: boolean
     emitToolUseSummaries: boolean
-    isAnt: boolean
     fastModeEnabled: boolean
   }
 }
@@ -36,7 +35,6 @@ export function buildQueryConfig(): QueryConfig {
       emitToolUseSummaries: isEnvTruthy(
         process.env.CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES,
       ),
-      isAnt: process.env.USER_TYPE === 'ant',
       // Inlined from fastMode.ts to avoid pulling its heavy module graph
       // (axios, settings, auth, model, oauth, config) into test shards that
       // didn't previously load it — changes init order and breaks unrelated tests.

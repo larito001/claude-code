@@ -2473,44 +2473,32 @@ export async function refreshMarketplace(
         const sshUrl = `git@github.com:${source.repo}.git`
         const httpsUrl = `https://github.com/${source.repo}.git`
 
-        if (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)) {
-          // CCR: always HTTPS (no SSH keys available)
+        const sshConfigured = await isGitHubSshLikelyConfigured()
+        const primaryUrl = sshConfigured ? sshUrl : httpsUrl
+        const fallbackUrl = sshConfigured ? httpsUrl : sshUrl
+
+        try {
           await cacheMarketplaceFromGit(
-            httpsUrl,
+            primaryUrl,
             installLocation,
             source.ref,
             source.sparsePaths,
             onProgress,
             options,
           )
-        } else {
-          const sshConfigured = await isGitHubSshLikelyConfigured()
-          const primaryUrl = sshConfigured ? sshUrl : httpsUrl
-          const fallbackUrl = sshConfigured ? httpsUrl : sshUrl
-
-          try {
-            await cacheMarketplaceFromGit(
-              primaryUrl,
-              installLocation,
-              source.ref,
-              source.sparsePaths,
-              onProgress,
-              options,
-            )
-          } catch {
-            logForDebugging(
-              `Marketplace refresh failed with ${sshConfigured ? 'SSH' : 'HTTPS'} for ${source.repo}, falling back to ${sshConfigured ? 'HTTPS' : 'SSH'}`,
-              { level: 'info' },
-            )
-            await cacheMarketplaceFromGit(
-              fallbackUrl,
-              installLocation,
-              source.ref,
-              source.sparsePaths,
-              onProgress,
-              options,
-            )
-          }
+        } catch {
+          logForDebugging(
+            `Marketplace refresh failed with ${sshConfigured ? 'SSH' : 'HTTPS'} for ${source.repo}, falling back to ${sshConfigured ? 'HTTPS' : 'SSH'}`,
+            { level: 'info' },
+          )
+          await cacheMarketplaceFromGit(
+            fallbackUrl,
+            installLocation,
+            source.ref,
+            source.sparsePaths,
+            onProgress,
+            options,
+          )
         }
       } else {
         // Explicit git URL: use as-is (no fallback available)

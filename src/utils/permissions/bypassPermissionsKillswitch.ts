@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { useEffect, useRef } from 'react'
 import {
   type AppState,
@@ -7,7 +7,6 @@ import {
   useSetAppState,
 } from 'src/state/AppState.js'
 import type { ToolPermissionContext } from 'src/Tool.js'
-import { getIsRemoteMode } from '../../bootstrap/state.js'
 import {
   createDisabledBypassPermissionsContext,
   shouldDisableBypassPermissions,
@@ -20,8 +19,7 @@ export async function checkAndDisableBypassPermissionsIfNeeded(
   toolPermissionContext: ToolPermissionContext,
   setAppState: (f: (prev: AppState) => AppState) => void,
 ): Promise<void> {
-  // Check if bypassPermissions should be disabled based on Statsig gate
-  // Do this only once, before the first query, to ensure we have the latest gate value
+  // Check once before the first query using local feature configuration.
   if (bypassPermissionsCheckRan) {
     return
   }
@@ -48,7 +46,7 @@ export async function checkAndDisableBypassPermissionsIfNeeded(
 
 /**
  * Reset the run-once flag for checkAndDisableBypassPermissionsIfNeeded.
- * Call this after /login so the gate check re-runs with the new org.
+ * Call this after feature configuration changes.
  */
 export function resetBypassPermissionsCheck(): void {
   bypassPermissionsCheckRan = false
@@ -60,7 +58,6 @@ export function useKickOffCheckAndDisableBypassPermissionsIfNeeded(): void {
 
   // Run once, when the component mounts
   useEffect(() => {
-    if (getIsRemoteMode()) return
     void checkAndDisableBypassPermissionsIfNeeded(
       toolPermissionContext,
       setAppState,
@@ -88,7 +85,7 @@ export async function checkAndDisableAutoModeIfNeeded(
     )
     setAppState(prev => {
       // Apply the transform to CURRENT context, not the stale snapshot we
-      // passed to verifyAutoModeGateAccess. The async GrowthBook await inside
+      // passed to verifyAutoModeGateAccess. The async gate check inside
       // can be outrun by a mid-turn shift-tab; spreading a stale context here
       // would revert the user's mode change.
       const nextCtx = updateContext(prev.toolPermissionContext)
@@ -118,7 +115,7 @@ export async function checkAndDisableAutoModeIfNeeded(
 
 /**
  * Reset the run-once flag for checkAndDisableAutoModeIfNeeded.
- * Call this after /login so the gate check re-runs with the new org.
+ * Call this after feature configuration changes.
  */
 export function resetAutoModeGateCheck(): void {
   autoModeCheckRan = false
@@ -139,7 +136,6 @@ export function useKickOffCheckAndDisableAutoModeIfNeeded(): void {
   // breaker. The print.ts headless paths are covered by the sync
   // isAutoModeGateEnabled() check.
   useEffect(() => {
-    if (getIsRemoteMode()) return
     if (isFirstRunRef.current) {
       isFirstRunRef.current = false
     } else {

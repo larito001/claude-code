@@ -10,7 +10,6 @@
  */
 
 import { basename, join } from 'path'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { logForDebugging } from '../debug.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from '../envUtils.js'
 import { isENOENT, toError } from '../errors.js'
@@ -27,10 +26,10 @@ import {
  * Check if PID-based version locking is enabled.
  * When disabled, falls back to mtime-based locking (30-day timeout).
  *
- * Controlled by GrowthBook gate with local override:
+ * Controlled by a local override:
  * - Set ENABLE_PID_BASED_VERSION_LOCKING=true to force-enable
  * - Set ENABLE_PID_BASED_VERSION_LOCKING=false to force-disable
- * - If unset, GrowthBook gate (tengu_pid_based_version_locking) controls rollout
+ * - If unset, PID-based locking is enabled
  */
 export function isPidBasedLockingEnabled(): boolean {
   const envVar = process.env.ENABLE_PID_BASED_VERSION_LOCKING
@@ -41,11 +40,7 @@ export function isPidBasedLockingEnabled(): boolean {
   if (isEnvDefinedFalsy(envVar)) {
     return false
   }
-  // GrowthBook controls gradual rollout (returns false for external users)
-  return getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_pid_based_version_locking',
-    false,
-  )
+  return true
 }
 
 /**

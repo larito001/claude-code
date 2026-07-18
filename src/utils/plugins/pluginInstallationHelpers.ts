@@ -10,7 +10,6 @@ import { rename, rm } from 'fs/promises'
 import { dirname, join, resolve, sep } from 'path'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
   logEvent,
 } from '../../services/analytics/index.js'
 import { getCwd } from '../cwd.js'
@@ -554,16 +553,7 @@ export async function installPluginFromMarketplace({
       }
     }
 
-    // _PROTO_* routes to PII-tagged plugin_name/marketplace_name BQ columns.
-    // plugin_id kept in additional_metadata (redacted to 'third-party' for
-    // non-official) because dbt external_claude_code_plugin_installs.sql
-    // extracts $.plugin_id for official-marketplace install tracking. Other
-    // plugin lifecycle events drop the blob key — no downstream consumers.
     logEvent('tengu_plugin_installed', {
-      _PROTO_plugin_name:
-        entry.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      _PROTO_marketplace_name:
-        marketplaceName as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
       plugin_id: (isOfficialMarketplaceName(marketplaceName)
         ? pluginId
         : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

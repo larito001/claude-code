@@ -11,6 +11,7 @@ import { getClaudeConfigHomeDir } from '../src/utils/envUtils.js'
 import { getSettingsFilePathForSource } from '../src/utils/settings/settings.js'
 import { getAutoMemPath } from '../src/memdir/paths.js'
 import { getOriginalCwd } from '../src/bootstrap/state.js'
+import { getDefaultFeatures, getOptionalFeatures } from '../src/utils/features.js'
 
 const PORT = Number(process.env.CONFIG_PORT) || 3456
 const CWD = getOriginalCwd()
@@ -50,8 +51,8 @@ function getMemoryDir() {
   return getAutoMemPath()
 }
 
-function getBundlePolyfillPath() {
-  return join(APP_ROOT, 'node_modules', 'bundle', 'index.js')
+function getEnvPath() {
+  return join(APP_ROOT, '.env')
 }
 
 function getClaudeMdPaths(): Record<ClaudeMdTarget, string> {
@@ -164,66 +165,65 @@ function listMdFiles(dir: string): Array<{ name: string; path: string; content: 
 
 // --- Feature Flags ---
 
+const DEFAULT_FEATURES = new Set(getDefaultFeatures())
+const CONFIGURABLE_FEATURES = [
+  ...getDefaultFeatures(),
+  ...getOptionalFeatures(),
+] as const
+
+function readEnvValue(content: string, key: string): string {
+  const match = content.match(new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=\\s*(.*)$`, 'm'))
+  return (match?.[1] ?? '').trim().replace(/^(['"])(.*)\1$/, '$2')
+}
+
+function parseFeatureList(value: string): Set<string> {
+  return new Set(value.split(',').map(name => name.trim()).filter(Boolean))
+}
+
 function parseFeatureFlags(): Record<string, boolean> {
-  const content = readTextSafe(getBundlePolyfillPath())
-  const flags: Record<string, boolean> = {}
-  const allFlags = [
-    'KAIROS', 'PROACTIVE', 'COORDINATOR_MODE',
-    'TRANSCRIPT_CLASSIFIER', 'BASH_CLASSIFIER', 'BUDDY', 'WEB_BROWSER_TOOL',
-    'AGENT_TRIGGERS', 'MONITOR_TOOL', 'TEAMMEM',
-    'EXTRACT_MEMORIES', 'MCP_SKILLS', 'REVIEW_ARTIFACT', 'CONNECTOR_TEXT',
-    'DOWNLOAD_USER_SETTINGS', 'MESSAGE_ACTIONS', 'KAIROS_CHANNELS', 'KAIROS_GITHUB_WEBHOOKS',
-  ]
-  for (const flag of allFlags) {
-    // Check if the flag line is uncommented (enabled)
-    const enabledRegex = new RegExp(`^\\s*'${flag}'`, 'm')
-    const commentedRegex = new RegExp(`^\\s*//\\s*'${flag}'`, 'm')
-    flags[flag] = enabledRegex.test(content) && !commentedRegex.test(content)
-  }
-  return flags
+  const content = readTextSafe(getEnvPath())
+  const enabled = parseFeatureList(readEnvValue(content, 'CLAUDE_CODE_FEATURES'))
+  const disabled = parseFeatureList(readEnvValue(content, 'CLAUDE_CODE_DISABLE_FEATURES'))
+  return Object.fromEntries(
+    CONFIGURABLE_FEATURES.map(name => [
+      name,
+      !disabled.has(name) && (DEFAULT_FEATURES.has(name) || enabled.has(name)),
+    ]),
+  )
 }
 
-function writeFeatureFlags(flags: Record<string, boolean>) {
-  const descriptions: Record<string, string> = {
-    KAIROS: 'Assistant / daily-log mode',
-    PROACTIVE: 'Proactive autonomous mode',
-    COORDINATOR_MODE: 'Multi-agent swarm coordinator',
-    TRANSCRIPT_CLASSIFIER: 'Auto-mode permission classifier',
-    BASH_CLASSIFIER: 'Bash command safety classifier',
-    BUDDY: 'Companion sprite animation',
-    WEB_BROWSER_TOOL: 'In-process web browser tool',
-    AGENT_TRIGGERS: 'Scheduled cron agents',
-    MONITOR_TOOL: 'MCP server monitoring',
-    TEAMMEM: 'Shared team memory',
-    EXTRACT_MEMORIES: 'Background memory extraction agent',
-    MCP_SKILLS: 'Skills from MCP servers',
-    REVIEW_ARTIFACT: 'Review artifact tool',
-    CONNECTOR_TEXT: 'Connector text blocks',
-    DOWNLOAD_USER_SETTINGS: 'Remote settings sync',
-    MESSAGE_ACTIONS: 'Message action buttons',
-    KAIROS_CHANNELS: 'Channel notifications',
-    KAIROS_GITHUB_WEBHOOKS: 'GitHub webhook integration',
+function setEnvValues(values: Record<string, string>): void {
+  const envPath = getEnvPath()
+  const existing = readTextSafe(envPath)
+  const lines = existing ? existing.replace(/\r\n/g, '\n').split('\n') : []
+
+  for (const [key, value] of Object.entries(values)) {
+    const matcher = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=`)
+    const index = lines.findIndex(line => matcher.test(line))
+    const replacement = `${key}=${value}`
+    if (index >= 0) lines[index] = replacement
+    else lines.push(replacement)
   }
 
-  const lines = Object.entries(flags).map(([flag, enabled]) => {
-    const desc = descriptions[flag] || flag
-    return enabled
-      ? `  '${flag}', // ${desc}`
-      : `  // '${flag}', // ${desc}`
+  writeTextSafe(envPath, `${lines.filter((line, index) => index < lines.length - 1 || line).join('\n')}\n`)
+}
+
+function writeFeatureFlags(flags: Record<string, boolean>): void {
+  const invalid = Object.keys(flags).find(
+    name => !CONFIGURABLE_FEATURES.includes(name as typeof CONFIGURABLE_FEATURES[number]),
+  )
+  if (invalid) throw new Error(`Unsupported feature: ${invalid}`)
+
+  const enabled = CONFIGURABLE_FEATURES.filter(
+    name => !DEFAULT_FEATURES.has(name) && flags[name] === true,
+  )
+  const disabled = CONFIGURABLE_FEATURES.filter(
+    name => DEFAULT_FEATURES.has(name) && flags[name] === false,
+  )
+  setEnvValues({
+    CLAUDE_CODE_FEATURES: enabled.join(','),
+    CLAUDE_CODE_DISABLE_FEATURES: disabled.join(','),
   })
-
-  const content = `// Runtime polyfill for bun:bundle feature() function
-// Managed by Claude Code Config UI
-
-const ENABLED_FEATURES = new Set([
-${lines.join('\n')}
-])
-
-module.exports.feature = function feature(name) {
-  return ENABLED_FEATURES.has(name)
-}
-`
-  writeTextSafe(getBundlePolyfillPath(), content)
 }
 
 // --- API Router ---
@@ -261,7 +261,11 @@ async function handleAPI(req: Request): Promise<Response> {
 
   if (path === '/api/features' && req.method === 'POST') {
     const flags = await req.json() as Record<string, boolean>
-    writeFeatureFlags(flags)
+    try {
+      writeFeatureFlags(flags)
+    } catch (error) {
+      return badRequest(error instanceof Error ? error.message : 'Invalid feature configuration')
+    }
     return Response.json({ ok: true })
   }
 
@@ -388,7 +392,7 @@ async function handleAPI(req: Request): Promise<Response> {
       mcpConfigPath: getMcpConfigPath(),
       claudeMdPaths: getClaudeMdPaths(),
       rulesDirs: { user: getRulesDir('user'), project: getRulesDir('project') },
-      bundlePath: getBundlePolyfillPath(),
+      envPath: getEnvPath(),
     })
   }
 

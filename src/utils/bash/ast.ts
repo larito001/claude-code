@@ -682,7 +682,8 @@ function collectCommands(
     // so `VAR=$(evil)` still recursively extracts/rejects based on the
     // inner command. Does NOT push to commands — a bare assignment needs
     // no permission rule (it's inert). Common pattern: `VAR=x && cmd`
-    // where cmd references $VAR. ~35% of too-complex in top-5k ant cmds.
+    // where cmd references $VAR. This avoids treating inert assignments as
+    // executable commands.
     const ev = walkVariableAssignment(node, commands, varScope)
     if ('kind' in ev) return ev
     // Populate scope so later `$VAR` references resolve.
@@ -1596,7 +1597,7 @@ function walkString(
         // the original $() text as placeholder (runtime-determined value).
         // `echo "SHA: $(git rev-parse HEAD)"` → extracts BOTH
         // `echo "SHA: $(...)"` AND `git rev-parse HEAD` — both must match
-        // permission rules. ~27% of too-complex in top-5k ant cmds.
+        // permission rules.
         const err = collectCommandSubstitution(child, innerCommands, varScope)
         if (err) return err
         result += CMDSUB_PLACEHOLDER

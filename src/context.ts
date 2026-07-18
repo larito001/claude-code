@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import memoize from 'lodash-es/memoize.js'
 import {
   getAdditionalDirectoriesForClaudeMd,
@@ -19,7 +19,7 @@ import { logError } from './utils/log.js'
 
 const MAX_STATUS_CHARS = 2000
 
-// System prompt injection for cache breaking (ant-only, ephemeral debugging state)
+// Optional system-prompt injection used for local cache-break diagnostics.
 let systemPromptInjection: string | null = null
 
 export function getSystemPromptInjection(): string | null {
@@ -120,14 +120,9 @@ export const getSystemContext = memoize(
     const startTime = Date.now()
     logForDiagnosticsNoPII('info', 'system_context_started')
 
-    // Skip git status in CCR (unnecessary overhead on resume) or when git instructions are disabled
-    const gitStatus =
-      isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ||
-      !shouldIncludeGitInstructions()
-        ? null
-        : await getGitStatus()
+    const gitStatus = shouldIncludeGitInstructions() ? await getGitStatus() : null
 
-    // Include system prompt injection if set (for cache breaking, ant-only)
+    // Include the diagnostic injection only when explicitly enabled.
     const injection = feature('BREAK_CACHE_COMMAND')
       ? getSystemPromptInjection()
       : null

@@ -46,8 +46,8 @@ export function createFallbackStorage(
         // Primary write failed but primary may still hold an *older* valid
         // entry. read() prefers primary whenever it returns non-null, so that
         // stale entry would shadow the fresh data we just wrote to secondary —
-        // e.g. a refresh token the server has already rotated away, causing a
-        // /login loop (#30337). Best-effort delete; if this also fails the
+        // e.g. a refresh token the server has already rotated away, causing an
+        // MCP authorization loop. Best-effort delete; if this also fails the
         // user's keychain is in a bad state we can't fix from here.
         if (primaryDataBefore !== null) {
           primary.delete()

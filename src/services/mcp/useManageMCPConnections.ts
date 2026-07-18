@@ -1,5 +1,4 @@
-import { feature } from 'bun:bundle'
-import { basename } from 'path'
+import { feature } from 'src/utils/features.js'
 import { useCallback, useEffect, useRef } from 'react'
 import { getSessionId } from '../../bootstrap/state.js'
 import type { Command } from '../../commands.js'
@@ -18,18 +17,6 @@ import type {
   ServerResource,
 } from './types.js'
 
-/* eslint-disable @typescript-eslint/no-require-imports */
-const fetchMcpSkillsForClient = feature('MCP_SKILLS')
-  ? (
-      require('../../skills/mcpSkills.js') as typeof import('../../skills/mcpSkills.js')
-    ).fetchMcpSkillsForClient
-  : null
-const clearSkillIndexCache = feature('EXPERIMENTAL_SKILL_SEARCH')
-  ? (
-      require('../skillSearch/localSearch.js') as typeof import('../skillSearch/localSearch.js')
-    ).clearSkillIndexCache
-  : null
-
 import {
   PromptListChangedNotificationSchema,
   ResourceListChangedNotificationSchema,
@@ -42,9 +29,6 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import {
-  dedupClaudeAiMcpServers,
-  doesEnterpriseMcpConfigExist,
-  filterMcpServersByPolicy,
   getClaudeCodeMcpConfigs,
   isMcpServerDisabled,
   setMcpServerEnabled,
@@ -76,10 +60,6 @@ import {
   createChannelPermissionCallbacks,
   isChannelPermissionRelayEnabled,
 } from './channelPermissions.js'
-import {
-  clearClaudeAIMcpConfigsCache,
-  fetchClaudeAIMcpConfigsIfEligible,
-} from './claudeai.js'
 import { registerElicitationHandler } from './elicitationHandler.js'
 import { getMcpPrefix } from './mcpStringUtils.js'
 import { commandBelongsToServer, excludeStalePluginClients } from './utils.js'
@@ -145,7 +125,6 @@ export function useManageMCPConnections(
   isStrictMcpConfig = false,
 ) {
   const store = useAppStateStore()
-  const _authVersion = useAppState(s => s.authVersion)
   // Incremented by /reload-plugins (refreshActivePlugins) to pick up newly
   // enabled plugin MCP servers. getClaudeCodeMcpConfigs() reads loadAllPlugins()
   // which has been cleared by refreshActivePlugins, so the effects below see
@@ -169,7 +148,7 @@ export function useManageMCPConnections(
     null,
   )
   if (
-    (feature('KAIROS') || feature('KAIROS_CHANNELS')) &&
+    (feature('MCP_CHANNELS')) &&
     channelPermCallbacksRef.current === null
   ) {
     channelPermCallbacksRef.current = createChannelPermissionCallbacks()
@@ -177,7 +156,7 @@ export function useManageMCPConnections(
   // Store callbacks in AppState so interactiveHandler.ts can reach them via
   // ctx.toolUseContext.getAppState(). One-time set — the ref is stable.
   useEffect(() => {
-    if (feature('KAIROS') || feature('KAIROS_CHANNELS')) {
+    if (feature('MCP_CHANNELS')) {
       const callbacks = channelPermCallbacksRef.current
       if (!callbacks) return
       // GrowthBook runtime gate — separate from channels so channels can
@@ -470,7 +449,7 @@ export function useManageMCPConnections(
           // Channel push: notifications/claude/channel → enqueue().
           // Gate decides whether to register the handler; connection stays
           // up either way (allowedMcpServers controls that).
-          if (feature('KAIROS') || feature('KAIROS_CHANNELS')) {
+          if (feature('MCP_CHANNELS')) {
             const gate = gateChannelServer(
               client.name,
               client.capabilities,
@@ -560,8 +539,7 @@ export function useManageMCPConnections(
                 }
                 break
               case 'skip':
-                // Idempotent teardown so a register→skip re-gate (e.g.
-                // effect re-runs after /logout) actually removes the live
+                // Idempotent teardown so a register→skip re-gate actually removes the live
                 // handler. Without this, mid-session demotion is one-way:
                 // the gate says skip but the earlier handler keeps enqueuing.
                 // Map.delete — safe when never registered.
@@ -679,19 +657,13 @@ export function useManageMCPConnections(
                   // Skills come from resources, not prompts — don't invalidate their
                   // cache here. fetchMcpSkillsForClient returns the cached result.
                   fetchCommandsForClient.cache.delete(client.name)
-                  const [mcpPrompts, mcpSkills] = await Promise.all([
-                    fetchCommandsForClient(client),
-                    feature('MCP_SKILLS')
-                      ? fetchMcpSkillsForClient!(client)
-                      : Promise.resolve([]),
-                  ])
+                  const mcpPrompts = await fetchCommandsForClient(client)
                   updateServer({
                     ...client,
-                    commands: [...mcpPrompts, ...mcpSkills],
+                    commands: mcpPrompts,
                   })
                   // MCP skills changed — invalidate skill-search index so
                   // next discovery rebuilds with the new set.
-                  clearSkillIndexCache?.()
                 } catch (error) {
                   logMCPError(
                     client.name,
@@ -715,31 +687,8 @@ export function useManageMCPConnections(
                 })
                 try {
                   fetchResourcesForClient.cache.delete(client.name)
-                  if (feature('MCP_SKILLS')) {
-                    // Skills are discovered from resources, so refresh them too.
-                    // Invalidate prompts cache as well: we write commands here,
-                    // and a concurrent prompts/list_changed could otherwise have
-                    // us stomp its fresh result with our cached stale one.
-                    fetchMcpSkillsForClient!.cache.delete(client.name)
-                    fetchCommandsForClient.cache.delete(client.name)
-                    const [newResources, mcpPrompts, mcpSkills] =
-                      await Promise.all([
-                        fetchResourcesForClient(client),
-                        fetchCommandsForClient(client),
-                        fetchMcpSkillsForClient!(client),
-                      ])
-                    updateServer({
-                      ...client,
-                      resources: newResources,
-                      commands: [...mcpPrompts, ...mcpSkills],
-                    })
-                    // MCP skills changed — invalidate skill-search index so
-                    // next discovery rebuilds with the new set.
-                    clearSkillIndexCache?.()
-                  } else {
-                    const newResources = await fetchResourcesForClient(client)
-                    updateServer({ ...client, resources: newResources })
-                  }
+                  const newResources = await fetchResourcesForClient(client)
+                  updateServer({ ...client, resources: newResources })
                 } catch (error) {
                   logMCPError(
                     client.name,
@@ -766,8 +715,7 @@ export function useManageMCPConnections(
   // Re-runs on session change (/clear) and on /reload-plugins (pluginReconnectKey).
   // On plugin reload, also disconnects stale plugin MCP servers (scope 'dynamic')
   // that no longer appear in configs — prevents ghost tools from disabled plugins.
-  // Skip claude.ai dedup here to avoid blocking on the network fetch; the connect
-  // useEffect below runs immediately after and dedups before connecting.
+  // Initialize local, project, plugin, and dynamic MCP configurations first.
   const sessionId = getSessionId()
   useEffect(() => {
     async function initializeServersAsPending() {
@@ -854,31 +802,17 @@ export function useManageMCPConnections(
   ])
 
   // Load MCP configs and connect to servers
-  // Two-phase loading: Claude Code configs first (fast), then claude.ai configs (may be slow)
+  // Load and connect all local, project, plugin, and dynamic MCP configurations.
   useEffect(() => {
     let cancelled = false
 
     async function loadAndConnectMcpConfigs() {
-      // Clear claude.ai MCP cache so we fetch fresh configs with current auth
-      // state. This is important when authVersion changes (e.g., after login/
-      // logout). Kick off the fetch now so it overlaps with loadAllPlugins()
-      // inside getClaudeCodeMcpConfigs; it's awaited only at the dedup step.
-      // Phase 2 below awaits the same promise — no second network call.
-      let claudeaiPromise: Promise<Record<string, ScopedMcpServerConfig>>
-      if (isStrictMcpConfig || doesEnterpriseMcpConfigExist()) {
-        claudeaiPromise = Promise.resolve({})
-      } else {
-        clearClaudeAIMcpConfigsCache()
-        claudeaiPromise = fetchClaudeAIMcpConfigsIfEligible()
-      }
-
-      // Phase 1: Load Claude Code configs. Plugin MCP servers that duplicate a
-      // --mcp-config entry or a claude.ai connector are suppressed here so they
-      // don't connect alongside the connector in Phase 2.
+      // Plugin MCP servers that duplicate an explicit --mcp-config entry are
+      // suppressed by the configuration loader.
       const { servers: claudeCodeConfigs, errors: mcpErrors } =
         isStrictMcpConfig
           ? { servers: {}, errors: [] }
-          : await getClaudeCodeMcpConfigs(dynamicMcpConfig, claudeaiPromise)
+          : await getClaudeCodeMcpConfigs(dynamicMcpConfig)
       if (cancelled) return
 
       // Add MCP errors to plugin errors for UI visibility (deduplicated)
@@ -901,110 +835,23 @@ export function useManageMCPConnections(
         )
       })
 
-      // Phase 2: Await claude.ai configs (started above; memoized — no second fetch)
-      let claudeaiConfigs: Record<string, ScopedMcpServerConfig> = {}
-      if (!isStrictMcpConfig) {
-        claudeaiConfigs = filterMcpServersByPolicy(
-          await claudeaiPromise,
-        ).allowed
-        if (cancelled) return
-
-        // Suppress claude.ai connectors that duplicate an enabled manual server.
-        // Keys never collide (`slack` vs `claude.ai Slack`) so the merge below
-        // won't catch this — need content-based dedup by URL signature.
-        if (Object.keys(claudeaiConfigs).length > 0) {
-          const { servers: dedupedClaudeAi } = dedupClaudeAiMcpServers(
-            claudeaiConfigs,
-            configs,
-          )
-          claudeaiConfigs = dedupedClaudeAi
-        }
-
-        if (Object.keys(claudeaiConfigs).length > 0) {
-          // Add claude.ai servers as pending immediately so they show up in UI
-          setAppState(prevState => {
-            const existingServerNames = new Set(
-              prevState.mcp.clients.map(c => c.name),
-            )
-            const newClients = Object.entries(claudeaiConfigs)
-              .filter(([name]) => !existingServerNames.has(name))
-              .map(([name, config]) => ({
-                name,
-                type: isMcpServerDisabled(name)
-                  ? ('disabled' as const)
-                  : ('pending' as const),
-                config,
-              }))
-            if (newClients.length === 0) return prevState
-            return {
-              ...prevState,
-              mcp: {
-                ...prevState.mcp,
-                clients: [...prevState.mcp.clients, ...newClients],
-              },
-            }
-          })
-
-          // Now start connecting (only enabled servers)
-          const enabledClaudeaiConfigs = Object.fromEntries(
-            Object.entries(claudeaiConfigs).filter(
-              ([name]) => !isMcpServerDisabled(name),
-            ),
-          )
-          getMcpToolsCommandsAndResources(
-            onConnectionAttempt,
-            enabledClaudeaiConfigs,
-          ).catch(error => {
-            logMCPError(
-              'useManageMcpConnections',
-              `Failed to get claude.ai MCP resources: ${errorMessage(error)}`,
-            )
-          })
-        }
-      }
-
-      // Log server counts after both phases complete
-      const allConfigs = { ...configs, ...claudeaiConfigs }
+      // Log server counts after loading all configured sources.
       const counts = {
         enterprise: 0,
         global: 0,
         project: 0,
         user: 0,
         plugin: 0,
-        claudeai: 0,
       }
-      // Ant-only: collect stdio command basenames to correlate with RSS/FPS
-      // metrics. Stdio servers like rust-analyzer can be heavy and we want to
-      // know which ones correlate with poor session performance.
-      const stdioCommands: string[] = []
-      for (const [name, serverConfig] of Object.entries(allConfigs)) {
+      for (const [name, serverConfig] of Object.entries(configs)) {
         if (serverConfig.scope === 'enterprise') counts.enterprise++
         else if (serverConfig.scope === 'user') counts.global++
         else if (serverConfig.scope === 'project') counts.project++
         else if (serverConfig.scope === 'local') counts.user++
         else if (serverConfig.scope === 'dynamic') counts.plugin++
-        else if (serverConfig.scope === 'claudeai') counts.claudeai++
-
-        if (
-          process.env.USER_TYPE === 'ant' &&
-          !isMcpServerDisabled(name) &&
-          (serverConfig.type === undefined || serverConfig.type === 'stdio') &&
-          'command' in serverConfig
-        ) {
-          stdioCommands.push(basename(serverConfig.command))
-        }
       }
       logEvent('tengu_mcp_servers', {
         ...counts,
-        ...(process.env.USER_TYPE === 'ant' && stdioCommands.length > 0
-          ? {
-              stdio_commands: stdioCommands
-                .sort()
-                .join(
-                  ',',
-                ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            }
-          : {}),
       })
     }
 
@@ -1018,7 +865,6 @@ export function useManageMCPConnections(
     dynamicMcpConfig,
     onConnectionAttempt,
     setAppState,
-    _authVersion,
     sessionId,
     _pluginReconnectKey,
   ])

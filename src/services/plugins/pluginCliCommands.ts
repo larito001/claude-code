@@ -20,7 +20,6 @@ import {
 } from '../../utils/telemetry/pluginTelemetry.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
   logEvent,
 } from '../analytics/index.js'
 import {
@@ -69,12 +68,6 @@ function handlePluginCommandError(
     ? (() => {
         const { name, marketplace } = parsePluginIdentifier(plugin)
         return {
-          _PROTO_plugin_name:
-            name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-          ...(marketplace && {
-            _PROTO_marketplace_name:
-              marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-          }),
           ...buildPluginTelemetryFields(
             name,
             marketplace,
@@ -117,20 +110,10 @@ export async function installPlugin(
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${figures.tick} ${result.message}`)
 
-    // _PROTO_* routes to PII-tagged plugin_name/marketplace_name BQ columns.
-    // Unredacted plugin_id was previously logged to general-access
-    // additional_metadata for all users — dropped in favor of the privileged
-    // column route.
     const { name, marketplace } = parsePluginIdentifier(
       result.pluginId || plugin,
     )
     logEvent('tengu_plugin_installed_cli', {
-      _PROTO_plugin_name:
-        name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      ...(marketplace && {
-        _PROTO_marketplace_name:
-          marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      }),
       scope: (result.scope ||
         scope) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       install_source:
@@ -169,12 +152,6 @@ export async function uninstallPlugin(
       result.pluginId || plugin,
     )
     logEvent('tengu_plugin_uninstalled_cli', {
-      _PROTO_plugin_name:
-        name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      ...(marketplace && {
-        _PROTO_marketplace_name:
-          marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      }),
       scope: (result.scope ||
         scope) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       ...buildPluginTelemetryFields(name, marketplace, getManagedPluginNames()),
@@ -210,12 +187,6 @@ export async function enablePlugin(
       result.pluginId || plugin,
     )
     logEvent('tengu_plugin_enabled_cli', {
-      _PROTO_plugin_name:
-        name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      ...(marketplace && {
-        _PROTO_marketplace_name:
-          marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      }),
       scope:
         result.scope as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       ...buildPluginTelemetryFields(name, marketplace, getManagedPluginNames()),
@@ -251,12 +222,6 @@ export async function disablePlugin(
       result.pluginId || plugin,
     )
     logEvent('tengu_plugin_disabled_cli', {
-      _PROTO_plugin_name:
-        name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      ...(marketplace && {
-        _PROTO_marketplace_name:
-          marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      }),
       scope:
         result.scope as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       ...buildPluginTelemetryFields(name, marketplace, getManagedPluginNames()),
@@ -319,12 +284,6 @@ export async function updatePluginCli(
         result.pluginId || plugin,
       )
       logEvent('tengu_plugin_updated_cli', {
-        _PROTO_plugin_name:
-          name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-        ...(marketplace && {
-          _PROTO_marketplace_name:
-            marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-        }),
         old_version: (result.oldVersion ||
           'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         new_version: (result.newVersion ||

@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { markPostCompaction } from 'src/bootstrap/state.js'
 import { getSdkBetas } from '../../bootstrap/state.js'
 import type { QuerySource } from '../../constants/querySource.js'
@@ -12,7 +12,6 @@ import { hasExactErrorMessage } from '../../utils/errors.js'
 import type { CacheSafeParams } from '../../utils/forkedAgent.js'
 import { logError } from '../../utils/log.js'
 import { tokenCountWithEstimation } from '../../utils/tokens.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { getMaxOutputTokensForModel } from '../api/claude.js'
 import { notifyCompaction } from '../api/promptCacheBreakDetection.js'
 import { setLastSummarizedMessageId } from '../SessionMemory/sessionMemoryUtils.js'
@@ -161,73 +160,22 @@ export async function shouldAutoCompact(
   messages: Message[],
   model: string,
   querySource?: QuerySource,
-  // Snip removes messages but the surviving assistant's usage still reflects
-  // pre-snip context, so tokenCountWithEstimation can't see the savings.
-  // Subtract the rough-delta that snip already computed.
-  snipTokensFreed = 0,
 ): Promise<boolean> {
   // Recursion guards. session_memory and compact are forked agents that
   // would deadlock.
   if (querySource === 'session_memory' || querySource === 'compact') {
     return false
   }
-  // marble_origami is the ctx-agent — if ITS context blows up and
-  // autocompact fires, runPostCompactCleanup calls resetContextCollapse()
-  // which destroys the MAIN thread's committed log (module-level state
-  // shared across forks). Inside feature() so the string DCEs from
-  // external builds (it's in excluded-strings.txt).
-  if (feature('CONTEXT_COLLAPSE')) {
-    if (querySource === 'marble_origami') {
-      return false
-    }
-  }
-
   if (!isAutoCompactEnabled()) {
     return false
   }
 
-  // Reactive-only mode: suppress proactive autocompact, let reactive compact
-  // catch the API's prompt-too-long. feature() wrapper keeps the flag string
-  // out of external builds (REACTIVE_COMPACT is ant-only).
-  // Note: returning false here also means autoCompactIfNeeded never reaches
-  // trySessionMemoryCompaction in the query loop — the /compact call site
-  // still tries session memory first. Revisit if reactive-only graduates.
-  if (feature('REACTIVE_COMPACT')) {
-    if (getFeatureValue_CACHED_MAY_BE_STALE('tengu_cobalt_raccoon', false)) {
-      return false
-    }
-  }
-
-  // Context-collapse mode: same suppression. Collapse IS the context
-  // management system when it's on — the 90% commit / 95% blocking-spawn
-  // flow owns the headroom problem. Autocompact firing at effective-13k
-  // (~93% of effective) sits right between collapse's commit-start (90%)
-  // and blocking (95%), so it would race collapse and usually win, nuking
-  // granular context that collapse was about to save. Gating here rather
-  // than in isAutoCompactEnabled() keeps reactiveCompact alive as the 413
-  // fallback (it consults isAutoCompactEnabled directly) and leaves
-  // sessionMemory + manual /compact working.
-  //
-  // Consult isContextCollapseEnabled (not the raw gate) so the
-  // CLAUDE_CONTEXT_COLLAPSE env override is honored here too. require()
-  // inside the block breaks the init-time cycle (this file exports
-  // getEffectiveContextWindowSize which collapse's index imports).
-  if (feature('CONTEXT_COLLAPSE')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { isContextCollapseEnabled } =
-      require('../contextCollapse/index.js') as typeof import('../contextCollapse/index.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    if (isContextCollapseEnabled()) {
-      return false
-    }
-  }
-
-  const tokenCount = tokenCountWithEstimation(messages) - snipTokensFreed
+  const tokenCount = tokenCountWithEstimation(messages)
   const threshold = getAutoCompactThreshold(model)
   const effectiveWindow = getEffectiveContextWindowSize(model)
 
   logForDebugging(
-    `autocompact: tokens=${tokenCount} threshold=${threshold} effectiveWindow=${effectiveWindow}${snipTokensFreed > 0 ? ` snipFreed=${snipTokensFreed}` : ''}`,
+    `autocompact: tokens=${tokenCount} threshold=${threshold} effectiveWindow=${effectiveWindow}`,
   )
 
   const { isAboveAutoCompactThreshold } = calculateTokenWarningState(
@@ -244,7 +192,6 @@ export async function autoCompactIfNeeded(
   cacheSafeParams: CacheSafeParams,
   querySource?: QuerySource,
   tracking?: AutoCompactTrackingState,
-  snipTokensFreed?: number,
 ): Promise<{
   wasCompacted: boolean
   compactionResult?: CompactionResult
@@ -269,7 +216,6 @@ export async function autoCompactIfNeeded(
     messages,
     model,
     querySource,
-    snipTokensFreed,
   )
 
   if (!shouldCompact) {

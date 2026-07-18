@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { APIUserAbortError } from '@anthropic-ai/sdk'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import {
@@ -80,7 +80,6 @@ import {
   clearClassifierChecking,
   setClassifierChecking,
 } from '../classifierApprovals.js'
-import { isInProtectedNamespace } from '../envUtils.js'
 import { executePermissionRequestHooks } from '../hooks.js'
 import {
   AUTO_REJECT_MESSAGE,
@@ -558,7 +557,7 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
         createDenialTrackingState()
 
       // PowerShell requires explicit user permission in auto mode unless
-      // POWERSHELL_AUTO_MODE (ant-only build flag) is on. When disabled, this
+      // POWERSHELL_AUTO_MODE is enabled. When disabled, this
       // guard keeps PS out of the classifier and skips the acceptEdits
       // fast-path below. When enabled, PS flows through to the classifier like
       // Bash — the classifier prompt gets POWERSHELL_DENY_GUIDANCE appended so
@@ -568,7 +567,7 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
       // return before reaching here. Allow-rule protection is handled by
       // permissionSetup.ts: isOverlyBroadPowerShellAllowRule strips PowerShell(*)
       // and isDangerousPowerShellPermission strips iex/pwsh/Start-Process
-      // prefix rules for ant users and auto mode entry.
+      // prefix rules before auto mode entry.
       if (
         tool.name === POWERSHELL_TOOL_NAME &&
         !feature('POWERSHELL_AUTO_MODE')
@@ -627,7 +626,6 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
               decision:
                 'allowed' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               toolName: sanitizeToolNameForAnalytics(tool.name),
-              inProtectedNamespace: isInProtectedNamespace(),
               // msg_id of the agent completion that produced this tool_use —
               // the action at the bottom of the classifier transcript. Joins
               // the decision back to the main agent's API response.
@@ -667,7 +665,6 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
           decision:
             'allowed' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           toolName: sanitizeToolNameForAnalytics(tool.name),
-          inProtectedNamespace: isInProtectedNamespace(),
           agentMsgId: assistantMessage.message
             .id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           confidence:
@@ -701,15 +698,14 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
         clearClassifierChecking(toolUseID)
       }
 
-      // Notify ants when classifier error dumped prompts (will be in /share)
+      // Notify when an explicitly enabled classifier dump was written.
       if (
-        process.env.USER_TYPE === 'ant' &&
         classifierResult.errorDumpPath &&
         context.addNotification
       ) {
         context.addNotification({
           key: 'auto-mode-error-dump',
-          text: `Auto mode classifier error — prompts dumped to ${classifierResult.errorDumpPath} (included in /share)`,
+          text: `Auto mode classifier error — prompts dumped to ${classifierResult.errorDumpPath}`,
           priority: 'immediate',
           color: 'error',
         })
@@ -734,7 +730,6 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
         decision:
           yoloDecision as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         toolName: sanitizeToolNameForAnalytics(tool.name),
-        inProtectedNamespace: isInProtectedNamespace(),
         // msg_id of the agent completion that produced this tool_use —
         // the action at the bottom of the classifier transcript.
         agentMsgId: assistantMessage.message

@@ -2,7 +2,7 @@
  * Conversation clearing utility.
  * This module has heavier dependencies and should be lazy-loaded when possible.
  */
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { randomUUID, type UUID } from 'crypto'
 import {
   getLastMainRequestId,
@@ -49,7 +49,6 @@ import { clearSessionCaches } from './caches.js'
 export async function clearConversation({
   setMessages,
   readFileState,
-  discoveredSkillNames,
   loadedNestedMemoryPaths,
   getAppState,
   setAppState,
@@ -57,7 +56,6 @@ export async function clearConversation({
 }: {
   setMessages: (updater: (prev: Message[]) => Message[]) => void
   readFileState: FileStateCache
-  discoveredSkillNames?: Set<string>
   loadedNestedMemoryPaths?: Set<string>
   getAppState?: () => AppState
   setAppState?: (f: (prev: AppState) => AppState) => void
@@ -109,7 +107,7 @@ export async function clearConversation({
   setMessages(() => [])
 
   // Clear context-blocked flag so proactive ticks resume after /clear
-  if (feature('PROACTIVE') || feature('KAIROS')) {
+  if (feature('PROACTIVE')) {
     /* eslint-disable @typescript-eslint/no-require-imports */
     const { setContextBlocked } = require('../../proactive/index.js')
     /* eslint-enable @typescript-eslint/no-require-imports */
@@ -128,7 +126,6 @@ export async function clearConversation({
 
   setCwd(getOriginalCwd())
   readFileState.clear()
-  discoveredSkillNames?.clear()
   loadedNestedMemoryPaths?.clear()
 
   // Clean out necessary items from App State
@@ -202,7 +199,7 @@ export async function clearConversation({
   // Set the old session as parent for analytics lineage tracking
   regenerateSessionId({ setCurrentAsParent: true })
   // Update the environment variable so subprocesses use the new session ID
-  if (process.env.USER_TYPE === 'ant' && process.env.CLAUDE_CODE_SESSION_ID) {
+  if (process.env.CLAUDE_CODE_SESSION_ID) {
     process.env.CLAUDE_CODE_SESSION_ID = getSessionId()
   }
   await resetSessionFilePointer()

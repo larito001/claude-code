@@ -647,7 +647,7 @@ const PluginManifestUserConfigSchema = lazySchema(() =>
           'Non-sensitive values saved to settings.json; sensitive values to secure storage ' +
           '(macOS keychain or .credentials.json). Available as ${user_config.KEY} in ' +
           'MCP/LSP server config, hook commands, and (non-sensitive only) skill/agent content. ' +
-          'Note: sensitive values share a single keychain entry with OAuth tokens — keep ' +
+          'Note: sensitive values share a single secure-storage entry with MCP credentials — keep ' +
           'secret counts small to stay under the ~2KB stdin-safe limit (see INC-3028).',
       ),
   }),

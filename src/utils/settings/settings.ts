@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import mergeWith from 'lodash-es/mergeWith.js'
 import { dirname, join, resolve } from 'path'
 import { z } from 'zod/v4'
@@ -8,7 +8,6 @@ import {
   getOriginalCwd,
   getUseCoworkPlugins,
 } from '../../bootstrap/state.js'
-import { getRemoteManagedSettingsSyncFromCache } from '../../services/remoteManagedSettings/syncCacheState.js'
 import { uniq } from '../array.js'
 import { logForDebugging } from '../debug.js'
 import { logForDiagnosticsNoPII } from '../diagLogs.js'
@@ -319,13 +318,8 @@ export function getSettingsForSource(
 function getSettingsForSourceUncached(
   source: SettingSource,
 ): SettingsJson | null {
-  // For policySettings: first source wins (remote > HKLM/plist > file > HKCU)
+  // For policySettings: first source wins (HKLM/plist > file > HKCU)
   if (source === 'policySettings') {
-    const remoteSettings = getRemoteManagedSettingsSyncFromCache()
-    if (remoteSettings && Object.keys(remoteSettings).length > 0) {
-      return remoteSettings
-    }
-
     const mdmResult = getMdmSettings()
     if (Object.keys(mdmResult.settings).length > 0) {
       return mdmResult.settings
@@ -370,21 +364,14 @@ function getSettingsForSourceUncached(
 /**
  * Get the origin of the highest-priority active policy settings source.
  * Uses "first source wins" — returns the first source that has content.
- * Priority: remote > plist/hklm > file (managed-settings.json) > hkcu
+ * Priority: plist/hklm > file (managed-settings.json) > hkcu
  */
 export function getPolicySettingsOrigin():
-  | 'remote'
   | 'plist'
   | 'hklm'
   | 'file'
   | 'hkcu'
   | null {
-  // 1. Remote (highest)
-  const remoteSettings = getRemoteManagedSettingsSyncFromCache()
-  if (remoteSettings && Object.keys(remoteSettings).length > 0) {
-    return 'remote'
-  }
-
   // 2. Admin-only MDM (HKLM / macOS plist)
   const mdmResult = getMdmSettings()
   if (Object.keys(mdmResult.settings).length > 0) {
@@ -673,24 +660,10 @@ function loadSettingsFromDisk(): SettingsWithErrors {
     // Merge settings from each source in priority order with deep merging
     for (const source of getEnabledSettingSources()) {
       // policySettings: "first source wins" — use the highest-priority source
-      // that has content. Priority: remote > HKLM/plist > managed-settings.json > HKCU
+      // that has content. Priority: HKLM/plist > managed-settings.json > HKCU
       if (source === 'policySettings') {
         let policySettings: SettingsJson | null = null
         const policyErrors: ValidationError[] = []
-
-        // 1. Remote (highest priority)
-        const remoteSettings = getRemoteManagedSettingsSyncFromCache()
-        if (remoteSettings && Object.keys(remoteSettings).length > 0) {
-          const result = SettingsSchema().safeParse(remoteSettings)
-          if (result.success) {
-            policySettings = result.data
-          } else {
-            // Remote exists but is invalid — surface errors even as we fall through
-            policyErrors.push(
-              ...formatZodError(result.error, 'remote managed settings'),
-            )
-          }
-        }
 
         // 2. Admin-only MDM (HKLM / macOS plist)
         if (!policySettings) {
@@ -962,9 +935,7 @@ export function getAutoModeConfig():
       if (result.success) {
         if (result.data.allow) allow.push(...result.data.allow)
         if (result.data.soft_deny) soft_deny.push(...result.data.soft_deny)
-        if (process.env.USER_TYPE === 'ant') {
-          if (result.data.deny) soft_deny.push(...result.data.deny)
-        }
+        if (result.data.deny) soft_deny.push(...result.data.deny)
         if (result.data.environment)
           environment.push(...result.data.environment)
       }

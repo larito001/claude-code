@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { APIError } from '@anthropic-ai/sdk'
 import type {
   BetaStopReason,
@@ -12,7 +12,6 @@ import {
   setLastApiCompletionTimestamp,
 } from 'src/bootstrap/state.js'
 import type { QueryChainTracking } from 'src/Tool.js'
-import { isConnectorTextBlock } from 'src/types/connectorText.js'
 import type { AssistantMessage } from 'src/types/message.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import type { EffortLevel } from 'src/utils/effort.js'
@@ -26,7 +25,7 @@ import {
   isBetaTracingEnabled,
   type Span,
 } from 'src/utils/telemetry/sessionTracing.js'
-import type { NonNullableUsage } from '../../entrypoints/sdk/sdkUtilityTypes.js'
+import type { NonNullableUsage } from '@anthropic-ai/claude-agent-sdk'
 import { consumeInvokingRequestId } from '../../utils/agentContext.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -404,7 +403,6 @@ function logAPISuccess({
   textContentLength,
   thinkingContentLength,
   toolUseContentLengths,
-  connectorTextBlockCount,
   fastMode,
   previousRequestId,
   betas,
@@ -430,7 +428,6 @@ function logAPISuccess({
   textContentLength?: number
   thinkingContentLength?: number
   toolUseContentLengths?: Record<string, number>
-  connectorTextBlockCount?: number
   fastMode?: boolean
   previousRequestId?: string | null
   betas?: string[]
@@ -533,24 +530,7 @@ function logAPISuccess({
           ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
       : {}),
-    ...(connectorTextBlockCount !== undefined
-      ? ({
-          connectorTextBlockCount,
-        } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-      : {}),
     fastMode,
-    // Log cache_deleted_input_tokens for cache editing analysis. Casts needed
-    // because the field is intentionally not on NonNullableUsage (excluded from
-    // external builds). Set by updateUsage() when cache editing is active.
-    ...(feature('CACHED_MICROCOMPACT') &&
-    ((usage as unknown as { cache_deleted_input_tokens?: number })
-      .cache_deleted_input_tokens ?? 0) > 0
-      ? {
-          cacheDeletedInputTokens: (
-            usage as unknown as { cache_deleted_input_tokens: number }
-          ).cache_deleted_input_tokens,
-        }
-      : {}),
     ...(previousRequestId
       ? {
           previousRequestId:
@@ -633,21 +613,17 @@ export function logAPISuccessAndDuration({
   let textContentLength: number | undefined
   let thinkingContentLength: number | undefined
   let toolUseContentLengths: Record<string, number> | undefined
-  let connectorTextBlockCount: number | undefined
 
   if (newMessages) {
     let textLen = 0
     let thinkingLen = 0
     let hasToolUse = false
     const toolLengths: Record<string, number> = {}
-    let connectorCount = 0
 
     for (const msg of newMessages) {
       for (const block of msg.message.content) {
         if (block.type === 'text') {
           textLen += block.text.length
-        } else if (feature('CONNECTOR_TEXT') && isConnectorTextBlock(block)) {
-          connectorCount++
         } else if (block.type === 'thinking') {
           thinkingLen += block.thinking.length
         } else if (
@@ -667,7 +643,6 @@ export function logAPISuccessAndDuration({
     textContentLength = textLen
     thinkingContentLength = thinkingLen > 0 ? thinkingLen : undefined
     toolUseContentLengths = hasToolUse ? toolLengths : undefined
-    connectorTextBlockCount = connectorCount > 0 ? connectorCount : undefined
   }
 
   const durationMs = Date.now() - start
@@ -696,7 +671,6 @@ export function logAPISuccessAndDuration({
     textContentLength,
     thinkingContentLength,
     toolUseContentLengths,
-    connectorTextBlockCount,
     fastMode,
     previousRequestId,
     betas,
@@ -713,9 +687,8 @@ export function logAPISuccessAndDuration({
     speed: fastMode ? 'fast' : 'normal',
   })
 
-  // Extract model output, thinking output, and tool call flag when beta tracing is enabled
+  // Extract visible model output and tool call metadata when tracing is enabled.
   let modelOutput: string | undefined
-  let thinkingOutput: string | undefined
   let hasToolCall: boolean | undefined
 
   if (isBetaTracingEnabled() && newMessages) {
@@ -728,18 +701,6 @@ export function logAPISuccessAndDuration({
             .map(c => (c as { type: 'text'; text: string }).text),
         )
         .join('\n') || undefined
-
-    // Thinking output - Ant-only (build-time gated)
-    if (process.env.USER_TYPE === 'ant') {
-      thinkingOutput =
-        newMessages
-          .flatMap(m =>
-            m.message.content
-              .filter(c => c.type === 'thinking')
-              .map(c => (c as { type: 'thinking'; thinking: string }).thinking),
-          )
-          .join('\n') || undefined
-    }
 
     // Check if any tool_use blocks were in the output
     hasToolCall = newMessages.some(m =>
@@ -756,7 +717,6 @@ export function logAPISuccessAndDuration({
     cacheCreationTokens: usage.cache_creation_input_tokens,
     attempt,
     modelOutput,
-    thinkingOutput,
     hasToolCall,
     ttftMs: ttftMs ?? undefined,
     requestSetupMs,

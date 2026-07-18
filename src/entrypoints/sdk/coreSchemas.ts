@@ -148,20 +148,8 @@ export const McpServerConfigForProcessTransportSchema = lazySchema(() =>
   ]),
 )
 
-export const McpClaudeAIProxyServerConfigSchema = lazySchema(() =>
-  z.object({
-    type: z.literal('claudeai-proxy'),
-    url: z.string(),
-    id: z.string(),
-  }),
-)
-
-// Broader config type for status responses (includes claudeai-proxy which is output-only)
 export const McpServerStatusConfigSchema = lazySchema(() =>
-  z.union([
-    McpServerConfigForProcessTransportSchema(),
-    McpClaudeAIProxyServerConfigSchema(),
-  ]),
+  McpServerConfigForProcessTransportSchema(),
 )
 
 export const McpServerStatusSchema = lazySchema(() =>
@@ -189,7 +177,7 @@ export const McpServerStatusSchema = lazySchema(() =>
         .string()
         .optional()
         .describe(
-          'Configuration scope (e.g., project, user, local, claudeai, managed)',
+          'Configuration scope (e.g., project, user, local, managed)',
         ),
       tools: z
         .array(
@@ -747,7 +735,6 @@ export const FileChangedHookInputSchema = lazySchema(() =>
 export const EXIT_REASONS = [
   'clear',
   'resume',
-  'logout',
   'prompt_input_exit',
   'other',
   'bypass_permissions_disabled',
@@ -1078,13 +1065,9 @@ export const ModelInfoSchema = lazySchema(() =>
     .describe('Information about an available model.'),
 )
 
-export const AccountInfoSchema = lazySchema(() =>
+export const ApiBackendInfoSchema = lazySchema(() =>
   z
     .object({
-      email: z.string().optional(),
-      organization: z.string().optional(),
-      subscriptionType: z.string().optional(),
-      tokenSource: z.string().optional(),
       apiKeySource: z.string().optional(),
       apiProvider: z
         .enum(['firstParty', 'bedrock', 'vertex', 'foundry'])
@@ -1225,12 +1208,13 @@ export const RewindFilesResultSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// External Type Placeholders
+// Opaque External Payload Schemas
 // ============================================================================
 //
-// These schemas use z.unknown() as placeholders for external types.
+// These schemas intentionally accept opaque values owned by external packages.
 // The generation script uses TypeOverrideMap to output the correct TS type references.
-// This allows us to define SDK message types in Zod while maintaining proper typing.
+// Keeping runtime validation open here preserves forward compatibility while the
+// generated TypeScript surface retains the precise external types.
 
 /** Placeholder for APIUserMessage from @anthropic-ai/sdk */
 export const APIUserMessagePlaceholder = lazySchema(() => z.unknown())
@@ -1300,48 +1284,6 @@ export const SDKUserMessageReplaySchema = lazySchema(() =>
   }),
 )
 
-export const SDKRateLimitInfoSchema = lazySchema(() =>
-  z
-    .object({
-      status: z.enum(['allowed', 'allowed_warning', 'rejected']),
-      resetsAt: z.number().optional(),
-      rateLimitType: z
-        .enum([
-          'five_hour',
-          'seven_day',
-          'seven_day_opus',
-          'seven_day_sonnet',
-          'overage',
-        ])
-        .optional(),
-      utilization: z.number().optional(),
-      overageStatus: z
-        .enum(['allowed', 'allowed_warning', 'rejected'])
-        .optional(),
-      overageResetsAt: z.number().optional(),
-      overageDisabledReason: z
-        .enum([
-          'overage_not_provisioned',
-          'org_level_disabled',
-          'org_level_disabled_until',
-          'out_of_credits',
-          'seat_tier_level_disabled',
-          'member_level_disabled',
-          'seat_tier_zero_credit_limit',
-          'group_zero_credit_limit',
-          'member_zero_credit_limit',
-          'org_service_level_disabled',
-          'org_service_zero_credit_limit',
-          'no_limits_configured',
-          'unknown',
-        ])
-        .optional(),
-      isUsingOverage: z.boolean().optional(),
-      surpassedThreshold: z.number().optional(),
-    })
-    .describe('Rate limit information for claude.ai subscription users.'),
-)
-
 export const SDKAssistantMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('assistant'),
@@ -1351,17 +1293,6 @@ export const SDKAssistantMessageSchema = lazySchema(() =>
     uuid: UUIDPlaceholder(),
     session_id: z.string(),
   }),
-)
-
-export const SDKRateLimitEventSchema = lazySchema(() =>
-  z
-    .object({
-      type: z.literal('rate_limit_event'),
-      rate_limit_info: SDKRateLimitInfoSchema(),
-      uuid: UUIDPlaceholder(),
-      session_id: z.string(),
-    })
-    .describe('Rate limit event emitted when rate limit info changes.'),
 )
 
 export const SDKStreamlinedTextMessageSchema = lazySchema(() =>
@@ -1718,12 +1649,6 @@ export const SDKTaskStartedMessageSchema = lazySchema(() =>
     tool_use_id: z.string().optional(),
     description: z.string(),
     task_type: z.string().optional(),
-    workflow_name: z
-      .string()
-      .optional()
-      .describe(
-        "meta.name from the workflow script (e.g. 'spec'). Only set when task_type is 'local_workflow'.",
-      ),
     prompt: z.string().optional(),
     uuid: UUIDPlaceholder(),
     session_id: z.string(),
@@ -1872,7 +1797,6 @@ export const SDKMessageSchema = lazySchema(() =>
     SDKSessionStateChangedMessageSchema(),
     SDKFilesPersistedEventSchema(),
     SDKToolUseSummaryMessageSchema(),
-    SDKRateLimitEventSchema(),
     SDKElicitationCompleteMessageSchema(),
     SDKPromptSuggestionMessageSchema(),
   ]),

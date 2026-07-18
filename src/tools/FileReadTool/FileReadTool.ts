@@ -528,10 +528,9 @@ export const FileReadTool = buildTool({
     // cache_creation). Only applies to text/notebook reads — images/PDFs
     // aren't cached in readFileState so won't match here.
     //
-    // Ant soak: 1,734 dedup hits in 2h, no Read error regression.
-    // Killswitch pattern: GB can disable if the stub message confuses
-    // the model externally.
-    // 3P default: killswitch off = dedup enabled. Client-side only — no
+    // The deployment-level killswitch can disable deduplication if the stub
+    // message is incompatible with a target model.
+    // Default: killswitch off = dedup enabled. Client-side only — no
     // server support needed, safe for Bedrock/Vertex/Foundry.
     const dedupKillswitch = getFeatureValue_CACHED_MAY_BE_STALE(
       'tengu_read_dedup_killswitch',

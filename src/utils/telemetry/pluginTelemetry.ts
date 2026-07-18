@@ -1,8 +1,7 @@
 /**
  * Plugin telemetry helpers — shared field builders for plugin lifecycle events.
  *
- * Implements the twin-column privacy pattern: every user-defined-name field
- * emits both a raw value (routed to PII-tagged _PROTO_* BQ columns) and a
+ * User-defined names are represented by a stable hash and redacted fields;
  * redacted twin (real name iff marketplace ∈ allowlist, else 'third-party').
  *
  * plugin_id_hash provides an opaque per-plugin aggregation key with no privacy
@@ -15,7 +14,6 @@ import { createHash } from 'crypto'
 import { sep } from 'path'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
   logEvent,
 } from '../../services/analytics/index.js'
 import type {
@@ -126,9 +124,8 @@ export function getEnabledVia(
 }
 
 /**
- * Common plugin telemetry fields keyed off name@marketplace. Returns the
- * hash, scope enum, and the redacted-twin columns. Callers add the raw
- * _PROTO_* fields separately (those require the PII-tagged marker type).
+ * Common privacy-preserving plugin telemetry fields keyed off
+ * name@marketplace. Returns the hash, scope enum, and redacted names.
  */
 export function buildPluginTelemetryFields(
   name: string,
@@ -197,12 +194,6 @@ export function logPluginsEnabledForSession(
     const { marketplace } = parsePluginIdentifier(plugin.repository)
 
     logEvent('tengu_plugin_enabled_for_session', {
-      _PROTO_plugin_name:
-        plugin.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      ...(marketplace && {
-        _PROTO_marketplace_name:
-          marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      }),
       ...buildPluginTelemetryFields(plugin.name, marketplace, managedNames),
       enabled_via: getEnabledVia(
         plugin,
@@ -277,12 +268,6 @@ export function logPluginLoadErrors(
     logEvent('tengu_plugin_load_failed', {
       error_category:
         err.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      _PROTO_plugin_name:
-        pluginName as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      ...(marketplace && {
-        _PROTO_marketplace_name:
-          marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      }),
       ...buildPluginTelemetryFields(pluginName, marketplace, managedNames),
     })
   }

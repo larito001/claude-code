@@ -1,12 +1,6 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { readFile, stat } from 'fs/promises'
 import { dirname } from 'path'
-import {
-  downloadUserSettings,
-  redownloadUserSettings,
-} from 'src/services/settingsSync/index.js'
-import { waitForRemoteManagedSettingsToLoad } from 'src/services/remoteManagedSettings/index.js'
 import { StructuredIO } from 'src/cli/structuredIO.js'
 import {
   type Command,
@@ -129,7 +123,6 @@ import { cwd } from 'process'
 import { getCwd } from 'src/utils/cwd.js'
 import omit from 'lodash-es/omit.js'
 import reject from 'lodash-es/reject.js'
-import { isPolicyAllowed } from 'src/services/policyLimits/index.js'
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js'
 import { hasPermissionsToUseTool } from 'src/utils/permissions/permissions.js'
 import { safeParseJSON } from 'src/utils/json.js'
@@ -178,7 +171,7 @@ import {
   type PromptVariant,
 } from 'src/services/PromptSuggestion/promptSuggestion.js'
 import { getLastCacheSafeParams } from 'src/utils/forkedAgent.js'
-import { getAccountInformation } from 'src/utils/auth.js'
+import { getApiCredentialInformation } from 'src/utils/auth.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import type { HookCallbackMatcher } from 'src/types/hooks.js'
 import { AwsAuthStatusManager } from 'src/utils/awsAuthStatusManager.js'
@@ -236,20 +229,11 @@ import {
 import { setupVscodeSdkMcp } from 'src/services/mcp/vscodeSdkMcp.js'
 import { getAllMcpConfigs } from 'src/services/mcp/config.js'
 import {
-  isQualifiedForGrove,
-  checkGroveForNonInteractive,
-} from 'src/services/api/grove.js'
-import {
   toInternalMessages,
-  toSDKRateLimitInfo,
 } from 'src/utils/messages/mappers.js'
 import { createModelSwitchBreadcrumbs } from 'src/utils/messages.js'
 import { collectContextData } from 'src/commands/context/context-noninteractive.js'
 import { LOCAL_COMMAND_STDOUT_TAG } from 'src/constants/xml.js'
-import {
-  statusListeners,
-  type ClaudeAILimits,
-} from 'src/services/claudeAiLimits.js'
 import {
   getDefaultMainLoopModel,
   getMainLoopModel,
@@ -272,7 +256,6 @@ import {
   setMainThreadAgentType,
   switchSession,
   isSessionPersistenceDisabled,
-  getIsRemoteMode,
   getFlagSettingsInline,
   setFlagSettingsInline,
   getMainThreadAgentType,
@@ -335,6 +318,7 @@ import { isBackgroundTask } from '../tasks/types.js'
 import { stopTask } from '../tasks/stopTask.js'
 import { drainSdkEvents } from '../utils/sdkEventQueue.js'
 import { initializeGrowthBook } from '../services/analytics/growthbook.js'
+import { drainPendingExtraction } from '../services/extractMemories/extractMemories.js'
 import { errorMessage, toError } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
 import { isExtractModeActive } from '../memdir/paths.js'
@@ -345,7 +329,7 @@ const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('../coordinator/coordinatorMode.js') as typeof import('../coordinator/coordinatorMode.js'))
   : null
 const proactiveModule =
-  feature('PROACTIVE') || feature('KAIROS')
+  feature('PROACTIVE')
     ? (require('../proactive/index.js') as typeof import('../proactive/index.js'))
     : null
 const cronSchedulerModule = feature('AGENT_TRIGGERS')
@@ -356,9 +340,6 @@ const cronJitterConfigModule = feature('AGENT_TRIGGERS')
   : null
 const cronGate = feature('AGENT_TRIGGERS')
   ? (require('../tools/ScheduleCronTool/prompt.js') as typeof import('../tools/ScheduleCronTool/prompt.js'))
-  : null
-const extractMemoriesModule = feature('EXTRACT_MEMORIES')
-  ? (require('../services/extractMemories/extractMemories.js') as typeof import('../services/extractMemories/extractMemories.js'))
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 
@@ -475,27 +456,12 @@ export async function runHeadless(
     setSDKStatus?: (status: SDKStatus) => void
   },
 ): Promise<void> {
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    isEnvTruthy(process.env.CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER)
-  ) {
+  if (isEnvTruthy(process.env.CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER)) {
     process.stderr.write(
       `\nStartup time: ${Math.round(process.uptime() * 1000)}ms\n`,
     )
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
-  }
-
-  // Fire user settings download now so it overlaps with the MCP/tool setup
-  // below. Managed settings already started in main.tsx preAction; this gives
-  // user settings a similar head start. The cached promise is joined in
-  // installPluginsAndApplyMcpInBackground before plugin install reads
-  // enabledPlugins.
-  if (
-    feature('DOWNLOAD_USER_SETTINGS') &&
-    (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) || getIsRemoteMode())
-  ) {
-    void downloadUserSettings()
   }
 
   // In headless mode there is no React tree, so the useSettingsChange hook
@@ -520,7 +486,7 @@ export async function runHeadless(
   // where CLAUDE_CODE_PROACTIVE is set but main.tsx's check didn't fire
   // (e.g. env was injected by the SDK transport after argv parsing).
   if (
-    (feature('PROACTIVE') || feature('KAIROS')) &&
+    (feature('PROACTIVE')) &&
     proactiveModule &&
     !proactiveModule.isProactiveActive() &&
     isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE)
@@ -537,12 +503,6 @@ export async function runHeadless(
   // Start headless profiler for first turn
   headlessProfilerStartTurn()
   headlessProfilerCheckpoint('runHeadless_entry')
-
-  // Check Grove requirements for non-interactive consumer subscribers
-  if (await isQualifiedForGrove()) {
-    await checkGroveForNonInteractive()
-  }
-  headlessProfilerCheckpoint('after_grove_check')
 
   // Initialize GrowthBook so feature flags take effect in headless mode.
   // Without this, the disk cache is empty and all flags fall back to defaults.
@@ -828,7 +788,7 @@ export async function runHeadless(
   const messages: SDKMessage[] = []
   let lastMessage: SDKMessage | undefined
   // Streamlined mode transforms messages when CLAUDE_CODE_STREAMLINED_OUTPUT=true and using stream-json
-  // Build flag gates this out of external builds; env var is the runtime opt-in for ant builds
+  // The local feature flag and environment variable are both required.
   const transformToStreamlined =
     feature('STREAMLINED_OUTPUT') &&
     isEnvTruthy(process.env.CLAUDE_CODE_STREAMLINED_OUTPUT) &&
@@ -941,7 +901,7 @@ export async function runHeadless(
   // the forked agent mid-flight. Gated by isExtractModeActive so the
   // tengu_slate_thimble flag controls non-interactive extraction end-to-end.
   if (feature('EXTRACT_MEMORIES') && isExtractModeActive()) {
-    await extractMemoriesModule!.drainPendingExtraction()
+    await drainPendingExtraction()
   }
 
   gracefulShutdownSync(
@@ -1020,7 +980,6 @@ function runHeadlessStreaming(
       run_active: running,
       run_phase: runPhase,
       worker_status: getSessionState(),
-      internal_events_pending: structuredIO.internalEventsPending,
       bg_tasks: bg,
     })
   })
@@ -1098,22 +1057,6 @@ function runHeadlessStreaming(
       })
     })
   }
-
-  // Set up rate limit status listener to emit SDKRateLimitEvent for all status changes.
-  // Emitting for all statuses (including 'allowed') ensures consumers can clear warnings
-  // when rate limits reset. The upstream emitStatusChange already deduplicates via isEqual.
-  const rateLimitListener = (limits: ClaudeAILimits) => {
-    const rateLimitInfo = toSDKRateLimitInfo(limits)
-    if (rateLimitInfo) {
-      output.enqueue({
-        type: 'rate_limit_event',
-        rate_limit_info: rateLimitInfo,
-        uuid: randomUUID(),
-        session_id: getSessionId(),
-      })
-    }
-  }
-  statusListeners.add(rateLimitListener)
 
   // Messages for internal tracking, directly mutated by ask(). These messages
   // include Assistant, User, Attachment, and Progress messages.
@@ -1581,12 +1524,6 @@ function runHeadlessStreaming(
           headers: connection.config.headers,
           oauth: connection.config.oauth,
         }
-      } else if (connection.config.type === 'claudeai-proxy') {
-        config = {
-          type: 'claudeai-proxy' as const,
-          url: connection.config.url,
-          id: connection.config.id,
-        }
       } else if (
         connection.config.type === 'stdio' ||
         connection.config.type === undefined
@@ -1615,7 +1552,7 @@ function runHeadlessStreaming(
       // handler re-runs the full gate); just avoids dead buttons.
       let capabilities: { experimental?: Record<string, unknown> } | undefined
       if (
-        (feature('KAIROS') || feature('KAIROS_CHANNELS')) &&
+        (feature('MCP_CHANNELS')) &&
         connection.type === 'connected' &&
         connection.capabilities.experimental
       ) {
@@ -1648,21 +1585,6 @@ function runHeadlessStreaming(
   // NOTE: Nested function required - needs closure access to applyMcpServerChanges and updateSdkMcp
   async function installPluginsAndApplyMcpInBackground(): Promise<void> {
     try {
-      // Join point for user settings (fired at runHeadless entry) and managed
-      // settings (fired in main.tsx preAction). downloadUserSettings() caches
-      // its promise so this awaits the same in-flight request.
-      await Promise.all([
-        feature('DOWNLOAD_USER_SETTINGS') &&
-        (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) || getIsRemoteMode())
-          ? withDiagnosticsTiming('headless_user_settings_download', () =>
-              downloadUserSettings(),
-            )
-          : Promise.resolve(),
-        withDiagnosticsTiming('headless_managed_settings_wait', () =>
-          waitForRemoteManagedSettingsToLoad(),
-        ),
-      ])
-
       const pluginsInstalled = await installPluginsForHeadless()
 
       if (pluginsInstalled) {
@@ -1777,7 +1699,7 @@ function runHeadlessStreaming(
   // setTimeout(0) yields to the event loop so pending stdin messages
   // (interrupts, user messages) are processed before the tick fires.
   const scheduleProactiveTick =
-    feature('PROACTIVE') || feature('KAIROS')
+    feature('PROACTIVE')
       ? () => {
           setTimeout(() => {
             if (
@@ -2152,10 +2074,7 @@ function runHeadlessStreaming(
                 const currentState = getAppState()
                 if (
                   getRunningTasks(currentState).some(
-                    t =>
-                      (t.type === 'local_agent' ||
-                        t.type === 'local_workflow') &&
-                      isBackgroundTask(t),
+                    t => t.type === 'local_agent' && isBackgroundTask(t),
                   )
                 ) {
                   heldBackResult = message
@@ -2359,8 +2278,6 @@ function runHeadlessStreaming(
       return
     } finally {
       runPhase = 'finally_flush'
-      // Flush pending internal events before going idle
-      await structuredIO.flushInternalEvents()
       runPhase = 'finally_post_flush'
       if (!isShuttingDown()) {
         notifySessionStateChanged('idle')
@@ -2381,7 +2298,7 @@ function runHeadlessStreaming(
 
     // Proactive tick: if proactive is active and queue is empty, inject a tick
     if (
-      (feature('PROACTIVE') || feature('KAIROS')) &&
+      (feature('PROACTIVE')) &&
       proactiveModule?.isProactiveActive() &&
       !proactiveModule.isProactivePaused()
     ) {
@@ -2581,23 +2498,9 @@ function runHeadlessStreaming(
         await finalizePendingAsyncHooks()
         unsubscribeSkillChanges()
         unsubscribeAuthStatus?.()
-        statusListeners.delete(rateLimitListener)
         output.done()
       }
     }
-  }
-
-  // Set up UDS inbox callback so the query loop is kicked off
-  // when a message arrives via the UDS socket in headless mode.
-  if (feature('UDS_INBOX')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { setOnEnqueue } = require('../utils/udsMessaging.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    setOnEnqueue(() => {
-      if (!inputClosed) {
-        void run()
-      }
-    })
   }
 
   // Cron scheduler: runs scheduled_tasks.json tasks in SDK/-p mode.
@@ -2611,7 +2514,7 @@ function runHeadlessStreaming(
   if (
     feature('AGENT_TRIGGERS') &&
     cronSchedulerModule &&
-    cronGate?.isKairosCronEnabled()
+    cronGate?.isCronSchedulingEnabled()
   ) {
     cronScheduler = cronSchedulerModule.createCronScheduler({
       onFire: prompt => {
@@ -2635,7 +2538,7 @@ function runHeadlessStreaming(
       },
       isLoading: () => running || inputClosed,
       getJitterConfig: cronJitterConfigModule?.getCronJitterConfig,
-      isKilled: () => !cronGate?.isKairosCronEnabled(),
+      isKilled: () => !cronGate?.isCronSchedulingEnabled(),
     })
     cronScheduler.start()
   }
@@ -2726,7 +2629,7 @@ function runHeadlessStreaming(
 
       if (message.type === 'control_request') {
         if (message.request.subtype === 'interrupt') {
-          // Track escapes for attribution (ant-only feature)
+          // Track interrupts when commit attribution is explicitly enabled.
           if (feature('COMMIT_ATTRIBUTION')) {
             setAppState(prev => ({
               ...prev,
@@ -2960,18 +2863,6 @@ function runHeadlessStreaming(
           }
         } else if (message.request.subtype === 'reload_plugins') {
           try {
-            if (
-              feature('DOWNLOAD_USER_SETTINGS') &&
-              (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) || getIsRemoteMode())
-            ) {
-              // Re-pull user settings so enabledPlugins pushed from the
-              // user's local CLI take effect before the cache sweep.
-              const applied = await redownloadUserSettings()
-              if (applied) {
-                settingsChangeDetector.notifyChange('userSettings')
-              }
-            }
-
             const r = await refreshActivePlugins(setAppState)
 
             const sdkAgents = currentAgents.filter(
@@ -3523,7 +3414,7 @@ function runHeadlessStreaming(
             ...getSettingsWithSources(),
             applied: {
               model,
-              // Numeric effort (ant-only) → null; SDK schema is string-level only.
+              // Numeric effort is not part of the public SDK schema.
               effort: typeof effort === 'string' ? effort : null,
             },
           })
@@ -3631,7 +3522,7 @@ function runHeadlessStreaming(
             }
           })()
         } else if (
-          (feature('PROACTIVE') || feature('KAIROS')) &&
+          (feature('PROACTIVE')) &&
           (message.request as { subtype: string }).subtype === 'set_proactive'
         ) {
           const req = message.request as unknown as {
@@ -3762,7 +3653,6 @@ function runHeadlessStreaming(
       await finalizePendingAsyncHooks()
       unsubscribeSkillChanges()
       unsubscribeAuthStatus?.()
-      statusListeners.delete(rateLimitListener)
       output.done()
     }
   })()
@@ -4058,8 +3948,8 @@ async function handleInitializeRequest(
   const outputStyle = settings?.outputStyle || DEFAULT_OUTPUT_STYLE_NAME
   const availableOutputStyles = await getAllOutputStyles(getCwd())
 
-  // Get account information
-  const accountInfo = getAccountInformation()
+  // Report only provider-neutral credential metadata. No account session exists.
+  const credentialInfo = getApiCredentialInformation()
   if (request.hooks) {
     const hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {}
     for (const [event, matchers] of Object.entries(request.hooks)) {
@@ -4096,14 +3986,9 @@ async function handleInitializeRequest(
     available_output_styles: Object.keys(availableOutputStyles),
     models: modelInfos,
     account: {
-      email: accountInfo?.email,
-      organization: accountInfo?.organization,
-      subscriptionType: accountInfo?.subscription,
-      tokenSource: accountInfo?.tokenSource,
-      apiKeySource: accountInfo?.apiKeySource,
-      // getAccountInformation() returns undefined under 3P providers, so the
-      // other fields are all absent. apiProvider disambiguates "not logged
-      // in" (firstParty + tokenSource:none) from "3P, login not applicable".
+      // `account` is retained for Claude Agent SDK wire compatibility; it
+      // contains only API credential/provider metadata, never a login session.
+      apiKeySource: credentialInfo?.apiKeySource,
       apiProvider: getAPIProvider(),
     },
     pid: process.pid,
@@ -4299,7 +4184,7 @@ function handleChannelEnable(
       response: { subtype: 'error', request_id: requestId, error },
     })
 
-  if (!(feature('KAIROS') || feature('KAIROS_CHANNELS'))) {
+  if (!(feature('MCP_CHANNELS'))) {
     return respondError('channels feature not available in this build')
   }
 
@@ -4414,7 +4299,7 @@ function handleChannelEnable(
 function reregisterChannelHandlerAfterReconnect(
   connection: MCPServerConnection,
 ): void {
-  if (!(feature('KAIROS') || feature('KAIROS_CHANNELS'))) return
+  if (!(feature('MCP_CHANNELS'))) return
   if (connection.type !== 'connected') return
 
   const gate = gateChannelServer(
@@ -4611,8 +4496,7 @@ async function loadInitialMessages(
     }
   }
 
-  // Handle resume in print mode (accepts session ID or URL)
-  // URLs are [ANT-ONLY]
+  // Handle resume in print mode (accepts a session ID or local JSONL file).
   if (options.resume) {
     try {
       logEvent('tengu_resume_print', {})

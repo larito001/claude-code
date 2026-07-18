@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { chmod, open, rename, stat, unlink } from 'fs/promises'
 import mapValues from 'lodash-es/mapValues.js'
 import memoize from 'lodash-es/memoize.js'
@@ -39,7 +39,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import { fetchClaudeAIMcpConfigsIfEligible } from './claudeai.js'
 import { expandEnvVarsInString } from './envExpansion.js'
 import {
   type ConfigScope,
@@ -161,37 +160,6 @@ function getServerUrl(config: McpServerConfig): string | null {
 }
 
 /**
- * CCR proxy URL path markers. In remote sessions, claude.ai connectors arrive
- * via --mcp-config with URLs rewritten to route through the CCR/session-ingress
- * SHTTP proxy. The original vendor URL is preserved in the mcp_url query param
- * so the proxy knows where to forward. See api-go/ccr/internal/ccrshared/
- * mcp_url_rewriter.go and api-go/ccr/internal/mcpproxy/proxy.go.
- */
-const CCR_PROXY_PATH_MARKERS = [
-  '/v2/session_ingress/shttp/mcp/',
-  '/v2/ccr-sessions/',
-]
-
-/**
- * If the URL is a CCR proxy URL, extract the original vendor URL from the
- * mcp_url query parameter. Otherwise return the URL unchanged. This lets
- * signature-based dedup match a plugin's raw vendor URL against a connector's
- * rewritten proxy URL when both point at the same MCP server.
- */
-export function unwrapCcrProxyUrl(url: string): string {
-  if (!CCR_PROXY_PATH_MARKERS.some(m => url.includes(m))) {
-    return url
-  }
-  try {
-    const parsed = new URL(url)
-    const original = parsed.searchParams.get('mcp_url')
-    return original || url
-  } catch {
-    return url
-  }
-}
-
-/**
  * Compute a dedup signature for an MCP server config.
  * Two configs with the same signature are considered "the same server" for
  * plugin deduplication. Ignores env (plugins always inject CLAUDE_PLUGIN_ROOT)
@@ -205,7 +173,7 @@ export function getMcpServerSignature(config: McpServerConfig): string | null {
   }
   const url = getServerUrl(config)
   if (url) {
-    return `url:${unwrapCcrProxyUrl(url)}`
+    return `url:${url}`
   }
   return null
 }
@@ -259,50 +227,6 @@ export function dedupPluginMcpServers(
       continue
     }
     seenPluginSigs.set(sig, name)
-    servers[name] = config
-  }
-  return { servers, suppressed }
-}
-
-/**
- * Filter claude.ai connectors, dropping any whose signature matches an enabled
- * manually-configured server. Manual wins: a user who wrote .mcp.json or ran
- * `claude mcp add` expressed higher intent than a connector toggled in the web UI.
- *
- * Connector keys are `claude.ai <DisplayName>` so they never key-collide with
- * manual servers in the merge — this content-based check catches the case where
- * both point at the same underlying URL (e.g. `mcp__slack__*` and
- * `mcp__claude_ai_Slack__*` both hitting mcp.slack.com, ~600 chars/turn wasted).
- *
- * Only enabled manual servers count as dedup targets — a disabled manual server
- * mustn't suppress its connector twin, or neither runs.
- */
-export function dedupClaudeAiMcpServers(
-  claudeAiServers: Record<string, ScopedMcpServerConfig>,
-  manualServers: Record<string, ScopedMcpServerConfig>,
-): {
-  servers: Record<string, ScopedMcpServerConfig>
-  suppressed: Array<{ name: string; duplicateOf: string }>
-} {
-  const manualSigs = new Map<string, string>()
-  for (const [name, config] of Object.entries(manualServers)) {
-    if (isMcpServerDisabled(name)) continue
-    const sig = getMcpServerSignature(config)
-    if (sig && !manualSigs.has(sig)) manualSigs.set(sig, name)
-  }
-
-  const servers: Record<string, ScopedMcpServerConfig> = {}
-  const suppressed: Array<{ name: string; duplicateOf: string }> = []
-  for (const [name, config] of Object.entries(claudeAiServers)) {
-    const sig = getMcpServerSignature(config)
-    const manualDup = sig !== null ? manualSigs.get(sig) : undefined
-    if (manualDup !== undefined) {
-      logForDebugging(
-        `Suppressing claude.ai connector "${name}": duplicates manually-configured "${manualDup}"`,
-      )
-      suppressed.push({ name, duplicateOf: manualDup })
-      continue
-    }
     servers[name] = config
   }
   return { servers, suppressed }
@@ -603,9 +527,6 @@ function expandEnvVars(config: McpServerConfig): {
     case 'sdk':
       expanded = config
       break
-    case 'claudeai-proxy':
-      expanded = config
-      break
   }
 
   return {
@@ -690,8 +611,6 @@ export async function addMcpConfig(
       throw new Error('Cannot add MCP server to scope: dynamic')
     case 'enterprise':
       throw new Error('Cannot add MCP server to scope: enterprise')
-    case 'claudeai':
-      throw new Error('Cannot add MCP server to scope: claudeai')
   }
 
   // Add based on scope
@@ -1045,19 +964,12 @@ export function getMcpConfigByName(name: string): ScopedMcpServerConfig | null {
 }
 
 /**
- * Get Claude Code MCP configurations (excludes claude.ai servers from the
- * returned set — they're fetched separately and merged by callers).
- * This is fast: only local file reads; no awaited network calls on the
- * critical path. The optional extraDedupTargets promise (e.g. the in-flight
- * claude.ai connector fetch) is awaited only after loadAllPluginsCacheOnly() completes,
- * so the two overlap rather than serialize.
+ * Get Claude Code MCP configurations from enterprise, user, project, local,
+ * dynamic, and plugin sources.
  * @returns Claude Code server configurations with appropriate scopes
  */
 export async function getClaudeCodeMcpConfigs(
   dynamicServers: Record<string, ScopedMcpServerConfig> = {},
-  extraDedupTargets: Promise<
-    Record<string, ScopedMcpServerConfig>
-  > = Promise.resolve({}),
 ): Promise<{
   servers: Record<string, ScopedMcpServerConfig>
   errors: PluginError[]
@@ -1161,14 +1073,12 @@ export async function getClaudeCodeMcpConfigs(
   // Only servers that will actually connect are valid dedup targets — a
   // disabled manual server mustn't suppress a plugin server, or neither runs
   // (manual is skipped by name at connection time; plugin was removed here).
-  const extraTargets = await extraDedupTargets
   const enabledManualServers: Record<string, ScopedMcpServerConfig> = {}
   for (const [name, config] of Object.entries({
     ...userServers,
     ...approvedProjectServers,
     ...localServers,
     ...dynamicServers,
-    ...extraTargets,
   })) {
     if (
       !isMcpServerDisabled(name) &&
@@ -1236,42 +1146,14 @@ export async function getClaudeCodeMcpConfigs(
 }
 
 /**
- * Get all MCP configurations across all scopes, including claude.ai servers.
- * This may be slow due to network calls - use getClaudeCodeMcpConfigs() for fast startup.
+ * Get all MCP configurations across all local, enterprise, and plugin scopes.
  * @returns All server configurations with appropriate scopes
  */
 export async function getAllMcpConfigs(): Promise<{
   servers: Record<string, ScopedMcpServerConfig>
   errors: PluginError[]
 }> {
-  // In enterprise mode, don't load claude.ai servers (enterprise has exclusive control)
-  if (doesEnterpriseMcpConfigExist()) {
-    return getClaudeCodeMcpConfigs()
-  }
-
-  // Kick off the claude.ai fetch before getClaudeCodeMcpConfigs so it overlaps
-  // with loadAllPluginsCacheOnly() inside. Memoized — the awaited call below is a cache hit.
-  const claudeaiPromise = fetchClaudeAIMcpConfigsIfEligible()
-  const { servers: claudeCodeServers, errors } = await getClaudeCodeMcpConfigs(
-    {},
-    claudeaiPromise,
-  )
-  const { allowed: claudeaiMcpServers } = filterMcpServersByPolicy(
-    await claudeaiPromise,
-  )
-
-  // Suppress claude.ai connectors that duplicate an enabled manual server.
-  // Keys never collide (`slack` vs `claude.ai Slack`) so the merge below
-  // won't catch this — need content-based dedup by URL signature.
-  const { servers: dedupedClaudeAi } = dedupClaudeAiMcpServers(
-    claudeaiMcpServers,
-    claudeCodeServers,
-  )
-
-  // Merge with claude.ai having lowest precedence
-  const servers = Object.assign({}, dedupedClaudeAi, claudeCodeServers)
-
-  return { servers, errors }
+  return getClaudeCodeMcpConfigs()
 }
 
 /**

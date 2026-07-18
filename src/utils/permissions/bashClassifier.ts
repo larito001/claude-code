@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { ToolPermissionContext } from '../../Tool.js'
 
 export const PROMPT_PREFIX = 'prompt:'

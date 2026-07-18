@@ -1,206 +1,163 @@
-# Claude Code 源码：可构建的研究分支
+# Claude Code 核心开发框架
 
-[![构建状态](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun)](https://bun.sh)
-[![TypeScript](https://img.shields.io/badge/lang-TypeScript-3178c6?logo=typescript&logoColor=white)]()
-[![代码行数](https://img.shields.io/badge/lines-512K+-blue)]()
-[![许可证](https://img.shields.io/badge/license-research%20only-orange)]()
-[![Stars](https://img.shields.io/github/stars/beita6969/claude-code?style=social)](https://github.com/beita6969/claude-code/stargazers)
-[![Forks](https://img.shields.io/github/forks/beita6969/claude-code?style=social)](https://github.com/beita6969/claude-code/network/members)
+这是一个面向二次开发的 Claude Code 核心基底。项目保留原有 Agent 循环、工具系统、终端交互和扩展协议，移除 Claude/Anthropic 网页登录、订阅认证及与账号产品绑定的外围能力。
 
-> Claude Code 源码的一个**可构建、可修改、可运行**版本。
+默认开发配置使用 `.env` 中的 API Key，不会启动登录或 `/logout` 流程。
 
-本项目基于 2026-03-31 通过 npm source map 泄露而公开的 Claude Code 源码快照。原始快照仅含原始 TypeScript 源码，没有构建配置，因此无法编译或运行。本分支重建了完整构建系统，并修复缺失组件以使其可用。
+## 保留的核心
 
-**[快速开始](#快速开始)** | **[架构](#架构概览)** | **[功能开关](#功能开关)** | **[扩展指南](#扩展点无需修改源码)**
+- Query/Agent 执行循环与流式响应
+- Bash、PowerShell、文件读写、搜索、计划和子 Agent 工具
+- Command、Tool、Agent、Skill、Plugin、Hook 扩展接口
+- MCP stdio、HTTP、SSE 与 OAuth 服务器接入
+- 会话持久化、恢复、回退与导出
+- 自动压缩、上下文提醒和文件记忆
+- 权限规则、沙箱与工作目录隔离
+- React/Ink 交互式终端 UI
+- API Key Provider 与公开 Agent SDK 门面
+- Windows、macOS、Linux 路径和 Shell 适配
 
----
+已删除的主要内容包括网页登录/订阅认证、Claude.ai 远程会话与远程配置、Desktop/Chrome 产品引流、反馈调查、内部 Daemon/Runner、缺失实现的 Workflow/Monitor/WebBrowser 实验入口。通用 MCP OAuth 不属于 Claude 账号登录，因此仍保留。
 
-## 快速开始
+## 环境要求
 
-### 前置条件
+- Bun 1.3 或更高版本
+- 一个 Anthropic 兼容 API 的 Key
+- 建议安装 Git 与 ripgrep
 
-- [Bun](https://bun.sh) >= 1.3.x
-- `.env` 中配置有效的 `DEEPSEEK_API_KEY`（开发入口会映射给 Anthropic 兼容 SDK）
+## 快速启动
 
-### 安装与运行
+安装依赖：
 
 ```bash
-git clone https://github.com/beita6969/claude-code.git
-cd claude-code
-
-# 安装依赖（postinstall 会自动创建 bun:bundle polyfill）
 bun install
-
-# 直接运行（自动读取 .env）
-bun run dev -- -p "your prompt here" --output-format text
 ```
 
-### 构建（可选）
+复制配置模板，并填写自己的 Key：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+macOS/Linux：
 
 ```bash
-# 编译为单一 bundle（约 20MB）
-bun build src/entrypoints/cli.tsx --outdir=dist --target=bun
+cp .env.example .env
 ```
 
-### 运行模式
+交互式启动：
 
 ```bash
-# 无界面输出模式（无需 TTY）
-bun src/entrypoints/cli.tsx -p "your prompt here" --output-format text
-
-# JSON 输出
-bun src/entrypoints/cli.tsx -p "your prompt here" --output-format json
-
-# 交互式 REPL 模式（需要 TTY）
-bun src/entrypoints/cli.tsx
+bun run dev
 ```
 
-> **注意**：此裁剪版只使用 API Key，不包含 Claude/Anthropic 网页登录、订阅认证、Claude in Chrome 或 Computer Use 流程。
+单次调用：
 
----
-
-## 与原始快照相比的变更
-
-原始快照**没有 `package.json`、`tsconfig.json`、锁文件或构建脚本**，并且 source map 缺少 100 多个内部模块及功能门控模块。
-
-### 构建系统（已重建）
-
-| 文件 | 用途 |
-|------|------|
-| `package.json` | 根据约 1,900 个源文件逆向整理出的 60+ npm 依赖 |
-| `tsconfig.json` | TypeScript 配置（ESNext、JSX、Bun bundler 模块解析） |
-| `bunfig.toml` | Bun 运行时配置 |
-| `scripts/postinstall.ts` | 跨平台地在 `bun install` 后创建 `bun:bundle` 运行时 polyfill |
-| `.gitignore` | 排除 `node_modules/`、`dist/` 和锁文件 |
-
-### 依赖适配与裁剪
-
-- Sharp、Turndown、Bedrock/Foundry/Vertex、AWS/Azure 与 OpenTelemetry 已接入公开正式包。
-- `color-diff-napi` 已替换为项目内 TypeScript 实现。
-- Claude in Chrome、Computer Use 及其 `@ant/*` 私有依赖已沿入口、UI、配置和 MCP 调用链删除。
-- `audio-capture-napi` 无调用方，已删除；`modifiers-napi` 改为跨平台可降级的可选能力。
-
-### 源码修复
-
-| 文件 | 变更 |
-|------|------|
-| `src/main.tsx` | 运行时注入 `MACRO` 常量（生产环境中为编译期定义） |
-| `src/main.tsx` | 修复 Commander.js 对 `-d2e` 短参数的不兼容问题 |
-| `src/bootstrap/state.ts` | 增加缺失的 `isReplBridgeActive()` 导出 |
-| `src/types/connectorText.ts` | 增加 `isConnectorTextBlock` 函数 stub |
-| `src/tools/WorkflowTool/constants.ts` | 增加 `WORKFLOW_TOOL_NAME` 导出 |
-
----
-
-## 架构概览
-
+```bash
+bun run dev -- -p "只回复 OK" --output-format text
 ```
+
+`bun run dev` 会明确加载仓库根目录的 `.env`。当设置 `DEEPSEEK_API_KEY` 时，入口会把它映射到 Anthropic 兼容 SDK 使用的 `ANTHROPIC_API_KEY`；也可以直接配置标准的 `ANTHROPIC_API_KEY`。
+
+## `.env` 配置
+
+DeepSeek 示例：
+
+```dotenv
+ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+DEEPSEEK_API_KEY=replace-with-your-api-key
+ANTHROPIC_MODEL=deepseek-v4-pro
+ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro
+ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash
+CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash
+```
+
+其他兼容 Provider 可替换 `ANTHROPIC_BASE_URL`、模型名和 API Key。真实 `.env` 已被 Git 忽略，不要把密钥提交到仓库。
+
+## IDE 中运行
+
+在 JetBrains IDE 或 VS Code 中创建 Bun 运行配置：
+
+- 入口：`src/entrypoints/cli.tsx`
+- 工作目录：仓库根目录
+- 环境文件：仓库根目录的 `.env`
+- 终端：启用交互式/TTY 终端
+
+无 TTY 的普通 Run Console 只适合 `-p` 单次调用；完整输入框和快捷键需要交互式终端。
+
+## 构建与检查
+
+```bash
+# CLI + SDK 构建、公共扩展面类型检查、离线冒烟测试
+bun run check
+
+# 只构建
+bun run build
+
+# 运行构建产物
+bun dist/cli.js
+```
+
+`bun run typecheck` 检查公共 SDK、feature 配置和新增的框架维护模块。`bun run typecheck:legacy` 用于审计原始 React Compiler 生成源码；这批源码包含上游生成代码的静态类型噪声，运行正确性以正式构建和冒烟测试为准。
+
+## 配置界面
+
+```bash
+bun run config
+```
+
+界面仅监听 `127.0.0.1:3456`，可管理：
+
+- 用户、项目和本地 settings
+- 模型、权限与 Hooks
+- Agent 和 Skill 文件
+- `.mcp.json`
+- CLAUDE.md 与记忆文件
+- 已支持的本地 framework feature
+
+Feature 配置只会更新 `.env` 中的 `CLAUDE_CODE_FEATURES` 和 `CLAUDE_CODE_DISABLE_FEATURES`，不会读取或返回 API Key。
+
+## 扩展点
+
+| 能力 | 默认位置 | 说明 |
+| --- | --- | --- |
+| Project Skill | `.claude/skills/<name>/SKILL.md` | YAML frontmatter + Markdown |
+| Project Agent | `.claude/agents/<name>.md` | Prompt、工具、模型和权限 |
+| Project Hook | `.claude/settings.json` | 生命周期事件与命令/Prompt Hook |
+| MCP Server | `.mcp.json` | stdio/http/sse/ws 配置 |
+| Plugin | settings/marketplace | Command、Skill、Agent、Hook、MCP 组合扩展 |
+| SDK | `src/entrypoints/agentSdkTypes.ts` | 公开 Agent SDK API 和本地协议常量 |
+
+核心 feature 默认开启；已适配但默认关闭的本地能力可通过环境变量启用：
+
+```dotenv
+CLAUDE_CODE_FEATURES=PROACTIVE,COORDINATOR_MODE
+CLAUDE_CODE_DISABLE_FEATURES=QUICK_SEARCH
+```
+
+未知或未审计的历史 feature 不会被启用，避免缺失的内部产品模块进入商业运行链路。
+
+## 核心目录
+
+```text
 src/
-├── main.tsx              # CLI 入口（Commander.js + React/Ink）
-├── QueryEngine.ts        # 核心 LLM API 引擎
-├── query.ts              # Agent 循环（异步生成器）
-├── Tool.ts               # 工具类型定义
-├── tools.ts              # 工具注册表
-├── commands.ts           # 命令注册表
-├── context.ts            # 系统提示词上下文
-│
-├── tools/                # 40+ 工具实现
-│   ├── AgentTool/        # 子代理创建与协调
-│   ├── BashTool/         # Shell 命令执行
-│   ├── FileReadTool/     # 文件读取
-│   ├── FileEditTool/     # 文件编辑
-│   ├── GrepTool/         # 基于 ripgrep 的搜索
-│   ├── MCPTool/          # MCP 服务器工具调用
-│   ├── SkillTool/        # 技能执行
-│   └── ...
-│
-├── services/             # 外部集成
-│   ├── api/              # Anthropic API 客户端
-│   ├── mcp/              # MCP 服务器管理
-│   └── ...
-│
-├── memdir/               # 持久化记忆系统
-├── skills/               # 技能系统（内置与用户自定义）
-├── components/           # React/Ink 终端 UI
-├── hooks/                # React Hooks
-├── coordinator/          # 多代理编排
-└── stubs/                # 少量运行时兼容模块
+├── entrypoints/           CLI 与 SDK 入口
+├── QueryEngine.ts         查询生命周期和状态编排
+├── query.ts               Agent/Tool 循环
+├── Tool.ts                工具契约
+├── tools.ts               工具注册表
+├── commands.ts            命令与 Skill 注册表
+├── services/api/          Provider API、重试与流式事件
+├── services/mcp/          MCP 配置和连接管理
+├── tools/AgentTool/       内置/自定义 Agent 与子任务
+├── skills/                Skill 加载和执行
+├── utils/hooks/           Hook 注册与生命周期
+├── utils/sessionStorage.ts 会话持久化与恢复
+├── services/compact/      上下文压缩
+├── memdir/                文件记忆
+└── components/            React/Ink TUI
 ```
 
-### 关键系统
+## 商业使用提示
 
-| 系统 | 文件 | 说明 |
-|------|------|------|
-| **Agent 循环** | `query.ts`、`QueryEngine.ts` | `while(true)` 异步生成器：查询 → 工具调用 → 返回结果 → 继续循环 |
-| **记忆** | `memdir/` | 四类基于文件的记忆（用户、反馈、项目、参考），以 `MEMORY.md` 为索引 |
-| **MCP** | `services/mcp/` | Model Context Protocol 服务器管理（stdio/http/sse/ws） |
-| **技能** | `skills/`、`tools/SkillTool/` | 可复用的工作流模板（`SKILL.md` 格式） |
-| **代理** | `tools/AgentTool/` | 通过 `.claude/agents/*.md` 定义自定义代理类型 |
-| **系统提示词** | `constants/prompts.ts` | 分层提示词：静态 → 动态 → 记忆 → 代理 |
-
-### 扩展点（无需修改源码）
-
-| 机制 | 位置 | 格式 |
-|------|------|------|
-| 自定义技能 | `.claude/skills/name/SKILL.md` | YAML frontmatter + Markdown |
-| 自定义代理 | `.claude/agents/name.md` | YAML frontmatter + Markdown |
-| MCP 服务器 | `.mcp.json` | JSON 配置 |
-| Hooks | `~/.claude/settings.json` | JSON 事件—操作映射 |
-
----
-
-## 功能开关
-
-`bun:bundle` 的 `feature()` 函数控制功能门控。在本构建中，所有功能默认**关闭**。如需启用功能，请编辑由 `bun install` 自动生成的 `node_modules/bundle/index.js`：
-
-```javascript
-const ENABLED_FEATURES = new Set([
-  // 取消注释即可启用：
-  // 'KAIROS',              // 助手模式
-  // 'PROACTIVE',           // 主动模式
-  // 'BRIDGE_MODE',         // IDE 桥接
-  // 'VOICE_MODE',          // 语音输入
-  // 'COORDINATOR_MODE',    // 多代理协调器
-  // 'EXTRACT_MEMORIES',    // 后台记忆提取
-  // 'TEAMMEM',             // 团队记忆
-])
-```
-
----
-
-## 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| 运行时 | Bun |
-| 语言 | TypeScript（严格模式） |
-| 终端 UI | React + Ink |
-| CLI | Commander.js |
-| 校验 | Zod v4 |
-| 搜索 | ripgrep |
-| 协议 | MCP SDK、LSP |
-| API | Anthropic SDK |
-| 遥测 | OpenTelemetry |
-
----
-
-## 规模
-
-- **约 1,900 个源文件**
-- **512,000+ 行 TypeScript**
-- **40+ 个工具**、**100+ 条命令**、**140+ 个 UI 组件**
-- **20MB** 编译产物
-
----
-
-## 免责声明
-
-- 本仓库仅用于**教育和研究用途**。
-- 原始 Claude Code 源码属于 **Anthropic**。
-- 本仓库**不隶属于 Anthropic，未获 Anthropic 认可，也不由 Anthropic 维护**。
-- 原始源码公开时间：2026-03-31，来源为 npm source map 泄露。
-
----
-
-如果这对你的研究有帮助，欢迎点个 Star。
+本仓库的工程目标是成为可扩展基底，但商业发布前仍应完成你自己的产品命名、品牌替换、安全评审、依赖许可证清单和上游代码授权确认。不要使用 Anthropic 或 Claude 商标暗示官方关系。

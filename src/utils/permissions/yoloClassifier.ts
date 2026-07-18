@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages.js'
 import { mkdir, writeFile } from 'fs/promises'
@@ -6,9 +6,7 @@ import { dirname, join } from 'path'
 import { z } from 'zod/v4'
 import {
   getCachedClaudeMdContent,
-  getLastClassifierRequests,
   getSessionId,
-  setLastClassifierRequests,
 } from '../../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { logEvent } from '../../services/analytics/index.js'
@@ -27,7 +25,6 @@ import { isEnvDefinedFalsy, isEnvTruthy } from '../envUtils.js'
 import { errorMessage } from '../errors.js'
 import { lazySchema } from '../lazySchema.js'
 import { extractTextContent } from '../messages.js'
-import { resolveAntModel } from '../model/antModels.js'
 import { getMainLoopModel } from '../model/model.js'
 import { getAutoModeConfig } from '../settings/settings.js'
 import { sideQuery } from '../sideQuery.js'
@@ -55,27 +52,10 @@ const BASE_PROMPT: string = feature('TRANSCRIPT_CLASSIFIER')
   ? txtRequire(require('./yolo-classifier-prompts/auto_mode_system_prompt.txt'))
   : ''
 
-// External template is loaded separately so it's available for
-// `claude auto-mode defaults` even in ant builds. Ant builds use
-// permissions_anthropic.txt at runtime but should dump external defaults.
-const EXTERNAL_PERMISSIONS_TEMPLATE: string = feature('TRANSCRIPT_CLASSIFIER')
+const PERMISSIONS_TEMPLATE: string = feature('TRANSCRIPT_CLASSIFIER')
   ? txtRequire(require('./yolo-classifier-prompts/permissions_external.txt'))
   : ''
-
-const ANTHROPIC_PERMISSIONS_TEMPLATE: string =
-  feature('TRANSCRIPT_CLASSIFIER') && process.env.USER_TYPE === 'ant'
-    ? txtRequire(require('./yolo-classifier-prompts/permissions_anthropic.txt'))
-    : ''
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
-
-function isUsingExternalPermissions(): boolean {
-  if (process.env.USER_TYPE !== 'ant') return true
-  const config = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_auto_mode_config',
-    {} as AutoModeConfig,
-  )
-  return config?.forceExternalPermissions === true
-}
 
 /**
  * Shape of the settings.autoMode config — the three classifier prompt
@@ -106,7 +86,7 @@ export function getDefaultExternalAutoModeRules(): AutoModeRules {
 }
 
 function extractTaggedBullets(tagName: string): string[] {
-  const match = EXTERNAL_PERMISSIONS_TEMPLATE.match(
+  const match = PERMISSIONS_TEMPLATE.match(
     new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`),
   )
   if (!match) return []
@@ -125,7 +105,7 @@ function extractTaggedBullets(tagName: string): string[] {
 export function buildDefaultExternalSystemPrompt(): string {
   return BASE_PROMPT.replace(
     '<permissions_template>',
-    () => EXTERNAL_PERMISSIONS_TEMPLATE,
+    () => PERMISSIONS_TEMPLATE,
   )
     .replace(
       /<user_allow_rules_to_replace>([\s\S]*?)<\/user_allow_rules_to_replace>/,
@@ -156,7 +136,6 @@ async function maybeDumpAutoMode(
   timestamp: number,
   suffix?: string,
 ): Promise<void> {
-  if (process.env.USER_TYPE !== 'ant') return
   if (!isEnvTruthy(process.env.CLAUDE_CODE_DUMP_AUTO_MODE)) return
   const base = suffix ? `${timestamp}.${suffix}` : `${timestamp}`
   try {
@@ -180,10 +159,9 @@ async function maybeDumpAutoMode(
 }
 
 /**
- * Session-scoped dump file for auto mode classifier error prompts. Written on API
- * error so users can share via /share without needing to repro with env var.
+ * Session-scoped dump file for explicitly enabled classifier diagnostics.
  */
-export function getAutoModeClassifierErrorDumpPath(): string {
+function getAutoModeClassifierErrorDumpPath(): string {
   return join(
     getClaudeTempDir(),
     'auto-mode-classifier-errors',
@@ -192,22 +170,8 @@ export function getAutoModeClassifierErrorDumpPath(): string {
 }
 
 /**
- * Snapshot of the most recent classifier API request(s), stringified lazily
- * only when /share reads it. Array because the XML path may send two requests
- * (stage1 + stage2). Stored in bootstrap/state.ts to avoid module-scope
- * mutable state.
- */
-export function getAutoModeClassifierTranscript(): string | null {
-  const requests = getLastClassifierRequests()
-  if (requests === null) return null
-  return jsonStringify(requests, null, 2)
-}
-
-/**
  * Dump classifier input prompts + context-comparison diagnostics on API error.
- * Written to a session-scoped file in the claude temp dir so /share can collect
- * it (replaces the old Desktop dump). Includes context numbers to help diagnose
- * projection divergence (classifier tokens >> main loop tokens).
+ * Includes context numbers to help diagnose projection divergence.
  * Returns the dump path on success, null on failure.
  */
 async function dumpErrorPrompts(
@@ -224,6 +188,7 @@ async function dumpErrorPrompts(
     model: string
   },
 ): Promise<string | null> {
+  if (!isEnvTruthy(process.env.CLAUDE_CODE_DUMP_AUTO_MODE)) return null
   try {
     const path = getAutoModeClassifierErrorDumpPath()
     await mkdir(dirname(path), { recursive: true })
@@ -484,20 +449,14 @@ function buildClaudeMdMessage(): Anthropic.MessageParam | null {
 export async function buildYoloSystemPrompt(
   context: ToolPermissionContext,
 ): Promise<string> {
-  const usingExternal = isUsingExternalPermissions()
-  const systemPrompt = BASE_PROMPT.replace('<permissions_template>', () =>
-    usingExternal
-      ? EXTERNAL_PERMISSIONS_TEMPLATE
-      : ANTHROPIC_PERMISSIONS_TEMPLATE,
+  const systemPrompt = BASE_PROMPT.replace(
+    '<permissions_template>',
+    () => PERMISSIONS_TEMPLATE,
   )
 
   const autoMode = getAutoModeConfig()
   const includeBashPromptRules = feature('BASH_CLASSIFIER')
-    ? !usingExternal
-    : false
   const includePowerShellGuidance = feature('POWERSHELL_AUTO_MODE')
-    ? !usingExternal
-    : false
   const allowDescriptions = [
     ...(includeBashPromptRules ? getBashPromptAllowDescriptions(context) : []),
     ...(autoMode?.allow ?? []),
@@ -669,26 +628,11 @@ function replaceOutputFormatWithXml(systemPrompt: string): string {
  *
  * For most models: send { type: 'disabled' } via sideQuery's `thinking: false`.
  *
- * Models with alwaysOnThinking (declared in tengu_ant_model_override) default
- * to adaptive thinking server-side and reject `disabled` with a 400. For those:
- * don't pass `thinking: false`, instead pad max_tokens so adaptive thinking
- * (observed 0–1114 tokens replaying go/ccshare/shawnm-20260310-202833) doesn't
- * exhaust the budget before <block> is emitted. Without headroom,
- * stop_reason=max_tokens yields an empty text response → parseXmlBlock('')
- * → null → "unparseable" → safe commands blocked.
- *
- * Returns [disableThinking, headroom] — tuple instead of named object so
- * property-name strings don't survive minification into external builds.
+ * Returns [disableThinking, headroom] as a compact tuple.
  */
 function getClassifierThinkingConfig(
-  model: string,
+  _model: string,
 ): [false | undefined, number] {
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    resolveAntModel(model)?.alwaysOnThinking
-  ) {
-    return [undefined, 2048]
-  }
   return [false, 0]
 }
 
@@ -801,7 +745,6 @@ async function classifyYoloActionXml(
       const stage1Block = parseXmlBlock(stage1Text)
 
       void maybeDumpAutoMode(stage1Opts, stage1Raw, stage1Start, 'stage1')
-      setLastClassifierRequests([stage1Opts])
 
       // If stage 1 says allow, return immediately (fast path)
       if (stage1Block === false) {
@@ -891,9 +834,6 @@ async function classifyYoloActionXml(
       : stage2Usage
 
     void maybeDumpAutoMode(stage2Opts, stage2Raw, stage2Start, 'stage2')
-    setLastClassifierRequests(
-      stage1Opts ? [stage1Opts, stage2Opts] : [stage2Opts],
-    )
 
     if (stage2Block === null) {
       logAutoModeOutcome('parse_failure', model, { classifierType })
@@ -1159,7 +1099,6 @@ export async function classifyYoloAction(
     }
     const result = await sideQuery(sideQueryOpts)
     void maybeDumpAutoMode(sideQueryOpts, result, start)
-    setLastClassifierRequests([sideQueryOpts])
     const durationMs = Date.now() - start
     const stage1RequestId = extractRequestId(result)
     const stage1MsgId = result.id
@@ -1315,11 +1254,6 @@ type AutoModeConfig = {
    */
   twoStageClassifier?: boolean | 'fast' | 'thinking'
   /**
-   * Ant builds normally use permissions_anthropic.txt; when true, use
-   * permissions_external.txt instead (dogfood the external template).
-   */
-  forceExternalPermissions?: boolean
-  /**
    * Gate the JSONL transcript format ({"Bash":"ls"} vs `Bash ls`).
    * Default false (old text-prefix format) for slow rollout / quick rollback.
    */
@@ -1328,14 +1262,12 @@ type AutoModeConfig = {
 
 /**
  * Get the model for the classifier.
- * Ant-only env var takes precedence, then GrowthBook JSON config override,
+ * Environment override takes precedence, then the remote config override,
  * then the main loop model.
  */
 function getClassifierModel(): string {
-  if (process.env.USER_TYPE === 'ant') {
-    const envModel = process.env.CLAUDE_CODE_AUTO_MODE_MODEL
-    if (envModel) return envModel
-  }
+  const envModel = process.env.CLAUDE_CODE_AUTO_MODE_MODEL
+  if (envModel) return envModel
   const config = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
@@ -1347,20 +1279,18 @@ function getClassifierModel(): string {
 }
 
 /**
- * Resolve the XML classifier setting: ant-only env var takes precedence,
- * then GrowthBook. Returns undefined when unset (caller decides default).
+ * Resolve the XML classifier setting: environment takes precedence, then
+ * remote config. Returns undefined when unset (caller decides default).
  */
 function resolveTwoStageClassifier():
   | boolean
   | 'fast'
   | 'thinking'
   | undefined {
-  if (process.env.USER_TYPE === 'ant') {
-    const env = process.env.CLAUDE_CODE_TWO_STAGE_CLASSIFIER
-    if (env === 'fast' || env === 'thinking') return env
-    if (isEnvTruthy(env)) return true
-    if (isEnvDefinedFalsy(env)) return false
-  }
+  const env = process.env.CLAUDE_CODE_TWO_STAGE_CLASSIFIER
+  if (env === 'fast' || env === 'thinking') return env
+  if (isEnvTruthy(env)) return true
+  if (isEnvDefinedFalsy(env)) return false
   const config = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
@@ -1377,11 +1307,9 @@ function isTwoStageClassifierEnabled(): boolean {
 }
 
 function isJsonlTranscriptEnabled(): boolean {
-  if (process.env.USER_TYPE === 'ant') {
-    const env = process.env.CLAUDE_CODE_JSONL_TRANSCRIPT
-    if (isEnvTruthy(env)) return true
-    if (isEnvDefinedFalsy(env)) return false
-  }
+  const env = process.env.CLAUDE_CODE_JSONL_TRANSCRIPT
+  if (isEnvTruthy(env)) return true
+  if (isEnvDefinedFalsy(env)) return false
   const config = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
@@ -1396,8 +1324,8 @@ function isJsonlTranscriptEnabled(): boolean {
  * recognizes `iex (iwr ...)` as "Code from External", `Remove-Item
  * -Recurse -Force` as "Irreversible Local Destruction", etc.
  *
- * Guarded at definition for DCE — with external:false, the string content
- * is absent from external builds (same pattern as the .txt requires above).
+ * Guarded at definition so disabled feature profiles do not append the
+ * PowerShell-specific policy text.
  */
 const POWERSHELL_DENY_GUIDANCE: readonly string[] = feature(
   'POWERSHELL_AUTO_MODE',

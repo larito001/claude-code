@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js'
 import { isExtractModeActive } from '../memdir/paths.js'
 import {
@@ -38,18 +38,9 @@ import type { SystemPrompt } from '../utils/systemPromptType.js'
 import { getTaskListId, listTasks } from '../utils/tasks.js'
 import { getAgentName, getTeamName, isTeammate } from '../utils/teammate.js'
 
-/* eslint-disable @typescript-eslint/no-require-imports */
-const extractMemoriesModule = feature('EXTRACT_MEMORIES')
-  ? (require('../services/extractMemories/extractMemories.js') as typeof import('../services/extractMemories/extractMemories.js'))
-  : null
-const jobClassifierModule = feature('TEMPLATES')
-  ? (require('../jobs/classifier.js') as typeof import('../jobs/classifier.js'))
-  : null
-
-/* eslint-enable @typescript-eslint/no-require-imports */
-
 import type { QuerySource } from '../constants/querySource.js'
 import { executeAutoDream } from '../services/autoDream/autoDream.js'
+import { executeExtractMemories } from '../services/extractMemories/extractMemories.js'
 import { executePromptSuggestion } from '../services/PromptSuggestion/promptSuggestion.js'
 import { isBareMode, isEnvDefinedFalsy } from '../utils/envUtils.js'
 import {
@@ -97,44 +88,11 @@ export async function* handleStopHooks(
     saveCacheSafeParams(createCacheSafeParams(stopHookContext))
   }
 
-  // Template job classification: when running as a dispatched job, classify
-  // state after each turn. Gate on repl_main_thread so background forks
-  // (extract-memories, auto-dream) don't pollute the timeline with their own
-  // assistant messages. Await the classifier so state.json is written before
-  // the turn returns — otherwise `claude list` shows stale state for the gap.
-  // Env key hardcoded (vs importing JOB_ENV_KEY from jobs/state) to match the
-  // require()-gated jobs/ import pattern above; spawn.test.ts asserts the
-  // string matches.
-  if (
-    feature('TEMPLATES') &&
-    process.env.CLAUDE_JOB_DIR &&
-    querySource.startsWith('repl_main_thread') &&
-    !toolUseContext.agentId
-  ) {
-    // Full turn history — assistantMessages resets each queryLoop iteration,
-    // so tool calls from earlier iterations (Agent spawn, then summary) need
-    // messagesForQuery to be visible in the tool-call summary.
-    const turnAssistantMessages = stopHookContext.messages.filter(
-      (m): m is AssistantMessage => m.type === 'assistant',
-    )
-    const p = jobClassifierModule!
-      .classifyAndWriteState(process.env.CLAUDE_JOB_DIR, turnAssistantMessages)
-      .catch(err => {
-        logForDebugging(`[job] classifier error: ${errorMessage(err)}`, {
-          level: 'error',
-        })
-      })
-    await Promise.race([
-      p,
-      // eslint-disable-next-line no-restricted-syntax -- sleep() has no .unref(); timer must not block exit
-      new Promise<void>(r => setTimeout(r, 60_000).unref()),
-    ])
-  }
   // --bare / SIMPLE: skip background bookkeeping (prompt suggestion,
   // memory extraction, auto-dream). Scripted -p calls don't want auto-memory
   // or forked agents contending for resources during shutdown.
   if (!isBareMode()) {
-    // Inline env check for dead code elimination in external builds
+    // Keep the runtime opt-out close to the scheduling point.
     if (!isEnvDefinedFalsy(process.env.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION)) {
       void executePromptSuggestion(stopHookContext)
     }
@@ -146,7 +104,7 @@ export async function* handleStopHooks(
       // Fire-and-forget in both interactive and non-interactive. For -p/SDK,
       // print.ts drains the in-flight promise after flushing the response
       // but before gracefulShutdownSync (see drainPendingExtraction).
-      void extractMemoriesModule!.executeExtractMemories(
+      void executeExtractMemories(
         stopHookContext,
         toolUseContext.appendSystemMessage,
       )

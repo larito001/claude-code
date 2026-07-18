@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { z } from 'zod/v4'
 import { clearInvokedSkillsForAgent } from '../../bootstrap/state.js'
 import {
@@ -12,7 +12,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
-import { clearDumpState } from '../../services/api/dumpPrompts.js'
 import type { AppState } from '../../state/AppState.js'
 import type {
   Tool,
@@ -39,7 +38,6 @@ import { asAgentId } from '../../types/ids.js'
 import type { Message as MessageType } from '../../types/message.js'
 import { isAgentSwarmsEnabled } from '../../utils/agentSwarmsEnabled.js'
 import { logForDebugging } from '../../utils/debug.js'
-import { isInProtectedNamespace } from '../../utils/envUtils.js'
 import { AbortError, errorMessage } from '../../utils/errors.js'
 import type { CacheSafeParams } from '../../utils/forkedAgent.js'
 import { lazySchema } from '../../utils/lazySchema.js'
@@ -434,7 +432,6 @@ export async function classifyHandoffIfNeeded({
       toolName:
         // Use legacy name for analytics continuity across the Task→Agent rename
         LEGACY_AGENT_TOOL_NAME as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      inProtectedNamespace: isInProtectedNamespace(),
       classifierModel:
         classifierResult.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       agentType:
@@ -681,6 +678,5 @@ export async function runAsyncAgentLifecycle({
     })
   } finally {
     clearInvokedSkillsForAgent(agentIdForCleanup)
-    clearDumpState(agentIdForCleanup)
   }
 }

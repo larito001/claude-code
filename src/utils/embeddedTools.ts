@@ -1,7 +1,7 @@
 import { isEnvTruthy } from './envUtils.js'
 
 /**
- * Whether this build has bfs/ugrep embedded in the bun binary (ant-native only).
+ * Whether this build has bfs/ugrep embedded in the runtime.
  *
  * When true:
  * - `find` and `grep` in Claude's Bash shell are shadowed by shell functions
@@ -10,7 +10,7 @@ import { isEnvTruthy } from './envUtils.js'
  * - The dedicated Glob/Grep tools are removed from the tool registry
  * - Prompt guidance steering Claude away from find/grep is omitted
  *
- * Set as a build-time define in scripts/build-with-plugins.ts for ant-native builds.
+ * Set as a build-time define by distributions that bundle these search tools.
  */
 export function hasEmbeddedSearchTools(): boolean {
   if (!isEnvTruthy(process.env.EMBEDDED_SEARCH_TOOLS)) return false

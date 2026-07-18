@@ -5,6 +5,7 @@
 import { Buffer } from 'buffer'
 import { env } from '../../utils/env.js'
 import { execFileNoThrow } from '../../utils/execFileNoThrow.js'
+import { isEnvTruthy } from '../../utils/envUtils.js'
 import { BEL, ESC, ESC_TYPE, SEP } from './ansi.js'
 import type { Action, Color, TabStatusAction } from './types.js'
 
@@ -456,16 +457,15 @@ export const CLEAR_TAB_STATUS = osc(
 )
 
 /**
- * Gate for emitting OSC 21337 (tab-status indicator). Ant-only while the
- * spec is unstable. Terminals that don't recognize it discard silently, so
- * emission is safe unconditionally — we don't gate on terminal detection
- * since support is expected across several terminals.
+ * Gate for emitting the experimental OSC 21337 tab-status indicator.
+ * Unsupported terminals discard it silently, so callers opt in explicitly
+ * instead of relying on terminal-name detection.
  *
  * Callers must wrap output with wrapForMultiplexer() so tmux/screen
  * DCS-passthrough carries the sequence to the outer terminal.
  */
 export function supportsTabStatus(): boolean {
-  return process.env.USER_TYPE === 'ant'
+  return isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_TAB_STATUS)
 }
 
 /**

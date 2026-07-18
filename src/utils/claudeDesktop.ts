@@ -8,14 +8,20 @@ import {
 import { getErrnoCode } from './errors.js'
 import { safeParseJSON } from './json.js'
 import { logError } from './log.js'
-import { getPlatform, SUPPORTED_PLATFORMS } from './platform.js'
+import { getPlatform, type Platform } from './platform.js'
+
+const CLAUDE_DESKTOP_SUPPORTED_PLATFORMS: readonly Platform[] = [
+  'macos',
+  'windows',
+  'wsl',
+]
 
 export async function getClaudeDesktopConfigPath(): Promise<string> {
   const platform = getPlatform()
 
-  if (!SUPPORTED_PLATFORMS.includes(platform)) {
+  if (!CLAUDE_DESKTOP_SUPPORTED_PLATFORMS.includes(platform)) {
     throw new Error(
-      `Unsupported platform: ${platform} - Claude Desktop integration only works on macOS and WSL.`,
+      `Unsupported platform: ${platform} - Claude Desktop integration only works on macOS, Windows, and WSL.`,
     )
   }
 
@@ -29,7 +35,14 @@ export async function getClaudeDesktopConfigPath(): Promise<string> {
     )
   }
 
-  // First, try using USERPROFILE environment variable if available
+  if (platform === 'windows') {
+    const roamingAppData =
+      process.env.APPDATA ??
+      join(process.env.USERPROFILE ?? homedir(), 'AppData', 'Roaming')
+    return join(roamingAppData, 'Claude', 'claude_desktop_config.json')
+  }
+
+  // WSL: first try the Windows profile exposed through the environment.
   const windowsHome = process.env.USERPROFILE
     ? process.env.USERPROFILE.replace(/\\/g, '/') // Convert Windows backslashes to forward slashes
     : null
@@ -98,9 +111,9 @@ export async function getClaudeDesktopConfigPath(): Promise<string> {
 export async function readClaudeDesktopMcpServers(): Promise<
   Record<string, McpServerConfig>
 > {
-  if (!SUPPORTED_PLATFORMS.includes(getPlatform())) {
+  if (!CLAUDE_DESKTOP_SUPPORTED_PLATFORMS.includes(getPlatform())) {
     throw new Error(
-      'Unsupported platform - Claude Desktop integration only works on macOS and WSL.',
+      'Unsupported platform - Claude Desktop integration only works on macOS, Windows, and WSL.',
     )
   }
   try {

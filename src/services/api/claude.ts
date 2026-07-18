@@ -37,11 +37,6 @@ import {
   toolMatchesName,
 } from '../../Tool.js'
 import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
-import {
-  type ConnectorTextBlock,
-  type ConnectorTextDelta,
-  isConnectorTextBlock,
-} from '../../types/connectorText.js'
 import type {
   AssistantMessage,
   Message,
@@ -70,7 +65,7 @@ import { resolveAppliedEffort } from '../../utils/effort.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
 import { computeFingerprintFromMessages } from '../../utils/fingerprint.js'
-import { captureAPIRequest, logError } from '../../utils/log.js'
+import { logError } from '../../utils/log.js'
 import {
   createAssistantAPIErrorMessage,
   createUserMessage,
@@ -93,11 +88,6 @@ import {
 } from '../../utils/systemPromptType.js'
 import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js'
 import { getDynamicConfig_BLOCKS_ON_INIT } from '../analytics/growthbook.js'
-import {
-  currentLimits,
-  extractQuotaStatusFromError,
-  extractQuotaStatusFromHeaders,
-} from '../claudeAiLimits.js'
 import { getAPIContextManagement } from '../compact/apiMicrocompact.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -105,7 +95,7 @@ const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
   ? (require('../../utils/permissions/autoModeState.js') as typeof import('../../utils/permissions/autoModeState.js'))
   : null
 
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { ClientOptions } from '@anthropic-ai/sdk'
 import {
   APIConnectionTimeoutError,
@@ -114,7 +104,6 @@ import {
 } from '@anthropic-ai/sdk/error'
 import {
   getAfkModeHeaderLatched,
-  getCacheEditingHeaderLatched,
   getFastModeHeaderLatched,
   getLastApiCompletionTimestamp,
   getPromptCache1hAllowlist,
@@ -122,7 +111,6 @@ import {
   getSessionId,
   getThinkingClearLatched,
   setAfkModeHeaderLatched,
-  setCacheEditingHeaderLatched,
   setFastModeHeaderLatched,
   setLastMainRequestId,
   setPromptCache1hAllowlist,
@@ -191,7 +179,6 @@ import {
   TOOL_SEARCH_TOOL_NAME,
 } from '../../tools/ToolSearchTool/prompt.js'
 import { count } from '../../utils/array.js'
-import { insertBlockAfterToolResults } from '../../utils/contentArray.js'
 import { validateBoundedIntEnvVar } from '../../utils/envValidation.js'
 import { safeParseJSON } from '../../utils/json.js'
 import { getInferenceProfileBackingModel } from '../../utils/model/bedrock.js'
@@ -199,10 +186,6 @@ import {
   normalizeModelStringForAPI,
   parseUserSpecifiedModel,
 } from '../../utils/model/model.js'
-import {
-  startSessionActivity,
-  stopSessionActivity,
-} from '../../utils/sessionActivity.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   isBetaTracingEnabled,
@@ -214,12 +197,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import {
-  consumePendingCacheEdits,
-  getPinnedCacheEdits,
-  markToolsSentToAPIState,
-  pinCacheEdits,
-} from '../compact/microCompact.js'
 import { getInitializationStatus } from '../lsp/manager.js'
 import { withStreamingVCR, withVCR } from '../vcr.js'
 import { CLIENT_REQUEST_ID_HEADER, getAnthropicClient } from './client.js'
@@ -292,20 +269,6 @@ export function getExtraBodyParams(betaHeaders?: string[]): JsonObject {
     }
   }
 
-  // Anti-distillation: send fake_tools opt-in for 1P CLI only
-  if (
-    feature('ANTI_DISTILLATION_CC')
-      ? process.env.CLAUDE_CODE_ENTRYPOINT === 'cli' &&
-        shouldIncludeFirstPartyOnlyBetas() &&
-        getFeatureValue_CACHED_MAY_BE_STALE(
-          'tengu_anti_distill_fake_tool_injection',
-          false,
-        )
-      : false
-  ) {
-    result.anti_distillation = ['fake_tools']
-  }
-
   // Handle beta headers if provided
   if (betaHeaders && betaHeaders.length > 0) {
     if (result.anthropic_beta && Array.isArray(result.anthropic_beta)) {
@@ -370,11 +333,8 @@ export function getCacheControl({
 /**
  * Determines if 1h TTL should be used for prompt caching.
  *
- * Only applied when:
- * 1. User is eligible (ant or subscriber within rate limits)
- * 2. The query source matches a pattern in the GrowthBook allowlist
- *
- * GrowthBook config shape: { allowlist: string[] }
+ * Only applied when explicitly enabled and the query source matches the
+ * configured allowlist.
  * Patterns support trailing '*' for prefix matching.
  * Examples:
  * - { allowlist: ["repl_main_thread*", "sdk"] } — main thread + SDK only
@@ -394,14 +354,10 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
     return true
   }
 
-  // Latch eligibility in bootstrap state for session stability — prevents
-  // mid-session overage flips from changing the cache_control TTL, which
-  // would bust the server-side prompt cache (~20K tokens per flip).
+  // Latch eligibility in bootstrap state for session stability.
   let userEligible = getPromptCache1hEligible()
   if (userEligible === null) {
-    userEligible =
-      process.env.USER_TYPE === 'ant' ||
-      (false && !currentLimits.isUsingOverage)
+    userEligible = isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_PROMPT_CACHE_1H)
     setPromptCache1hEligible(userEligible)
   }
   if (!userEligible) return false
@@ -410,10 +366,10 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
   // TTLs when GrowthBook's disk cache updates mid-request
   let allowlist = getPromptCache1hAllowlist()
   if (allowlist === null) {
-    const config = getFeatureValue_CACHED_MAY_BE_STALE<{
-      allowlist?: string[]
-    }>('tengu_prompt_cache_1h_config', {})
-    allowlist = config.allowlist ?? []
+    allowlist = (process.env.CLAUDE_CODE_PROMPT_CACHE_1H_SOURCES ?? '*')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean)
     setPromptCache1hAllowlist(allowlist)
   }
 
@@ -434,7 +390,6 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
 function configureEffortParams(
   effortValue: EffortValue | undefined,
   outputConfig: BetaOutputConfig,
-  extraBodyParams: Record<string, unknown>,
   betas: string[],
   model: string,
 ): void {
@@ -442,21 +397,10 @@ function configureEffortParams(
     return
   }
 
-  if (effortValue === undefined) {
-    betas.push(EFFORT_BETA_HEADER)
-  } else if (typeof effortValue === 'string') {
-    // Send string effort level as is
+  if (effortValue !== undefined) {
     outputConfig.effort = effortValue
-    betas.push(EFFORT_BETA_HEADER)
-  } else if (process.env.USER_TYPE === 'ant') {
-    // Numeric effort override - ant-only (uses anthropic_internal)
-    const existingInternal =
-      (extraBodyParams.anthropic_internal as Record<string, unknown>) || {}
-    extraBodyParams.anthropic_internal = {
-      ...existingInternal,
-      effort_override: effortValue,
-    }
   }
+  betas.push(EFFORT_BETA_HEADER)
 }
 
 // output_config.task_budget — API-side token budget awareness for the model.
@@ -514,8 +458,6 @@ export function getAPIMetadata() {
     user_id: jsonStringify({
       ...extra,
       device_id: getOrCreateUserID(),
-      // Only include OAuth account UUID when actively using OAuth authentication
-      account_uuid: undefined?.accountUuid ?? '',
       session_id: getSessionId(),
     }),
   }
@@ -613,9 +555,8 @@ export function userMessageToMessageParam(
       }
     }
   }
-  // Clone array content to prevent in-place mutations (e.g., insertCacheEditsBlock's
-  // splice) from contaminating the original message. Without cloning, multiple calls
-  // to addCacheBreakpoints share the same array and each splices in duplicate cache_edits.
+  // Clone array content so cache-control insertion cannot contaminate the
+  // original message shared by secondary queries.
   return {
     role: 'user',
     content: Array.isArray(message.message.content)
@@ -651,8 +592,7 @@ export function assistantMessageToMessageParam(
           ..._,
           ...(i === message.message.content.length - 1 &&
           _.type !== 'thinking' &&
-          _.type !== 'redacted_thinking' &&
-          (feature('CONNECTOR_TEXT') ? !isConnectorTextBlock(_) : true)
+          _.type !== 'redacted_thinking'
             ? enablePromptCaching
               ? { cache_control: getCacheControl({ querySource }) }
               : {}
@@ -825,7 +765,6 @@ export async function* executeNonStreamingRequest(
   },
   paramsFromContext: (context: RetryContext) => BetaMessageStreamParams,
   onAttempt: (attempt: number, start: number, maxOutputTokens: number) => void,
-  captureRequest: (params: BetaMessageStreamParams) => void,
   /**
    * Request ID of the failed streaming attempt this fallback is recovering
    * from. Emitted in tengu_nonstreaming_fallback_error for funnel correlation.
@@ -844,7 +783,6 @@ export async function* executeNonStreamingRequest(
     async (anthropic, attempt, context) => {
       const start = Date.now()
       const retryParams = paramsFromContext(context)
-      captureRequest(retryParams)
       onAttempt(attempt, start, retryParams.max_tokens)
 
       const adjustedParams = adjustParamsForNonStreaming(
@@ -1018,11 +956,9 @@ async function* queryModel(
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
   void
 > {
-  // Check cheap conditions first — the off-switch await blocks on GrowthBook
-  // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
-  // entirely. Subscribers don't hit this path at all.
+  // Check cheap conditions first. For non-Opus models this skips the local
+  // off-switch configuration lookup entirely.
   if (
-    !false &&
     isNonCustomOpusModel(options.model) &&
     (
       await getDynamicConfig_BLOCKS_ON_INIT<{ activated: boolean }>(
@@ -1172,29 +1108,6 @@ async function* queryModel(
     if (!betas.includes(toolSearchHeader)) {
       betas.push(toolSearchHeader)
     }
-  }
-
-  // Determine if cached microcompact is enabled for this model.
-  // Computed once here (in async context) and captured by paramsFromContext.
-  // The beta header is also captured here to avoid a top-level import of the
-  // ant-only CACHE_EDITING_BETA_HEADER constant.
-  let cachedMCEnabled = false
-  let cacheEditingBetaHeader = ''
-  if (feature('CACHED_MICROCOMPACT')) {
-    const {
-      isCachedMicrocompactEnabled,
-      isModelSupportedForCacheEditing,
-      getCachedMCConfig,
-    } = await import('../compact/cachedMicrocompact.js')
-    const betas = await import('src/constants/betas.js')
-    cacheEditingBetaHeader = betas.CACHE_EDITING_BETA_HEADER
-    const featureEnabled = isCachedMicrocompactEnabled()
-    const modelSupported = isModelSupportedForCacheEditing(options.model)
-    cachedMCEnabled = featureEnabled && modelSupported
-    const config = getCachedMCConfig()
-    logForDebugging(
-      `Cached MC gate: enabled=${featureEnabled} modelSupported=${modelSupported} model=${options.model} supportedModels=${jsonStringify(config.supportedModels)}`,
-    )
   }
 
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
@@ -1409,19 +1322,6 @@ async function* queryModel(
     setFastModeHeaderLatched(true)
   }
 
-  let cacheEditingHeaderLatched = getCacheEditingHeaderLatched() === true
-  if (feature('CACHED_MICROCOMPACT')) {
-    if (
-      !cacheEditingHeaderLatched &&
-      cachedMCEnabled &&
-      getAPIProvider() === 'firstParty' &&
-      options.querySource === 'repl_main_thread'
-    ) {
-      cacheEditingHeaderLatched = true
-      setCacheEditingHeaderLatched(true)
-    }
-  }
-
   // Only latch from agentic queries so a classifier call doesn't flip the
   // main thread's context_management mid-turn.
   let thinkingClearLatched = getThinkingClearLatched() === true
@@ -1459,8 +1359,6 @@ async function* queryModel(
       globalCacheStrategy,
       betas,
       autoModeActive: afkHeaderLatched,
-      isUsingOverage: currentLimits.isUsingOverage ?? false,
-      cachedMCEnabled: cacheEditingHeaderLatched,
       effortValue: effort,
       extraBodyParams: getExtraBodyParams(),
     })
@@ -1506,12 +1404,6 @@ async function* queryModel(
     }
   }
 
-  // Consume pending cache edits ONCE before paramsFromContext is defined.
-  // paramsFromContext is called multiple times (logging, retries), so consuming
-  // inside it would cause the first call to steal edits from subsequent calls.
-  const consumedCacheEdits = cachedMCEnabled ? consumePendingCacheEdits() : null
-  const consumedPinnedEdits = cachedMCEnabled ? getPinnedCacheEdits() : []
-
   // Capture the betas sent in the last API request, including the ones that
   // were dynamically added, so we can log and send it to telemetry.
   let lastRequestBetas: string[] | undefined
@@ -1544,7 +1436,6 @@ async function* queryModel(
     configureEffortParams(
       effort,
       outputConfig,
-      extraBodyParams,
       betasParams,
       options.model,
     )
@@ -1579,9 +1470,8 @@ async function* queryModel(
       !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_THINKING)
     let thinking: BetaMessageStreamParams['thinking'] | undefined = undefined
 
-    // IMPORTANT: Do not change the adaptive-vs-budget thinking selection below
-    // without notifying the model launch DRI and research. This is a sensitive
-    // setting that can greatly affect model quality and bashing.
+    // Adaptive thinking is preferred when the selected model supports it;
+    // otherwise use the configured token budget.
     if (hasThinking && modelSupportsThinking(options.model)) {
       if (
         !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING) &&
@@ -1650,25 +1540,6 @@ async function* queryModel(
       }
     }
 
-    // Cache editing beta: header is latched session-stable; useCachedMC
-    // (controls cache_edits body behavior) stays live so edits stop when
-    // the feature disables but the header doesn't flip.
-    const useCachedMC =
-      cachedMCEnabled &&
-      getAPIProvider() === 'firstParty' &&
-      options.querySource === 'repl_main_thread'
-    if (
-      cacheEditingHeaderLatched &&
-      getAPIProvider() === 'firstParty' &&
-      options.querySource === 'repl_main_thread' &&
-      !betasParams.includes(cacheEditingBetaHeader)
-    ) {
-      betasParams.push(cacheEditingBetaHeader)
-      logForDebugging(
-        'Cache editing beta header enabled for cached microcompact',
-      )
-    }
-
     // Only send temperature when thinking is disabled — the API requires
     // temperature: 1 when thinking is enabled, which is already the default.
     const temperature = !hasThinking
@@ -1683,9 +1554,6 @@ async function* queryModel(
         messagesForAPI,
         enablePromptCaching,
         options.querySource,
-        useCachedMC,
-        consumedCacheEdits,
-        consumedPinnedEdits,
         options.skipCacheWrite,
       ),
       system,
@@ -1742,7 +1610,7 @@ async function* queryModel(
   const newMessages: AssistantMessage[] = []
   let ttftMs = 0
   let partialMessage: BetaMessage | undefined = undefined
-  const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
+  const contentBlocks: BetaContentBlock[] = []
   let usage: NonNullableUsage = EMPTY_USAGE
   let costUSD = 0
   let stopReason: BetaStopReason | null = null
@@ -1750,7 +1618,6 @@ async function* queryModel(
   let fallbackMessage: AssistantMessage | undefined
   let maxOutputTokens = 0
   let responseHeaders: globalThis.Headers | undefined = undefined
-  let research: unknown = undefined
   let isFastModeRequest = isFastMode // Keep separate state as it may change if falling back
   let isAdvisorInProgress = false
 
@@ -1776,8 +1643,6 @@ async function* queryModel(
         queryCheckpoint('query_client_creation_end')
 
         const params = paramsFromContext(context)
-        captureAPIRequest(params, options.querySource) // Capture for bug reports
-
         maxOutputTokens = params.max_tokens
 
         // Fire immediately before the fetch is dispatched. .withResponse() below
@@ -1909,7 +1774,6 @@ async function* queryModel(
     }
     resetStreamIdleTimer()
 
-    startSessionActivity('api_call')
     try {
       // stream in and accumulate state
       let isFirstChunk = true
@@ -1962,15 +1826,6 @@ async function* queryModel(
             partialMessage = part.message
             ttftMs = Date.now() - start
             usage = updateUsage(usage, part.message?.usage)
-            // Capture research from message_start if available (internal only).
-            // Always overwrite with the latest value.
-            if (
-              process.env.USER_TYPE === 'ant' &&
-              'research' in (part.message as unknown as Record<string, unknown>)
-            ) {
-              research = (part.message as unknown as Record<string, unknown>)
-                .research
-            }
             break
           }
           case 'content_block_start':
@@ -2033,7 +1888,7 @@ async function* queryModel(
             break
           case 'content_block_delta': {
             const contentBlock = contentBlocks[part.index]
-            const delta = part.delta as typeof part.delta | ConnectorTextDelta
+            const delta = part.delta
             if (!contentBlock) {
               logEvent('tengu_streaming_error', {
                 error_type:
@@ -2044,24 +1899,7 @@ async function* queryModel(
               })
               throw new RangeError('Content block not found')
             }
-            if (
-              feature('CONNECTOR_TEXT') &&
-              delta.type === 'connector_text_delta'
-            ) {
-              if (contentBlock.type !== 'connector_text') {
-                logEvent('tengu_streaming_error', {
-                  error_type:
-                    'content_block_type_mismatch_connector_text' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  expected_type:
-                    'connector_text' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  actual_type:
-                    contentBlock.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                })
-                throw new Error('Content block is not a connector_text block')
-              }
-              contentBlock.connector_text += delta.connector_text
-            } else {
-              switch (delta.type) {
+            switch (delta.type) {
                 case 'citations_delta':
                   // TODO: handle citations
                   break
@@ -2106,13 +1944,6 @@ async function* queryModel(
                   contentBlock.text += delta.text
                   break
                 case 'signature_delta':
-                  if (
-                    feature('CONNECTOR_TEXT') &&
-                    contentBlock.type === 'connector_text'
-                  ) {
-                    contentBlock.signature = delta.signature
-                    break
-                  }
                   if (contentBlock.type !== 'thinking') {
                     logEvent('tengu_streaming_error', {
                       error_type:
@@ -2140,12 +1971,6 @@ async function* queryModel(
                   }
                   contentBlock.thinking += delta.thinking
                   break
-              }
-            }
-            // Capture research from content_block_delta if available (internal only).
-            // Always overwrite with the latest value.
-            if (process.env.USER_TYPE === 'ant' && 'research' in part) {
-              research = (part as { research: unknown }).research
             }
             break
           }
@@ -2183,8 +2008,6 @@ async function* queryModel(
               type: 'assistant',
               uuid: randomUUID(),
               timestamp: new Date().toISOString(),
-              ...(process.env.USER_TYPE === 'ant' &&
-                research !== undefined && { research }),
               ...(advisorModel && { advisorModel }),
             }
             newMessages.push(m)
@@ -2193,20 +2016,6 @@ async function* queryModel(
           }
           case 'message_delta': {
             usage = updateUsage(usage, part.usage)
-            // Capture research from message_delta if available (internal only).
-            // Always overwrite with the latest value. Also write back to
-            // already-yielded messages since message_delta arrives after
-            // content_block_stop.
-            if (
-              process.env.USER_TYPE === 'ant' &&
-              'research' in (part as unknown as Record<string, unknown>)
-            ) {
-              research = (part as unknown as Record<string, unknown>).research
-              for (const msg of newMessages) {
-                msg.research = research
-              }
-            }
-
             // Write final usage and stop_reason back to the last yielded
             // message. Messages are created at content_block_stop from
             // partialMessage, which was set at message_start before any tokens
@@ -2372,14 +2181,12 @@ async function* queryModel(
         )
       }
 
-      // Process fallback percentage header and quota status if available
+      // Preserve response headers for gateway/provider detection.
       // streamResponse is set when the stream is created in the withRetry callback above
       // TypeScript's control flow analysis can't track that streamResponse is set in the callback
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
       const resp = streamResponse as unknown as Response | undefined
       if (resp) {
-        extractQuotaStatusFromHeaders(resp.headers)
-        // Store headers for gateway detection
         responseHeaders = resp.headers
       }
     } catch (streamingError) {
@@ -2545,7 +2352,6 @@ async function* queryModel(
           attemptNumber = attempt
           maxOutputTokens = tokens
         },
-        params => captureAPIRequest(params, options.querySource),
         streamRequestId,
       )
 
@@ -2562,10 +2368,6 @@ async function* queryModel(
         type: 'assistant',
         uuid: randomUUID(),
         timestamp: new Date().toISOString(),
-        ...(process.env.USER_TYPE === 'ant' &&
-          research !== undefined && {
-            research,
-          }),
         ...(advisorModel && {
           advisorModel,
         }),
@@ -2642,7 +2444,6 @@ async function* queryModel(
             attemptNumber = attempt
             maxOutputTokens = tokens
           },
-          params => captureAPIRequest(params, options.querySource),
           failedRequestId,
         )
 
@@ -2659,8 +2460,6 @@ async function* queryModel(
           type: 'assistant',
           uuid: randomUUID(),
           timestamp: new Date().toISOString(),
-          ...(process.env.USER_TYPE === 'ant' &&
-            research !== undefined && { research }),
           ...(advisorModel && { advisorModel }),
         }
         newMessages.push(m)
@@ -2685,10 +2484,6 @@ async function* queryModel(
         if (fallbackError instanceof CannotRetryError) {
           error = fallbackError.originalError
           errorModel = fallbackError.retryContext.model
-        }
-
-        if (error instanceof APIError) {
-          extractQuotaStatusFromError(error)
         }
 
         const requestId =
@@ -2741,11 +2536,6 @@ async function* queryModel(
         errorModel = errorFromRetry.retryContext.model
       }
 
-      // Extract quota status from error headers if it's a rate limit error
-      if (error instanceof APIError) {
-        extractQuotaStatusFromError(error)
-      }
-
       // Extract requestId from stream, error header, or error body
       const requestId =
         streamRequestId ||
@@ -2787,7 +2577,6 @@ async function* queryModel(
       return
     }
   } finally {
-    stopSessionActivity('api_call')
     // Must be in the finally block: if the generator is terminated early
     // via .return() (e.g. consumer breaks out of for-await-of, or query.ts
     // encounters an abort), code after the try/finally never executes.
@@ -2809,11 +2598,6 @@ async function* queryModel(
         options.model,
       )
     }
-  }
-
-  // Mark all registered tools as sent to API so they become eligible for deletion
-  if (feature('CACHED_MICROCOMPACT') && cachedMCEnabled) {
-    markToolsSentToAPIState()
   }
 
   // Track the last requestId for the main conversation chain so shutdown
@@ -2943,24 +2727,6 @@ export function updateUsage(
         (partUsage as BetaUsage).cache_creation?.ephemeral_5m_input_tokens ??
         usage.cache_creation.ephemeral_5m_input_tokens,
     },
-    // cache_deleted_input_tokens: returned by the API when cache editing
-    // deletes KV cache content, but not in SDK types. Kept off NonNullableUsage
-    // so the string is eliminated from external builds by dead code elimination.
-    // Uses the same > 0 guard as other token fields to prevent message_delta
-    // from overwriting the real value with 0.
-    ...(feature('CACHED_MICROCOMPACT')
-      ? {
-          cache_deleted_input_tokens:
-            (partUsage as unknown as { cache_deleted_input_tokens?: number })
-              .cache_deleted_input_tokens != null &&
-            (partUsage as unknown as { cache_deleted_input_tokens: number })
-              .cache_deleted_input_tokens > 0
-              ? (partUsage as unknown as { cache_deleted_input_tokens: number })
-                  .cache_deleted_input_tokens
-              : ((usage as unknown as { cache_deleted_input_tokens?: number })
-                  .cache_deleted_input_tokens ?? 0),
-        }
-      : {}),
     inference_geo: usage.inference_geo,
     iterations: partUsage.iterations ?? usage.iterations,
     speed: (partUsage as BetaUsage).speed ?? usage.speed,
@@ -3000,54 +2766,16 @@ export function accumulateUsage(
         totalUsage.cache_creation.ephemeral_5m_input_tokens +
         messageUsage.cache_creation.ephemeral_5m_input_tokens,
     },
-    // See comment in updateUsage — field is not on NonNullableUsage to keep
-    // the string out of external builds.
-    ...(feature('CACHED_MICROCOMPACT')
-      ? {
-          cache_deleted_input_tokens:
-            ((totalUsage as unknown as { cache_deleted_input_tokens?: number })
-              .cache_deleted_input_tokens ?? 0) +
-            ((
-              messageUsage as unknown as { cache_deleted_input_tokens?: number }
-            ).cache_deleted_input_tokens ?? 0),
-        }
-      : {}),
     inference_geo: messageUsage.inference_geo, // Use the most recent
     iterations: messageUsage.iterations, // Use the most recent
     speed: messageUsage.speed, // Use the most recent
   }
 }
 
-function isToolResultBlock(
-  block: unknown,
-): block is { type: 'tool_result'; tool_use_id: string } {
-  return (
-    block !== null &&
-    typeof block === 'object' &&
-    'type' in block &&
-    (block as { type: string }).type === 'tool_result' &&
-    'tool_use_id' in block
-  )
-}
-
-type CachedMCEditsBlock = {
-  type: 'cache_edits'
-  edits: { type: 'delete'; cache_reference: string }[]
-}
-
-type CachedMCPinnedEdits = {
-  userMessageIndex: number
-  block: CachedMCEditsBlock
-}
-
-// Exported for testing cache_reference placement constraints
 export function addCacheBreakpoints(
   messages: (UserMessage | AssistantMessage)[],
   enablePromptCaching: boolean,
   querySource?: QuerySource,
-  useCachedMC = false,
-  newCacheEdits?: CachedMCEditsBlock | null,
-  pinnedEdits?: CachedMCPinnedEdits[],
   skipCacheWrite = false,
 ): MessageParam[] {
   logEvent('tengu_api_cache_breakpoints', {
@@ -3085,108 +2813,6 @@ export function addCacheBreakpoints(
       querySource,
     )
   })
-
-  if (!useCachedMC) {
-    return result
-  }
-
-  // Track all cache_references being deleted to prevent duplicates across blocks.
-  const seenDeleteRefs = new Set<string>()
-
-  // Helper to deduplicate a cache_edits block against already-seen deletions
-  const deduplicateEdits = (block: CachedMCEditsBlock): CachedMCEditsBlock => {
-    const uniqueEdits = block.edits.filter(edit => {
-      if (seenDeleteRefs.has(edit.cache_reference)) {
-        return false
-      }
-      seenDeleteRefs.add(edit.cache_reference)
-      return true
-    })
-    return { ...block, edits: uniqueEdits }
-  }
-
-  // Re-insert all previously-pinned cache_edits at their original positions
-  for (const pinned of pinnedEdits ?? []) {
-    const msg = result[pinned.userMessageIndex]
-    if (msg && msg.role === 'user') {
-      if (!Array.isArray(msg.content)) {
-        msg.content = [{ type: 'text', text: msg.content as string }]
-      }
-      const dedupedBlock = deduplicateEdits(pinned.block)
-      if (dedupedBlock.edits.length > 0) {
-        insertBlockAfterToolResults(msg.content, dedupedBlock)
-      }
-    }
-  }
-
-  // Insert new cache_edits into the last user message and pin them
-  if (newCacheEdits && result.length > 0) {
-    const dedupedNewEdits = deduplicateEdits(newCacheEdits)
-    if (dedupedNewEdits.edits.length > 0) {
-      for (let i = result.length - 1; i >= 0; i--) {
-        const msg = result[i]
-        if (msg && msg.role === 'user') {
-          if (!Array.isArray(msg.content)) {
-            msg.content = [{ type: 'text', text: msg.content as string }]
-          }
-          insertBlockAfterToolResults(msg.content, dedupedNewEdits)
-          // Pin so this block is re-sent at the same position in future calls
-          pinCacheEdits(i, newCacheEdits)
-
-          logForDebugging(
-            `Added cache_edits block with ${dedupedNewEdits.edits.length} deletion(s) to message[${i}]: ${dedupedNewEdits.edits.map(e => e.cache_reference).join(', ')}`,
-          )
-          break
-        }
-      }
-    }
-  }
-
-  // Add cache_reference to tool_result blocks that are within the cached prefix.
-  // Must be done AFTER cache_edits insertion since that modifies content arrays.
-  if (enablePromptCaching) {
-    // Find the last message containing a cache_control marker
-    let lastCCMsg = -1
-    for (let i = 0; i < result.length; i++) {
-      const msg = result[i]!
-      if (Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          if (block && typeof block === 'object' && 'cache_control' in block) {
-            lastCCMsg = i
-          }
-        }
-      }
-    }
-
-    // Add cache_reference to tool_result blocks that are strictly before
-    // the last cache_control marker. The API requires cache_reference to
-    // appear "before or on" the last cache_control — we use strict "before"
-    // to avoid edge cases where cache_edits splicing shifts block indices.
-    //
-    // Create new objects instead of mutating in-place to avoid contaminating
-    // blocks reused by secondary queries that use models without cache_editing support.
-    if (lastCCMsg >= 0) {
-      for (let i = 0; i < lastCCMsg; i++) {
-        const msg = result[i]!
-        if (msg.role !== 'user' || !Array.isArray(msg.content)) {
-          continue
-        }
-        let cloned = false
-        for (let j = 0; j < msg.content.length; j++) {
-          const block = msg.content[j]
-          if (block && isToolResultBlock(block)) {
-            if (!cloned) {
-              msg.content = [...msg.content]
-              cloned = true
-            }
-            msg.content[j] = Object.assign({}, block, {
-              cache_reference: block.tool_use_id,
-            })
-          }
-        }
-      }
-    }
-  }
 
   return result
 }

@@ -1,7 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { Box, Text, type TextProps } from '../../ink.js';
-import { feature } from 'bun:bundle';
+import { feature } from 'src/utils/features.js';
 import * as React from 'react';
 import { useState } from 'react';
 import sample from 'lodash-es/sample.js';
@@ -25,6 +24,7 @@ import { useAppStateStore } from '../../state/AppState.js';
 import { isBackgroundTask, type TaskState } from '../../tasks/types.js';
 import { getPillLabel } from '../../tasks/pillLabel.js';
 import { useSelectedMessageBg } from '../messageActions.js';
+const HOOK_TIMING_DISPLAY_THRESHOLD_MS = 500;
 type Props = {
   message: SystemMessage;
   addMargin: boolean;
@@ -264,13 +264,13 @@ function StopHookSummaryMessage(t0) {
   }
   const totalDurationMs = t1;
   if (hookErrors.length === 0 && !preventedContinuation && !message.hookLabel) {
-    if (true || totalDurationMs < HOOK_TIMING_DISPLAY_THRESHOLD_MS) {
+    if (totalDurationMs < HOOK_TIMING_DISPLAY_THRESHOLD_MS) {
       return null;
     }
   }
   let t2;
   if ($[3] !== totalDurationMs) {
-    t2 = false && totalDurationMs > 0 ? ` (${formatSecondsShort(totalDurationMs)})` : "";
+    t2 = totalDurationMs > 0 ? ` (${formatSecondsShort(totalDurationMs)})` : "";
     $[3] = totalDurationMs;
     $[4] = t2;
   } else {
@@ -402,11 +402,11 @@ function StopHookSummaryMessage(t0) {
   return t15;
 }
 function _temp3(info_0, idx_0) {
-  const durationStr_0 = false && info_0.durationMs !== undefined ? ` (${formatSecondsShort(info_0.durationMs)})` : "";
+  const durationStr_0 = info_0.durationMs !== undefined ? ` (${formatSecondsShort(info_0.durationMs)})` : "";
   return <Text key={`cmd-${idx_0}`} dimColor={true}>⎿  {info_0.command === "prompt" ? `prompt: ${info_0.promptText || ""}` : info_0.command}{durationStr_0}</Text>;
 }
 function _temp2(info, idx) {
-  const durationStr = false && info.durationMs !== undefined ? ` (${formatSecondsShort(info.durationMs)})` : "";
+  const durationStr = info.durationMs !== undefined ? ` (${formatSecondsShort(info.durationMs)})` : "";
   return <Text key={`cmd-${idx}`} dimColor={true}>{"     \u23BF "}{info.command === "prompt" ? `prompt: ${info.promptText || ""}` : info.command}{durationStr}</Text>;
 }
 function _temp(sum, h) {

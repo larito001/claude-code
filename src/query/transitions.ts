@@ -1,0 +1,17 @@
+export type Continue =
+  | { reason: 'max_output_tokens_escalate' }
+  | { reason: 'max_output_tokens_recovery'; attempt: number }
+  | { reason: 'stop_hook_blocking' }
+  | { reason: 'token_budget_continuation' }
+  | { reason: 'next_turn' }
+
+export type Terminal =
+  | { reason: 'blocking_limit' }
+  | { reason: 'image_error' }
+  | { reason: 'model_error'; error: unknown }
+  | { reason: 'aborted_streaming' }
+  | { reason: 'completed' }
+  | { reason: 'stop_hook_prevented' }
+  | { reason: 'aborted_tools' }
+  | { reason: 'hook_stopped' }
+  | { reason: 'max_turns'; turnCount: number }

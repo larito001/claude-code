@@ -17,14 +17,15 @@ export function getUserAgent(): string {
   const clientApp = process.env.CLAUDE_AGENT_SDK_CLIENT_APP
     ? `, client-app/${process.env.CLAUDE_AGENT_SDK_CLIENT_APP}`
     : ''
-  // Turn-/process-scoped workload tag for cron-initiated requests. 1P-only
-  // observability — proxies strip HTTP headers; QoS routing uses cc_workload
+  // Turn-/process-scoped workload tag for cron-initiated requests. This is
+  // first-party observability metadata; proxies may strip custom HTTP headers.
+  // QoS routing uses cc_workload
   // in the billing-header attribution block instead (see constants/system.ts).
   // getAnthropicClient (client.ts:98) calls this per-request inside withRetry,
   // so the read picks up the same setWorkload() value as getAttributionHeader.
   const workload = getWorkload()
   const workloadSuffix = workload ? `, workload/${workload}` : ''
-  return `claude-cli/${MACRO.VERSION} (${process.env.USER_TYPE}, ${process.env.CLAUDE_CODE_ENTRYPOINT ?? 'cli'}${agentSdkVersion}${clientApp}${workloadSuffix})`
+  return `claude-cli/${MACRO.VERSION} (${process.env.CLAUDE_CODE_ENTRYPOINT ?? 'cli'}${agentSdkVersion}${clientApp}${workloadSuffix})`
 }
 
 export function getMCPUserAgent(): string {
@@ -44,10 +45,9 @@ export function getMCPUserAgent(): string {
 
 // User-Agent for WebFetch requests to arbitrary sites. `Claude-User` is
 // Anthropic's publicly documented agent for user-initiated fetches (what site
-// operators match in robots.txt); the claude-code suffix lets them distinguish
-// local CLI traffic from claude.ai server-side fetches.
+// operators match in robots.txt); the claude-code suffix identifies local CLI traffic.
 export function getWebFetchUserAgent(): string {
-  return `Claude-User (${getClaudeCodeUserAgent()}; +https://support.anthropic.com/)`
+  return `Claude-User (${getClaudeCodeUserAgent()})`
 }
 
 export type AuthHeaders = {

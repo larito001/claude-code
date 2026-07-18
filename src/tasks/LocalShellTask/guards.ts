@@ -6,8 +6,6 @@ import type { TaskStateBase } from '../../Task.js'
 import type { AgentId } from '../../types/ids.js'
 import type { ShellCommand } from '../../utils/ShellCommand.js'
 
-export type BashTaskKind = 'bash' | 'monitor'
-
 export type LocalShellTaskState = TaskStateBase & {
   type: 'local_bash' // Keep as 'local_bash' for backward compatibility with persisted session state
   command: string
@@ -28,7 +26,6 @@ export type LocalShellTaskState = TaskStateBase & {
   agentId?: AgentId
   // UI display variant. 'monitor' → shows description instead of command,
   // 'Monitor details' dialog title, distinct status bar pill.
-  kind?: BashTaskKind
 }
 
 export function isLocalShellTask(task: unknown): task is LocalShellTaskState {

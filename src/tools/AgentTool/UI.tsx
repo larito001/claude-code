@@ -14,13 +14,11 @@ import { Message as MessageComponent } from '../../components/Message.js';
 import { MessageResponse } from '../../components/MessageResponse.js';
 import { ToolUseLoader } from '../../components/ToolUseLoader.js';
 import { Box, Text } from '../../ink.js';
-import { getDumpPromptsPath } from '../../services/api/dumpPrompts.js';
 import { findToolByName, type Tools } from '../../Tool.js';
 import type { Message, ProgressMessage } from '../../types/message.js';
 import type { AgentToolProgress } from '../../types/tools.js';
 import { count } from '../../utils/array.js';
 import { getSearchOrReadFromContent, getSearchReadSummaryText } from '../../utils/collapseReadSearch.js';
-import { getDisplayPath } from '../../utils/file.js';
 import { formatDuration, formatNumber } from '../../utils/format.js';
 import { buildSubagentLookups, createAssistantMessage, EMPTY_LOOKUPS } from '../../utils/messages.js';
 import type { ModelAlias } from '../../utils/model/aliases.js';
@@ -94,17 +92,9 @@ type ProcessedMessage = {
 
 /**
  * Process progress messages to group consecutive search/read operations into summaries.
- * For ants only - returns original messages for non-ants.
  * @param isAgentRunning - If true, the last group is always marked as active (in progress)
  */
 function processProgressMessages(messages: ProgressMessage<Progress>[], tools: Tools, isAgentRunning: boolean): ProcessedMessage[] {
-  // Only process for ants
-  if ("external" !== 'ant') {
-    return messages.filter((m): m is ProgressMessage<AgentToolProgress> => hasProgressMessage(m.data) && m.data.message.type !== 'user').map(m => ({
-      type: 'original',
-      message: m
-    }));
-  }
   const result: ProcessedMessage[] = [];
   let currentGroup: {
     searchCount: number;
@@ -350,7 +340,6 @@ export function renderToolResultMessage(data: Output, progressMessagesForMessage
     return null;
   }
   const {
-    agentId,
     totalDurationMs,
     totalToolUseCount,
     totalTokens,
@@ -370,11 +359,6 @@ export function renderToolResultMessage(data: Output, progressMessagesForMessage
     }
   });
   return <Box flexDirection="column">
-      {"external" === 'ant' && <MessageResponse>
-          <Text color="warning">
-            [ANT-ONLY] API calls: {getDisplayPath(getDumpPromptsPath(agentId))}
-          </Text>
-        </MessageResponse>}
       {isTranscriptMode && prompt && <MessageResponse>
           <AgentPromptDisplay prompt={prompt} theme={theme} />
         </MessageResponse>}
@@ -572,15 +556,7 @@ export function renderToolUseRejectedMessage(_input: {
   verbose: boolean;
   isTranscriptMode?: boolean;
 }): React.ReactNode {
-  // Get agentId from progress messages if available (agent was running before rejection)
-  const firstData = progressMessagesForMessage[0]?.data;
-  const agentId = firstData && hasProgressMessage(firstData) ? firstData.agentId : undefined;
   return <>
-      {"external" === 'ant' && agentId && <MessageResponse>
-          <Text color="warning">
-            [ANT-ONLY] API calls: {getDisplayPath(getDumpPromptsPath(agentId))}
-          </Text>
-        </MessageResponse>}
       {renderToolUseProgressMessage(progressMessagesForMessage, {
       tools,
       verbose,

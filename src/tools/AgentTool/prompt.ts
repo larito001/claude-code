@@ -216,7 +216,7 @@ ${
     return shared
   }
 
-  // Ant-native builds alias find/grep to embedded bfs/ugrep and remove the
+  // Embedded-search builds alias find/grep to bundled bfs/ugrep and remove the
   // dedicated Glob/Grep tools, so point at find via Bash instead.
   const embedded = hasEmbeddedSearchTools()
   const fileSearchHint = embedded
@@ -238,11 +238,9 @@ When NOT to use the ${AGENT_TOOL_NAME} tool:
 - Other tasks that are not related to the agent descriptions above
 `
 
-  // When listing via attachment, the "launch multiple agents" note is in the
-  // attachment message (conditioned on subscription there). When inline, keep
-  // the existing per-call getSubscriptionType() check.
+  // When listing via attachment, the concurrency note is included there.
   const concurrencyNote =
-    !listViaAttachment && null !== 'pro'
+    !listViaAttachment
       ? `
 - Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses`
       : ''

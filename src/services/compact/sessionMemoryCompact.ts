@@ -7,6 +7,7 @@ import type { HookResultMessage, Message } from '../../types/message.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
+import { feature } from '../../utils/features.js'
 import {
   createCompactBoundaryMessage,
   createUserMessage,
@@ -18,10 +19,6 @@ import { processSessionStartHooks } from '../../utils/sessionStart.js'
 import { getTranscriptPath } from '../../utils/sessionStorage.js'
 import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js'
 import { extractDiscoveredToolNames } from '../../utils/toolSearch.js'
-import {
-  getDynamicConfig_BLOCKS_ON_INIT,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js'
 import {
   isSessionMemoryEmpty,
@@ -96,8 +93,7 @@ export function resetSessionMemoryCompactConfig(): void {
 }
 
 /**
- * Initialize configuration from remote config (GrowthBook).
- * Only fetches once per session - subsequent calls return immediately.
+ * Initialize the local configuration once per session.
  */
 async function initSessionMemoryCompactConfig(): Promise<void> {
   if (configInitialized) {
@@ -105,28 +101,6 @@ async function initSessionMemoryCompactConfig(): Promise<void> {
   }
   configInitialized = true
 
-  // Load config from GrowthBook, merging with defaults
-  const remoteConfig = await getDynamicConfig_BLOCKS_ON_INIT<
-    Partial<SessionMemoryCompactConfig>
-  >('tengu_sm_compact_config', {})
-
-  // Only use remote values if they are explicitly set (positive numbers)
-  // This ensures sensible defaults aren't overridden by zero values
-  const config: SessionMemoryCompactConfig = {
-    minTokens:
-      remoteConfig.minTokens && remoteConfig.minTokens > 0
-        ? remoteConfig.minTokens
-        : DEFAULT_SM_COMPACT_CONFIG.minTokens,
-    minTextBlockMessages:
-      remoteConfig.minTextBlockMessages && remoteConfig.minTextBlockMessages > 0
-        ? remoteConfig.minTextBlockMessages
-        : DEFAULT_SM_COMPACT_CONFIG.minTextBlockMessages,
-    maxTokens:
-      remoteConfig.maxTokens && remoteConfig.maxTokens > 0
-        ? remoteConfig.maxTokens
-        : DEFAULT_SM_COMPACT_CONFIG.maxTokens,
-  }
-  setSessionMemoryCompactConfig(config)
 }
 
 /**
@@ -398,7 +372,7 @@ export function calculateMessagesToKeepIndex(
 
 /**
  * Check if we should use session memory for compaction
- * Uses cached gate values to avoid blocking on Statsig initialization
+ * Uses local feature flags so the framework does not depend on remote rollout state.
  */
 export function shouldUseSessionMemoryCompaction(): boolean {
   // Allow env var override for eval runs and testing
@@ -409,26 +383,7 @@ export function shouldUseSessionMemoryCompaction(): boolean {
     return false
   }
 
-  const sessionMemoryFlag = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_session_memory',
-    false,
-  )
-  const smCompactFlag = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_sm_compact',
-    false,
-  )
-  const shouldUse = sessionMemoryFlag && smCompactFlag
-
-  // Log flag states for debugging (ant-only to avoid noise in external logs)
-  if (process.env.USER_TYPE === 'ant') {
-    logEvent('tengu_sm_compact_flag_check', {
-      tengu_session_memory: sessionMemoryFlag,
-      tengu_sm_compact: smCompactFlag,
-      should_use: shouldUse,
-    })
-  }
-
-  return shouldUse
+  return feature('SESSION_MEMORY') && feature('SESSION_MEMORY_COMPACT')
 }
 
 /**
@@ -622,9 +577,7 @@ export async function trySessionMemoryCompaction(
     // Use logEvent instead of logError since errors here are expected
     // (e.g., file not found, path issues) and shouldn't go to error logs
     logEvent('tengu_sm_compact_error', {})
-    if (process.env.USER_TYPE === 'ant') {
-      logForDebugging(`Session memory compaction error: ${errorMessage(error)}`)
-    }
+    logForDebugging(`Session memory compaction error: ${errorMessage(error)}`)
     return null
   }
 }

@@ -9,9 +9,7 @@ import type {
   SDKAssistantMessage,
   SDKCompactBoundaryMessage,
   SDKMessage,
-  SDKRateLimitInfo,
 } from 'src/entrypoints/agentSdkTypes.js'
-import type { ClaudeAILimits } from 'src/services/claudeAiLimits.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
 import type {
   AssistantMessage,
@@ -138,7 +136,7 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
             isSynthetic: message.isMeta || message.isVisibleInTranscriptOnly,
             // Structured tool output (not the string content sent to the
             // model — the full Output object). Rides the protobuf catchall
-            // so web viewers can read things like BriefTool's file_uuid
+            // so downstream viewers can read tool-specific metadata
             // without it polluting model context.
             ...(message.toolUseResult !== undefined
               ? { tool_use_result: message.toolUseResult }
@@ -211,43 +209,6 @@ export function localCommandOutputToSDKAssistantMessage(
     parent_tool_use_id: null,
     session_id: getSessionId(),
     uuid,
-  }
-}
-
-/**
- * Maps internal ClaudeAILimits to the SDK-facing SDKRateLimitInfo type,
- * stripping internal-only fields like unifiedRateLimitFallbackAvailable.
- */
-export function toSDKRateLimitInfo(
-  limits: ClaudeAILimits | undefined,
-): SDKRateLimitInfo | undefined {
-  if (!limits) {
-    return undefined
-  }
-  return {
-    status: limits.status,
-    ...(limits.resetsAt !== undefined && { resetsAt: limits.resetsAt }),
-    ...(limits.rateLimitType !== undefined && {
-      rateLimitType: limits.rateLimitType,
-    }),
-    ...(limits.utilization !== undefined && {
-      utilization: limits.utilization,
-    }),
-    ...(limits.overageStatus !== undefined && {
-      overageStatus: limits.overageStatus,
-    }),
-    ...(limits.overageResetsAt !== undefined && {
-      overageResetsAt: limits.overageResetsAt,
-    }),
-    ...(limits.overageDisabledReason !== undefined && {
-      overageDisabledReason: limits.overageDisabledReason,
-    }),
-    ...(limits.isUsingOverage !== undefined && {
-      isUsingOverage: limits.isUsingOverage,
-    }),
-    ...(limits.surpassedThreshold !== undefined && {
-      surpassedThreshold: limits.surpassedThreshold,
-    }),
   }
 }
 

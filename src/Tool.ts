@@ -221,15 +221,12 @@ export type ToolUseContext = {
    */
   loadedNestedMemoryPaths?: Set<string>
   dynamicSkillDirTriggers?: Set<string>
-  /** 技能名称通过本次会议的 Skill_discovery 浮出水面。仅遥测（提要 was_discovered）。 */
-  discoveredSkillNames?: Set<string>
   userModified?: boolean
   setInProgressToolUseIDs: (f: (prev: Set<string>) => Set<string>) => void
   /** 仅在交互式 (REPL) 上下文中连接； SDK/QueryEngine 不设置此项。 */
   setHasInterruptibleToolInProgress?: (v: boolean) => void
   setResponseLength: (f: (prev: number) => number) => void
-  /** 仅 Ant：推送新的 API 指标条目以进行 OTPS 跟踪。
-   *  当新的 API 请求开始时，由子代理流调用。 */
+  /** 当新的 API 请求开始时，由子代理流推送 TTFT 指标。 */
   pushApiMetricsEntry?: (ttftMs: number) => void
   setStreamMode?: (mode: SpinnerMode) => void
   onCompactProgress?: (event: CompactProgressEvent) => void
@@ -571,7 +568,6 @@ export type Tool<
       tools: Tools
       verbose: boolean
       isTranscriptMode?: boolean
-      isBriefOnly?: boolean
       /** 原始 tool_use 输入（如果可用）。对于紧凑的结果很有用
        * 引用请求内容的摘要（例如“发送到#foo”）。 */
       input?: unknown

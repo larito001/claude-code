@@ -17,8 +17,6 @@ export type ExecResult = {
   interrupted: boolean
   backgroundTaskId?: string
   backgroundedByUser?: boolean
-  /** Set when assistant-mode auto-backgrounded a long-running blocking command. */
-  assistantAutoBackgrounded?: boolean
   /** Set when stdout was too large to fit inline — points to the output file on disk. */
   outputFilePath?: string
   /** Total size of the output file in bytes (set when outputFilePath is set). */
@@ -429,9 +427,13 @@ class AbortedShellCommand implements ShellCommand {
     return false
   }
 
-  kill(): void {}
+  kill(): void {
+    // No process was spawned, so the command is already in its terminal state.
+  }
 
-  cleanup(): void {}
+  cleanup(): void {
+    // No process resources were allocated.
+  }
 }
 
 export function createAbortedCommand(
@@ -459,7 +461,11 @@ export function createFailedCommand(preSpawnError: string): ShellCommand {
     background(): boolean {
       return false
     },
-    kill(): void {},
-    cleanup(): void {},
+    kill(): void {
+      // The spawn failed before a child process existed.
+    },
+    cleanup(): void {
+      // The spawn failed before resources were allocated.
+    },
   }
 }

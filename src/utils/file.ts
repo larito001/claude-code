@@ -272,11 +272,11 @@ export async function suggestPathUnderCwd(
  * 1.35B Read calls × 132 lines avg this is 2.18% of fleet uncached input
  * (bq-queries/read_line_prefix_overhead_verify.sql).
  *
- * Ant soak validated no Edit error regression (6.29% vs 6.86% baseline).
- * Killswitch pattern: GB can disable if issues surface externally.
+ * A deployment-level killswitch can restore the padded format if a target
+ * model depends on the older presentation.
  */
 export function isCompactLinePrefixEnabled(): boolean {
-  // 3P default: killswitch off = compact format enabled. Client-side only —
+  // Default: killswitch off = compact format enabled. Client-side only —
   // no server support needed, safe for Bedrock/Vertex/Foundry.
   return !getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_compact_line_prefix_killswitch',

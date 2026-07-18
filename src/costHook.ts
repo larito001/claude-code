@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { formatTotalCost, saveCurrentSessionCosts } from './cost-tracker.js'
-import { hasConsoleBillingAccess } from './utils/billing.js'
+import { shouldShowCostWarnings } from './utils/billing.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
 
 export function useCostSummary(
@@ -8,7 +8,7 @@ export function useCostSummary(
 ): void {
   useEffect(() => {
     const f = () => {
-      if (hasConsoleBillingAccess()) {
+      if (shouldShowCostWarnings()) {
         process.stdout.write('\n' + formatTotalCost() + '\n')
       }
 

@@ -13,9 +13,8 @@
  * initExtractMemories() in beforeEach to get a fresh closure.
  */
 
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { basename } from 'path'
-import { getIsRemoteMode } from '../../bootstrap/state.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import { ENTRYPOINT_NAME } from '../../memdir/memdir.js'
 import {
@@ -53,7 +52,6 @@ import {
   createMemorySavedMessage,
   createUserMessage,
 } from '../../utils/messages.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../analytics/metadata.js'
 import {
@@ -170,7 +168,7 @@ function denyAutoMemTool(tool: Tool, reason: string) {
  */
 export function createAutoMemCanUseTool(memoryDir: string): CanUseToolFn {
   return async (tool: Tool, input: Record<string, unknown>) => {
-    // Allow REPL — when REPL mode is enabled (ant-default), primitive tools
+    // Allow REPL — when REPL mode is enabled, primitive tools
     // are hidden from the tool list so the forked agent calls REPL instead.
     // REPL's VM context re-invokes this canUseTool for each inner primitive
     // (toolWrappers.ts createToolWrapper), so the Read/Bash/Edit/Write checks
@@ -307,13 +305,11 @@ export function initExtractMemories(): void {
   let lastMemoryMessageUuid: string | undefined
 
   /** One-shot flag: once we log that the gate is disabled, don't repeat. */
-  let hasLoggedGateFailure = false
 
   /** True while runExtraction is executing — prevents overlapping runs. */
   let inProgress = false
 
   /** Counts eligible turns since the last extraction run. Resets to 0 after each run. */
-  let turnsSinceLastExtraction = 0
 
   /** When a call arrives during an in-progress run, we stash the context here
    *  and run one trailing extraction after the current one finishes. */
@@ -329,11 +325,9 @@ export function initExtractMemories(): void {
   async function runExtraction({
     context,
     appendSystemMessage,
-    isTrailingRun,
   }: {
     context: REPLHookContext
     appendSystemMessage?: AppendSystemMessageFn
-    isTrailingRun?: boolean
   }): Promise<void> {
     const { messages } = context
     const memoryDir = getAutoMemPath()
@@ -363,27 +357,10 @@ export function initExtractMemories(): void {
       ? teamMemPaths!.isTeamMemoryEnabled()
       : false
 
-    const skipIndex = getFeatureValue_CACHED_MAY_BE_STALE(
-      'tengu_moth_copse',
-      false,
-    )
+    const skipIndex = false
 
     const canUseTool = createAutoMemCanUseTool(memoryDir)
     const cacheSafeParams = createCacheSafeParams(context)
-
-    // Only run extraction every N eligible turns (tengu_bramble_lintel, default 1).
-    // Trailing extractions (from stashed contexts) skip this check since they
-    // process already-committed work that should not be throttled.
-    if (!isTrailingRun) {
-      turnsSinceLastExtraction++
-      if (
-        turnsSinceLastExtraction <
-        (getFeatureValue_CACHED_MAY_BE_STALE('tengu_bramble_lintel', null) ?? 1)
-      ) {
-        return
-      }
-    }
-    turnsSinceLastExtraction = 0
 
     inProgress = true
     const startTime = Date.now()
@@ -516,7 +493,6 @@ export function initExtractMemories(): void {
         await runExtraction({
           context: trailing.context,
           appendSystemMessage: trailing.appendSystemMessage,
-          isTrailingRun: true,
         })
       }
     }
@@ -533,21 +509,12 @@ export function initExtractMemories(): void {
       return
     }
 
-    if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_passport_quail', false)) {
-      if (process.env.USER_TYPE === 'ant' && !hasLoggedGateFailure) {
-        hasLoggedGateFailure = true
-        logEvent('tengu_extract_memories_gate_disabled', {})
-      }
+    if (!feature('EXTRACT_MEMORIES')) {
       return
     }
 
     // Check auto-memory is enabled
     if (!isAutoMemoryEnabled()) {
-      return
-    }
-
-    // Skip in remote mode
-    if (getIsRemoteMode()) {
       return
     }
 

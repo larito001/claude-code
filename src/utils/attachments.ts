@@ -1,4 +1,3 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -48,7 +47,7 @@ import { dirname, parse, relative, resolve } from 'path'
 import { getCwd } from 'src/utils/cwd.js'
 import { getViewedTeammateTask } from '../state/selectors.js'
 import { logError } from './log.js'
-import { logAntError } from './debug.js'
+import { logDebugError } from './debug.js'
 import { isENOENT, toError } from './errors.js'
 import type { DiagnosticFile } from '../services/diagnosticTracking.js'
 import { diagnosticTracker } from '../services/diagnosticTracking.js'
@@ -85,21 +84,7 @@ import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from '../bootstrap/state.js'
 import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
 import { getContextWindowForModel } from './context.js'
-import type { DiscoverySignal } from '../services/skillSearch/signals.js'
-// Conditional require for DCE. All skill-search string literals that would
-// otherwise leak into external builds live inside these modules. The only
-// surfaces in THIS file are: the maybe() call (gated via spread below) and
-// the skill_listing suppression check (uses the same skillSearchModules null
-// check). The type-only DiscoverySignal import above is erased at compile time.
 /* eslint-disable @typescript-eslint/no-require-imports */
-const skillSearchModules = feature('EXPERIMENTAL_SKILL_SEARCH')
-  ? {
-      featureCheck:
-        require('../services/skillSearch/featureCheck.js') as typeof import('../services/skillSearch/featureCheck.js'),
-      prefetch:
-        require('../services/skillSearch/prefetch.js') as typeof import('../services/skillSearch/prefetch.js'),
-    }
-  : null
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
   ? (require('./permissions/autoModeState.js') as typeof import('./permissions/autoModeState.js'))
   : null
@@ -155,7 +140,6 @@ import {
   setNeedsAutoModeExitAttachment,
   getLastEmittedDate,
   setLastEmittedDate,
-  getKairosActive,
 } from '../bootstrap/state.js'
 import type { QuerySource } from '../constants/querySource.js'
 import {
@@ -191,18 +175,7 @@ import {
 } from './messages.js'
 import { isHumanTurn } from './messagePredicates.js'
 import { isEnvTruthy, getClaudeConfigHomeDir } from './envUtils.js'
-import { feature } from 'bun:bundle'
-/* eslint-disable @typescript-eslint/no-require-imports */
-const BRIEF_TOOL_NAME: string | null =
-  feature('KAIROS') || feature('KAIROS_BRIEF')
-    ? (
-        require('../tools/BriefTool/prompt.js') as typeof import('../tools/BriefTool/prompt.js')
-      ).BRIEF_TOOL_NAME
-    : null
-const sessionTranscriptModule = feature('KAIROS')
-  ? (require('../services/sessionTranscript/sessionTranscript.js') as typeof import('../services/sessionTranscript/sessionTranscript.js'))
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
+import { feature } from 'src/utils/features.js'
 import { hasUltrathinkKeyword, isUltrathinkEnabled } from './thinking.js'
 import {
   tokenCountFromLastAPIResponse,
@@ -245,7 +218,6 @@ import {
 import { isInProcessTeammate } from './teammateContext.js'
 import { removeTeammateFromTeamFile } from './swarm/teamHelpers.js'
 import { unassignTeammateTasks } from './tasks.js'
-import { getCompanionIntroAttachment } from '../buddy/prompt.js'
 
 export const TODO_REMINDER_CONFIG = {
   TURNS_SINCE_WRITE: 10,
@@ -282,10 +254,6 @@ export const RELEVANT_MEMORIES_CONFIG = {
   // resets the counter — old attachments are gone from context, so
   // re-surfacing is valid.
   MAX_SESSION_BYTES: 60 * 1024,
-} as const
-
-export const VERIFY_PLAN_REMINDER_CONFIG = {
-  TURNS_BETWEEN_REMINDERS: 10,
 } as const
 
 export type FileAttachment = {
@@ -531,12 +499,6 @@ export type Attachment =
       isInitial: boolean
     }
   | {
-      type: 'skill_discovery'
-      skills: { name: string; description: string; shortId?: string }[]
-      signal: DiscoverySignal
-      source: 'native' | 'aki' | 'both'
-    }
-  | {
       type: 'queued_command'
       prompt: string | Array<ContentBlockParam>
       source_uuid?: UUID
@@ -647,9 +609,6 @@ export type Attachment =
       }>
     }
   | {
-      type: 'verify_plan_reminder'
-    }
-  | {
       type: 'max_turns_reached'
       maxTurns: number
       turnCount: number
@@ -666,9 +625,6 @@ export type Attachment =
     }
   | {
       type: 'compaction_reminder'
-    }
-  | {
-      type: 'context_efficiency'
     }
   | {
       type: 'date_change'
@@ -691,19 +647,12 @@ export type Attachment =
       removedTypes: string[]
       /** True when this is the first announcement in the conversation */
       isInitial: boolean
-      /** Whether to include the "launch multiple agents concurrently" note (non-pro subscriptions) */
-      showConcurrencyNote: boolean
     }
   | {
       type: 'mcp_instructions_delta'
       addedNames: string[]
       addedBlocks: string[]
       removedNames: string[]
-    }
-  | {
-      type: 'companion_intro'
-      name: string
-      species: string
     }
   | {
       type: 'bagel_console'
@@ -743,7 +692,6 @@ export async function getAttachments(
   queuedCommands: QueuedCommand[],
   messages?: Message[],
   querySource?: QuerySource,
-  options?: { skipSkillDiscovery?: boolean },
 ): Promise<Attachment[]> {
   if (
     isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_ATTACHMENTS) ||
@@ -782,31 +730,6 @@ export async function getAttachments(
             ),
           ),
         ),
-        // Skill discovery on turn 0 (user input as signal). Inter-turn
-        // discovery runs via startSkillDiscoveryPrefetch in query.ts,
-        // gated on write-pivot detection — see skillSearch/prefetch.ts.
-        // feature() here lets DCE drop the 'skill_discovery' string (and the
-        // function it calls) from external builds.
-        //
-        // skipSkillDiscovery gates out the SKILL.md-expansion path
-        // (getMessagesForPromptSlashCommand). When a skill is invoked, its
-        // SKILL.md content is passed as `input` here to extract @-mentions —
-        // but that content is NOT user intent and must not trigger discovery.
-        // Without this gate, a 110KB SKILL.md fires ~3.3s of chunked AKI
-        // queries on every skill invocation (session 13a9afae).
-        ...(feature('EXPERIMENTAL_SKILL_SEARCH') &&
-        skillSearchModules &&
-        !options?.skipSkillDiscovery
-          ? [
-              maybe('skill_discovery', () =>
-                skillSearchModules.prefetch.getTurnZeroSkillDiscovery(
-                  input,
-                  messages ?? [],
-                  context,
-                ),
-              ),
-            ]
-          : []),
       ]
     : []
 
@@ -857,23 +780,11 @@ export async function getAttachments(
         ),
       ),
     ),
-    ...(feature('BUDDY')
-      ? [
-          maybe('companion_intro', () =>
-            Promise.resolve(getCompanionIntroAttachment(messages)),
-          ),
-        ]
-      : []),
     maybe('changed_files', () => getChangedFiles(context)),
     maybe('nested_memory', () => getNestedMemoryAttachments(context)),
     // relevant_memories moved to async prefetch (startRelevantMemoryPrefetch)
     maybe('dynamic_skill', () => getDynamicSkillAttachments(context)),
     maybe('skill_listing', () => getSkillListingAttachments(context)),
-    // Inter-turn skill discovery now runs via startSkillDiscoveryPrefetch
-    // (query.ts, concurrent with the main turn). The blocking call that
-    // previously lived here was the assistant_turn signal — 97% of those
-    // Haiku calls found nothing in prod. Prefetch + await-at-collection
-    // replaces it; see src/services/skillSearch/prefetch.ts.
     maybe('plan_mode', () => getPlanModeAttachments(messages, toolUseContext)),
     maybe('plan_mode_exit', () => getPlanModeExitAttachment(toolUseContext)),
     ...(feature('TRANSCRIPT_CLASSIFIER')
@@ -927,13 +838,6 @@ export async function getAttachments(
           ),
         ]
       : []),
-    ...(feature('HISTORY_SNIP')
-      ? [
-          maybe('context_efficiency', () =>
-            Promise.resolve(getContextEfficiencyAttachment(messages ?? [])),
-          ),
-        ]
-      : []),
   ]
 
   // Attachments which are semantically only for the main conversation or don't have concurrency-safe implementations
@@ -975,9 +879,6 @@ export async function getAttachments(
         ),
         maybe('output_token_usage', async () =>
           Promise.resolve(getOutputTokenUsageAttachment()),
-        ),
-        maybe('verify_plan_reminder', async () =>
-          getVerifyPlanReminderAttachment(messages, toolUseContext),
         ),
       ]
     : []
@@ -1030,8 +931,8 @@ async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
       } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
     }
     logError(e)
-    // For Ant users, log the full error to help with debugging
-    logAntError(`Attachment error in ${label}`, e)
+    // Preserve full details only in the local debug log.
+    logDebugError(`Attachment error in ${label}`, e)
 
     return []
   }
@@ -1426,16 +1327,6 @@ export function getDateChangeAttachments(
 
   setLastEmittedDate(currentDate)
 
-  // Assistant mode: flush yesterday's transcript to the per-day file so
-  // the /dream skill (1–5am local) finds it even if no compaction fires
-  // today. Fire-and-forget; writeSessionTranscriptSegment buckets by
-  // message timestamp so a multi-day gap flushes each day correctly.
-  if (feature('KAIROS')) {
-    if (getKairosActive() && messages !== undefined) {
-      sessionTranscriptModule?.flushOnDateChange(messages, currentDate)
-    }
-  }
-
   return [{ type: 'date_change', newDate: currentDate }]
 }
 
@@ -1546,12 +1437,11 @@ export function getAgentListingDeltaAttachment(
       addedLines: added.map(formatAgentLine),
       removedTypes: removed,
       isInitial: announced.size === 0,
-      showConcurrencyNote: null !== 'pro',
     },
   ]
 }
 
-// Exported for compact.ts / reactiveCompact.ts — single source of truth for the gate.
+// Exported for compact.ts — single source of truth for the gate.
 export function getMcpInstructionsDeltaAttachment(
   mcpClients: MCPServerConnection[],
   tools: Tools,
@@ -2616,29 +2506,6 @@ export function suppressNextSkillListing(): void {
 }
 let suppressNext = false
 
-// When skill-search is enabled and the filtered (bundled + MCP) listing exceeds
-// this count, fall back to bundled-only. Protects MCP-heavy users (100+ servers)
-// from truncation while keeping the turn-0 guarantee for typical setups.
-const FILTERED_LISTING_MAX = 30
-
-/**
- * Filter skills to bundled (Anthropic-curated) + MCP (user-connected) only.
- * Used when skill-search is enabled to resolve the turn-0 gap for subagents:
- * these sources are small, intent-signaled, and won't hit the truncation budget.
- * User/project/plugin skills (the long tail — 200+) go through discovery instead.
- *
- * Falls back to bundled-only if bundled+mcp exceeds FILTERED_LISTING_MAX.
- */
-export function filterToBundledAndMcp(commands: Command[]): Command[] {
-  const filtered = commands.filter(
-    cmd => cmd.loadedFrom === 'bundled' || cmd.loadedFrom === 'mcp',
-  )
-  if (filtered.length > FILTERED_LISTING_MAX) {
-    return filtered.filter(cmd => cmd.loadedFrom === 'bundled')
-  }
-  return filtered
-}
-
 async function getSkillListingAttachments(
   toolUseContext: ToolUseContext,
 ): Promise<Attachment[]> {
@@ -2658,24 +2525,10 @@ async function getSkillListingAttachments(
   const mcpSkills = getMcpSkillCommands(
     toolUseContext.getAppState().mcp.commands,
   )
-  let allCommands =
+  const allCommands =
     mcpSkills.length > 0
       ? uniqBy([...localCommands, ...mcpSkills], 'name')
       : localCommands
-
-  // When skill search is active, filter to bundled + MCP instead of full
-  // suppression. Resolves the turn-0 gap: main thread gets turn-0 discovery
-  // via getTurnZeroSkillDiscovery (blocking), but subagents use the async
-  // subagent_spawn signal (collected post-tools, visible turn 1). Bundled +
-  // MCP are small and intent-signaled; user/project/plugin skills go through
-  // discovery. feature() first for DCE — the property-access string leaks
-  // otherwise even with ?. on null.
-  if (
-    feature('EXPERIMENTAL_SKILL_SEARCH') &&
-    skillSearchModules?.featureCheck.isSkillSearchEnabled()
-  ) {
-    allCommands = filterToBundledAndMcp(allCommands)
-  }
 
   const agentKey = toolUseContext.agentId ?? ''
   let sent = sentSkillNames.get(agentKey)
@@ -2730,10 +2583,6 @@ async function getSkillListingAttachments(
     },
   ]
 }
-
-// getSkillDiscoveryAttachment moved to skillSearch/prefetch.ts as
-// getTurnZeroSkillDiscovery — keeps the 'skill_discovery' string literal inside
-// a feature-gated module so it doesn't leak into external builds.
 
 export function extractAtMentionedFiles(content: string): string[] {
   // Extract filenames mentioned with @ symbol, including line range syntax: @file.txt#L10-20
@@ -2922,7 +2771,6 @@ export async function* getAttachmentMessages(
   queuedCommands: QueuedCommand[],
   messages?: Message[],
   querySource?: QuerySource,
-  options?: { skipSkillDiscovery?: boolean },
 ): AsyncGenerator<AttachmentMessage, void> {
   // TODO: Compute this upstream
   const attachments = await getAttachments(
@@ -2932,7 +2780,6 @@ export async function* getAttachmentMessages(
     queuedCommands,
     messages,
     querySource,
-    options,
   )
 
   if (attachments.length === 0) {
@@ -3257,18 +3104,6 @@ async function getTodoReminderAttachments(
     return []
   }
 
-  // When SendUserMessage is in the toolkit, it's the primary communication
-  // channel and the model is always told to use it (#20467). TodoWrite
-  // becomes a side channel — nudging the model about it conflicts with the
-  // brief workflow. The tool itself stays available; this only gates the
-  // "you haven't used it in a while" nag.
-  if (
-    BRIEF_TOOL_NAME &&
-    toolUseContext.options.tools.some(t => toolMatchesName(t, BRIEF_TOOL_NAME))
-  ) {
-    return []
-  }
-
   // Skip if no messages provided
   if (!messages || messages.length === 0) {
     return []
@@ -3358,22 +3193,6 @@ async function getTaskReminderAttachments(
   toolUseContext: ToolUseContext,
 ): Promise<Attachment[]> {
   if (!isTodoV2Enabled()) {
-    return []
-  }
-
-  // Skip for ant users
-  if (process.env.USER_TYPE === 'ant') {
-    return []
-  }
-
-  // When SendUserMessage is in the toolkit, it's the primary communication
-  // channel and the model is always told to use it (#20467). TaskUpdate
-  // becomes a side channel — nudging the model about it conflicts with the
-  // brief workflow. The tool itself stays available; this only gates the nag.
-  if (
-    BRIEF_TOOL_NAME &&
-    toolUseContext.options.tools.some(t => toolMatchesName(t, BRIEF_TOOL_NAME))
-  ) {
     return []
   }
 
@@ -3516,10 +3335,6 @@ async function getTeammateMailboxAttachments(
   if (!isAgentSwarmsEnabled()) {
     return []
   }
-  if (process.env.USER_TYPE !== 'ant') {
-    return []
-  }
-
   // Get AppState early to check for team lead status
   const appState = toolUseContext.getAppState()
 
@@ -3842,73 +3657,6 @@ function getMaxBudgetUsdAttachment(maxBudgetUsd?: number): Attachment[] {
   ]
 }
 
-/**
- * Count human turns since plan mode exit (plan_mode_exit attachment).
- * Returns 0 if no plan_mode_exit attachment found.
- *
- * tool_result messages are type:'user' without isMeta, so filter by
- * toolUseResult to avoid counting them — otherwise the 10-turn reminder
- * interval fires every ~10 tool calls instead of ~10 human turns.
- */
-export function getVerifyPlanReminderTurnCount(messages: Message[]): number {
-  let turnCount = 0
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i]
-    if (message && isHumanTurn(message)) {
-      turnCount++
-    }
-    // Stop counting at plan_mode_exit attachment (marks when implementation started)
-    if (
-      message?.type === 'attachment' &&
-      message.attachment.type === 'plan_mode_exit'
-    ) {
-      return turnCount
-    }
-  }
-  // No plan_mode_exit found
-  return 0
-}
-
-/**
- * Get verify plan reminder attachment if the model hasn't called VerifyPlanExecution yet.
- */
-async function getVerifyPlanReminderAttachment(
-  messages: Message[] | undefined,
-  toolUseContext: ToolUseContext,
-): Promise<Attachment[]> {
-  if (
-    process.env.USER_TYPE !== 'ant' ||
-    !isEnvTruthy(process.env.CLAUDE_CODE_VERIFY_PLAN)
-  ) {
-    return []
-  }
-
-  const appState = toolUseContext.getAppState()
-  const pending = appState.pendingPlanVerification
-
-  // Only remind if plan exists and verification not started or completed
-  if (
-    !pending ||
-    pending.verificationStarted ||
-    pending.verificationCompleted
-  ) {
-    return []
-  }
-
-  // Only remind every N turns
-  if (messages && messages.length > 0) {
-    const turnCount = getVerifyPlanReminderTurnCount(messages)
-    if (
-      turnCount === 0 ||
-      turnCount % VERIFY_PLAN_REMINDER_CONFIG.TURNS_BETWEEN_REMINDERS !== 0
-    ) {
-      return []
-    }
-  }
-
-  return [{ type: 'verify_plan_reminder' }]
-}
-
 export function getCompactionReminderAttachment(
   messages: Message[],
   model: string,
@@ -3934,35 +3682,6 @@ export function getCompactionReminderAttachment(
 
   return [{ type: 'compaction_reminder' }]
 }
-
-/**
- * Context-efficiency nudge. Injected after every N tokens of growth without
- * a snip. Pacing is handled entirely by shouldNudgeForSnips — the 10k
- * interval resets on prior nudges, snip markers, snip boundaries, and
- * compact boundaries.
- */
-export function getContextEfficiencyAttachment(
-  messages: Message[],
-): Attachment[] {
-  if (!feature('HISTORY_SNIP')) {
-    return []
-  }
-  // Gate must match SnipTool.isEnabled() — don't nudge toward a tool that
-  // isn't in the tool list. Lazy require keeps this file snip-string-free.
-  const { isSnipRuntimeEnabled, shouldNudgeForSnips } =
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('../services/compact/snipCompact.js') as typeof import('../services/compact/snipCompact.js')
-  if (!isSnipRuntimeEnabled()) {
-    return []
-  }
-
-  if (!shouldNudgeForSnips(messages)) {
-    return []
-  }
-
-  return [{ type: 'context_efficiency' }]
-}
-
 
 function isFileReadDenied(
   filePath: string,

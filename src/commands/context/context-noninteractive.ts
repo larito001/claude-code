@@ -1,4 +1,3 @@
-import { feature } from 'bun:bundle'
 import { microcompactMessages } from '../../services/compact/microCompact.js'
 import type { AppState } from '../../state/AppStateStore.js'
 import type { Tools, ToolUseContext } from '../../Tool.js'
@@ -46,14 +45,7 @@ export async function collectContextData(
     },
   } = context
 
-  let apiView = getMessagesAfterCompactBoundary(messages)
-  if (feature('CONTEXT_COLLAPSE')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { projectView } =
-      require('../../services/contextCollapse/operations.js') as typeof import('../../services/contextCollapse/operations.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    apiView = projectView(apiView)
-  }
+  const apiView = getMessagesAfterCompactBoundary(messages)
 
   const { messages: compactedMessages } = await microcompactMessages(apiView)
   const appState = getAppState()
@@ -107,44 +99,6 @@ function formatContextAsMarkdownTable(data: ContextData): string {
   output += `**Model:** ${model}  \n`
   output += `**Tokens:** ${formatTokens(totalTokens)} / ${formatTokens(rawMaxTokens)} (${percentage}%)\n`
 
-  // Context-collapse status. Always show when the runtime gate is on —
-  // the user needs to know which strategy is managing their context
-  // even before anything has fired.
-  if (feature('CONTEXT_COLLAPSE')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { getStats, isContextCollapseEnabled } =
-      require('../../services/contextCollapse/index.js') as typeof import('../../services/contextCollapse/index.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    if (isContextCollapseEnabled()) {
-      const s = getStats()
-      const { health: h } = s
-
-      const parts = []
-      if (s.collapsedSpans > 0) {
-        parts.push(
-          `${s.collapsedSpans} ${plural(s.collapsedSpans, 'span')} summarized (${s.collapsedMessages} messages)`,
-        )
-      }
-      if (s.stagedSpans > 0) parts.push(`${s.stagedSpans} staged`)
-      const summary =
-        parts.length > 0
-          ? parts.join(', ')
-          : h.totalSpawns > 0
-            ? `${h.totalSpawns} ${plural(h.totalSpawns, 'spawn')}, nothing staged yet`
-            : 'waiting for first trigger'
-      output += `**Context strategy:** collapse (${summary})\n`
-
-      if (h.totalErrors > 0) {
-        output += `**Collapse errors:** ${h.totalErrors}/${h.totalSpawns} spawns failed`
-        if (h.lastError) {
-          output += ` (last: ${h.lastError.slice(0, 80)})`
-        }
-        output += '\n'
-      } else if (h.emptySpawnWarningEmitted) {
-        output += `**Collapse idle:** ${h.totalEmptySpawns} consecutive empty runs\n`
-      }
-    }
-  }
   output += '\n'
 
   // Main categories table
@@ -199,13 +153,9 @@ function formatContextAsMarkdownTable(data: ContextData): string {
     output += `\n`
   }
 
-  // System tools (ant-only)
-  if (
-    systemTools &&
-    systemTools.length > 0 &&
-    process.env.USER_TYPE === 'ant'
-  ) {
-    output += `### [ANT-ONLY] System Tools\n\n`
+  // System tools
+  if (systemTools && systemTools.length > 0) {
+    output += `### System Tools\n\n`
     output += `| Tool | Tokens |\n`
     output += `|------|--------|\n`
     for (const tool of systemTools) {
@@ -214,13 +164,9 @@ function formatContextAsMarkdownTable(data: ContextData): string {
     output += `\n`
   }
 
-  // System prompt sections (ant-only)
-  if (
-    systemPromptSections &&
-    systemPromptSections.length > 0 &&
-    process.env.USER_TYPE === 'ant'
-  ) {
-    output += `### [ANT-ONLY] System Prompt Sections\n\n`
+  // System prompt sections
+  if (systemPromptSections && systemPromptSections.length > 0) {
+    output += `### System Prompt Sections\n\n`
     output += `| Section | Tokens |\n`
     output += `|---------|--------|\n`
     for (const section of systemPromptSections) {
@@ -288,9 +234,9 @@ function formatContextAsMarkdownTable(data: ContextData): string {
     output += `\n`
   }
 
-  // Message breakdown (ant-only)
-  if (messageBreakdown && process.env.USER_TYPE === 'ant') {
-    output += `### [ANT-ONLY] Message Breakdown\n\n`
+  // Message breakdown
+  if (messageBreakdown) {
+    output += `### Message Breakdown\n\n`
     output += `| Category | Tokens |\n`
     output += `|----------|--------|\n`
     output += `| Tool calls | ${formatTokens(messageBreakdown.toolCallTokens)} |\n`

@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { WriteFileOptions } from 'fs'
 import {
   closeSync,
@@ -8,7 +8,6 @@ import {
 } from 'fs'
 // biome-ignore lint: This file IS the cloneDeep wrapper - it must import the original
 import lodashCloneDeep from 'lodash-es/cloneDeep.js'
-import { addSlowOperation } from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
 
 // Extended WriteFileOptions to include 'flush' which is available in Node.js 20.1.0+
@@ -24,7 +23,7 @@ type WriteFileOptionsWithFlush =
  * Operations taking longer than this will be logged for debugging.
  * - Override: set CLAUDE_CODE_SLOW_OPERATION_THRESHOLD_MS to a number
  * - Dev builds: 20ms (lower threshold for development)
- * - Ants: 300ms (enabled for all internal users)
+ * - Feature enabled: 300ms
  */
 const SLOW_OPERATION_THRESHOLD_MS = (() => {
   const envValue = process.env.CLAUDE_CODE_SLOW_OPERATION_THRESHOLD_MS
@@ -37,10 +36,7 @@ const SLOW_OPERATION_THRESHOLD_MS = (() => {
   if (process.env.NODE_ENV === 'development') {
     return 20
   }
-  if (process.env.USER_TYPE === 'ant') {
-    return 300
-  }
-  return Infinity
+  return feature('SLOW_OPERATION_LOGGING') ? 300 : Infinity
 })()
 
 // Re-export for callers that still need the threshold value directly
@@ -93,7 +89,7 @@ function buildDescription(args: IArguments): string {
   return result
 }
 
-class AntSlowLogger {
+class SlowOperationLogger {
   startTime: number
   args: IArguments
   err: Error
@@ -116,7 +112,6 @@ class AntSlowLogger {
         logForDebugging(
           `[SLOW OPERATION DETECTED] ${description} (${duration.toFixed(1)}ms)`,
         )
-        addSlowOperation(description, duration)
       } finally {
         isLogging = false
       }
@@ -127,12 +122,12 @@ class AntSlowLogger {
 const NOOP_LOGGER: Disposable = { [Symbol.dispose]() {} }
 
 // Must be regular functions (not arrows) to access `arguments`
-function slowLoggingAnt(
+function slowLoggingEnabled(
   _strings: TemplateStringsArray,
   ..._values: unknown[]
-): AntSlowLogger {
+): SlowOperationLogger {
   // eslint-disable-next-line prefer-rest-params
-  return new AntSlowLogger(arguments)
+  return new SlowOperationLogger(arguments)
 }
 
 function slowLoggingExternal(): Disposable {
@@ -142,11 +137,10 @@ function slowLoggingExternal(): Disposable {
 /**
  * Tagged template for slow operation logging.
  *
- * In ANT builds: creates an AntSlowLogger that times the operation and logs
+ * When enabled: creates a logger that times the operation and logs
  * if it exceeds the threshold. Description is built lazily only when slow.
  *
- * In external builds: returns a singleton no-op disposable. Zero allocations,
- * zero timing. AntSlowLogger and buildDescription are dead-code-eliminated.
+ * When disabled: returns a singleton no-op disposable with no timing overhead.
  *
  * @example
  * using _ = slowLogging`structuredClone(${value})`
@@ -154,7 +148,9 @@ function slowLoggingExternal(): Disposable {
  */
 export const slowLogging: {
   (strings: TemplateStringsArray, ...values: unknown[]): Disposable
-} = feature('SLOW_OPERATION_LOGGING') ? slowLoggingAnt : slowLoggingExternal
+} = feature('SLOW_OPERATION_LOGGING')
+  ? slowLoggingEnabled
+  : slowLoggingExternal
 
 // --- Wrapped operations ---
 

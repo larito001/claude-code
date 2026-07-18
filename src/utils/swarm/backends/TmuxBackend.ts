@@ -317,6 +317,53 @@ export class TmuxBackend implements PaneBackend {
   ): Promise<boolean> {
     const runTmux = useExternalSession ? runTmuxInSwarm : runTmuxInUserSession
 
+    // Hiding the final pane in the standalone swarm destroys its window (and
+    // possibly its session). Recreate a temporary target so the first hidden
+    // pane has somewhere to rejoin; remove the temporary shell afterwards.
+    let placeholderPaneId: string | null = null
+    if (useExternalSession) {
+      const targetCheck = await runTmux([
+        'list-panes',
+        '-t',
+        targetWindowOrPane,
+        '-F',
+        '#{pane_id}',
+      ])
+      if (targetCheck.code !== 0) {
+        const sessionExists = await this.hasSessionInSwarm(SWARM_SESSION_NAME)
+        const createResult = sessionExists
+          ? await runTmux([
+              'new-window',
+              '-d',
+              '-t',
+              SWARM_SESSION_NAME,
+              '-n',
+              SWARM_VIEW_WINDOW_NAME,
+              '-P',
+              '-F',
+              '#{pane_id}',
+            ])
+          : await runTmux([
+              'new-session',
+              '-d',
+              '-s',
+              SWARM_SESSION_NAME,
+              '-n',
+              SWARM_VIEW_WINDOW_NAME,
+              '-P',
+              '-F',
+              '#{pane_id}',
+            ])
+        if (createResult.code !== 0) {
+          logForDebugging(
+            `[TmuxBackend] Failed to recreate swarm target ${targetWindowOrPane}: ${createResult.stderr}`,
+          )
+          return false
+        }
+        placeholderPaneId = createResult.stdout.trim() || null
+      }
+    }
+
     // join-pane -s: source pane to move
     // -t: target window/pane to join into
     // -h: join horizontally (side by side)
@@ -330,6 +377,9 @@ export class TmuxBackend implements PaneBackend {
     ])
 
     if (result.code !== 0) {
+      if (placeholderPaneId) {
+        await runTmux(['kill-pane', '-t', placeholderPaneId])
+      }
       logForDebugging(
         `[TmuxBackend] Failed to show pane ${paneId}: ${result.stderr}`,
       )
@@ -340,21 +390,33 @@ export class TmuxBackend implements PaneBackend {
       `[TmuxBackend] Showed pane ${paneId} in ${targetWindowOrPane}`,
     )
 
-    // Reapply main-vertical layout with leader at 30%
-    await runTmux(['select-layout', '-t', targetWindowOrPane, 'main-vertical'])
+    if (placeholderPaneId) {
+      await runTmux(['kill-pane', '-t', placeholderPaneId])
+    }
 
-    // Get the first pane (leader) and resize to 30%
-    const panesResult = await runTmux([
-      'list-panes',
-      '-t',
-      targetWindowOrPane,
-      '-F',
-      '#{pane_id}',
-    ])
+    if (useExternalSession) {
+      // The standalone view has no leader, so distribute teammate panes evenly.
+      await runTmux(['select-layout', '-t', targetWindowOrPane, 'tiled'])
+    } else {
+      // Reapply main-vertical layout with the leader at 30%.
+      await runTmux([
+        'select-layout',
+        '-t',
+        targetWindowOrPane,
+        'main-vertical',
+      ])
 
-    const panes = panesResult.stdout.trim().split('\n').filter(Boolean)
-    if (panes[0]) {
-      await runTmux(['resize-pane', '-t', panes[0], '-x', '30%'])
+      const panesResult = await runTmux([
+        'list-panes',
+        '-t',
+        targetWindowOrPane,
+        '-F',
+        '#{pane_id}',
+      ])
+      const panes = panesResult.stdout.trim().split('\n').filter(Boolean)
+      if (panes[0]) {
+        await runTmux(['resize-pane', '-t', panes[0], '-x', '30%'])
+      }
     }
 
     return true

@@ -23,9 +23,8 @@ import {
  * Enabled by default. Priority chain (first defined wins):
  *   1. CLAUDE_CODE_DISABLE_AUTO_MEMORY env var (1/true → OFF, 0/false → ON)
  *   2. CLAUDE_CODE_SIMPLE (--bare) → OFF
- *   3. CCR without persistent storage → OFF (no CLAUDE_CODE_REMOTE_MEMORY_DIR)
- *   4. autoMemoryEnabled in settings.json (supports project-level opt-out)
- *   5. Default: enabled
+ *   3. autoMemoryEnabled in settings.json (supports project-level opt-out)
+ *   4. Default: enabled
  */
 export function isAutoMemoryEnabled(): boolean {
   const envVal = process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY
@@ -39,12 +38,6 @@ export function isAutoMemoryEnabled(): boolean {
   // system prompt via its SIMPLE early-return; this gate stops the other half
   // (extractMemories turn-end fork, autoDream, /remember, /dream, team sync).
   if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
-    return false
-  }
-  if (
-    isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) &&
-    !process.env.CLAUDE_CODE_REMOTE_MEMORY_DIR
-  ) {
     return false
   }
   const settings = getInitialSettings()
@@ -78,14 +71,10 @@ export function isExtractModeActive(): boolean {
 
 /**
  * Returns the base directory for persistent memory storage.
- * Resolution order:
- *   1. CLAUDE_CODE_REMOTE_MEMORY_DIR env var (explicit override, set in CCR)
- *   2. ~/.claude (default config home)
+ * Uses the portable Claude configuration directory (CLAUDE_CONFIG_DIR or
+ * the platform-specific default).
  */
 export function getMemoryBaseDir(): string {
-  if (process.env.CLAUDE_CODE_REMOTE_MEMORY_DIR) {
-    return process.env.CLAUDE_CODE_REMOTE_MEMORY_DIR
-  }
   return getClaudeConfigHomeDir()
 }
 
@@ -238,10 +227,8 @@ export const getAutoMemPath = memoize(
  * Returns the daily log file path for the given date (defaults to today).
  * Shape: <autoMemPath>/logs/YYYY/MM/YYYY-MM-DD.md
  *
- * Used by assistant mode (feature('KAIROS')): rather than maintaining
- * MEMORY.md as a live index, the agent appends to a date-named log file
- * as it works. A separate nightly /dream skill distills these logs into
- * topic files + MEMORY.md.
+ * Used by the optional session-transcript extension to preserve text that
+ * would otherwise be removed during compaction.
  */
 export function getAutoMemDailyLogPath(date: Date = new Date()): string {
   const yyyy = date.getFullYear().toString()

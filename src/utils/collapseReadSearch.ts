@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { UUID } from 'crypto'
 import { findToolByName, type Tools } from '../Tool.js'
 import { extractBashCommentLabel } from '../tools/BashTool/commentLabel.js'
@@ -33,11 +33,6 @@ import {
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemOps = feature('TEAMMEM')
   ? (require('./teamMemoryOps.js') as typeof import('./teamMemoryOps.js'))
-  : null
-const SNIP_TOOL_NAME = feature('HISTORY_SNIP')
-  ? (
-      require('../tools/SnipTool/prompt.js') as typeof import('../tools/SnipTool/prompt.js')
-    ).SNIP_TOOL_NAME
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 
@@ -174,13 +169,9 @@ export function getToolSearchOrReadInfo(
     }
   }
 
-  // Meta-operations absorbed silently: Snip (context cleanup) and ToolSearch
-  // (lazy tool schema loading). Neither should break a collapse group or
-  // contribute to its count, but both stay visible in verbose mode.
-  if (
-    (feature('HISTORY_SNIP') && toolName === SNIP_TOOL_NAME) ||
-    (isFullscreenEnvEnabled() && toolName === TOOL_SEARCH_TOOL_NAME)
-  ) {
+  // Lazy tool-schema loading should not break a collapse group or contribute
+  // to its count, but remains visible in verbose mode.
+  if (isFullscreenEnvEnabled() && toolName === TOOL_SEARCH_TOOL_NAME) {
     return {
       isCollapsible: true,
       isSearch: false,

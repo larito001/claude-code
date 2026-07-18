@@ -5,22 +5,16 @@ import type { DreamTaskState } from './DreamTask/DreamTask.js'
 import type { InProcessTeammateTaskState } from './InProcessTeammateTask/types.js'
 import type { LocalAgentTaskState } from './LocalAgentTask/LocalAgentTask.js'
 import type { LocalShellTaskState } from './LocalShellTask/guards.js'
-import type { LocalWorkflowTaskState } from './LocalWorkflowTask/LocalWorkflowTask.js'
-import type { MonitorMcpTaskState } from './MonitorMcpTask/MonitorMcpTask.js'
 
 export type TaskState =
   | LocalShellTaskState
   | LocalAgentTaskState  | InProcessTeammateTaskState
-  | LocalWorkflowTaskState
-  | MonitorMcpTaskState
   | DreamTaskState
 
 // Task types that can appear in the background tasks indicator
 export type BackgroundTaskState =
   | LocalShellTaskState
   | LocalAgentTaskState  | InProcessTeammateTaskState
-  | LocalWorkflowTaskState
-  | MonitorMcpTaskState
   | DreamTaskState
 
 /**

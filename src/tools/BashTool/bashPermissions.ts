@@ -1,7 +1,6 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { APIUserAbortError } from '@anthropic-ai/sdk'
 import type { z } from 'zod/v4'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -29,10 +28,7 @@ import { getCwd } from '../../utils/cwd.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { AbortError } from '../../utils/errors.js'
-import type {
-  ClassifierBehavior,
-  ClassifierResult,
-} from '../../utils/permissions/bashClassifier.js'
+import type { ClassifierResult } from '../../utils/permissions/bashClassifier.js'
 import {
   classifyBashCommand,
   getBashPromptAllowDescriptions,
@@ -65,7 +61,6 @@ import {
 } from '../../utils/permissions/shellRuleMatching.js'
 import { getPlatform } from '../../utils/platform.js'
 import { SandboxManager } from '../../utils/sandbox/sandbox-adapter.js'
-import { jsonStringify } from '../../utils/slowOperations.js'
 import { windowsPathToPosixPath } from '../../utils/windowsPaths.js'
 import { BashTool } from './BashTool.js'
 import { checkCommandOperatorPermissions } from './bashCommandHelpers.js'
@@ -110,43 +105,8 @@ export const MAX_SUBCOMMANDS_FOR_SECURITY_CHECK = 50
 export const MAX_SUGGESTED_RULES_FOR_COMPOUND = 5
 
 /**
- * [ANT-ONLY] Log classifier evaluation results for analysis.
- * This helps us understand which classifier rules are being evaluated
- * and how the classifier is deciding on commands.
- */
-function logClassifierResultForAnts(
-  command: string,
-  behavior: ClassifierBehavior,
-  descriptions: string[],
-  result: ClassifierResult,
-): void {
-  if (process.env.USER_TYPE !== 'ant') {
-    return
-  }
-
-  logEvent('tengu_internal_bash_classifier_result', {
-    behavior:
-      behavior as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    descriptions: jsonStringify(
-      descriptions,
-    ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    matches: result.matches,
-    matchedDescription: (result.matchedDescription ??
-      '') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    confidence:
-      result.confidence as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    reason:
-      result.reason as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    // Note: command contains code/filepaths - this is ANT-ONLY so it's OK
-    command:
-      command as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
-}
-
-/**
  * Extract a stable command prefix (command + subcommand) from a raw command string.
- * Skips leading env var assignments only if they are in SAFE_ENV_VARS (or
- * ANT_ONLY_SAFE_ENV_VARS for ant users). Returns null if a non-safe env var is
+ * Skips leading env var assignments only if they are in SAFE_ENV_VARS. Returns null if a non-safe env var is
  * encountered (to fall back to exact match), or if the second token doesn't look
  * like a subcommand (lowercase alphanumeric, e.g., "commit", "run").
  *
@@ -163,16 +123,14 @@ export function getSimpleCommandPrefix(command: string): string | null {
   if (tokens.length === 0) return null
 
   // Skip env var assignments (VAR=value) at the start, but only if they are
-  // in SAFE_ENV_VARS (or ANT_ONLY_SAFE_ENV_VARS for ant users). If a non-safe
+  // in SAFE_ENV_VARS. If a non-safe
   // env var is encountered, return null to fall back to exact match. This
   // prevents generating prefix rules like Bash(npm run:*) that can never match
   // at allow-rule check time, because stripSafeWrappers only strips safe vars.
   let i = 0
   while (i < tokens.length && ENV_VAR_ASSIGN_RE.test(tokens[i]!)) {
     const varName = tokens[i]!.split('=')[0]!
-    const isAntOnlySafe =
-      process.env.USER_TYPE === 'ant' && ANT_ONLY_SAFE_ENV_VARS.has(varName)
-    if (!SAFE_ENV_VARS.has(varName) && !isAntOnlySafe) {
+    if (!SAFE_ENV_VARS.has(varName)) {
       return null
     }
     i++
@@ -227,8 +185,8 @@ const BARE_SHELL_PREFIXES = new Set([
 
 /**
  * UI-only fallback: extract the first word alone when getSimpleCommandPrefix
- * declines. In external builds TREE_SITTER_BASH is off, so the async
- * tree-sitter refinement in BashPermissionRequest never fires — without this,
+ * declines. When TREE_SITTER_BASH is disabled or unavailable, the async
+ * refinement in BashPermissionRequest does not produce a prefix — without this,
  * pipes and compounds (`python3 file.py 2>&1 | tail -20`) dump into the
  * editable field verbatim.
  *
@@ -246,9 +204,7 @@ export function getFirstWordPrefix(command: string): string | null {
   let i = 0
   while (i < tokens.length && ENV_VAR_ASSIGN_RE.test(tokens[i]!)) {
     const varName = tokens[i]!.split('=')[0]!
-    const isAntOnlySafe =
-      process.env.USER_TYPE === 'ant' && ANT_ONLY_SAFE_ENV_VARS.has(varName)
-    if (!SAFE_ENV_VARS.has(varName) && !isAntOnlySafe) {
+    if (!SAFE_ENV_VARS.has(varName)) {
       return null
     }
     i++
@@ -325,9 +281,7 @@ function extractPrefixBeforeHeredoc(command: string): string | null {
   let i = 0
   while (i < tokens.length && ENV_VAR_ASSIGN_RE.test(tokens[i]!)) {
     const varName = tokens[i]!.split('=')[0]!
-    const isAntOnlySafe =
-      process.env.USER_TYPE === 'ant' && ANT_ONLY_SAFE_ENV_VARS.has(varName)
-    if (!SAFE_ENV_VARS.has(varName) && !isAntOnlySafe) {
+    if (!SAFE_ENV_VARS.has(varName)) {
       return null
     }
     i++
@@ -430,73 +384,6 @@ const SAFE_ENV_VARS = new Set([
 ])
 
 /**
- * ANT-ONLY environment variables that are safe to strip from commands.
- * These are only enabled when USER_TYPE === 'ant'.
- *
- * SECURITY: These env vars are stripped before permission-rule matching, which
- * means `DOCKER_HOST=tcp://evil.com docker ps` matches a `Bash(docker ps:*)`
- * rule after stripping. This is INTENTIONALLY ANT-ONLY (gated at line ~380)
- * and MUST NEVER ship to external users. DOCKER_HOST redirects the Docker
- * daemon endpoint — stripping it defeats prefix-based permission restrictions
- * by hiding the network endpoint from the permission check. KUBECONFIG
- * similarly controls which cluster kubectl talks to. These are convenience
- * strippings for internal power users who accept the risk.
- *
- * Based on analysis of 30 days of tengu_internal_bash_tool_use_permission_request events.
- */
-const ANT_ONLY_SAFE_ENV_VARS = new Set([
-  // Kubernetes and container config (config file pointers, not execution)
-  'KUBECONFIG', // kubectl config file path — controls which cluster kubectl uses
-  'DOCKER_HOST', // Docker daemon socket/endpoint — controls which daemon docker talks to
-
-  // Cloud provider project/profile selection (just names/identifiers)
-  'AWS_PROFILE', // AWS profile name selection
-  'CLOUDSDK_CORE_PROJECT', // GCP project ID
-  'CLUSTER', // generic cluster name
-
-  // Anthropic internal cluster selection (just names/identifiers)
-  'COO_CLUSTER', // coo cluster name
-  'COO_CLUSTER_NAME', // coo cluster name (alternate)
-  'COO_NAMESPACE', // coo namespace
-  'COO_LAUNCH_YAML_DRY_RUN', // dry run mode
-
-  // Feature flags (boolean/string flags only)
-  'SKIP_NODE_VERSION_CHECK', // skip version check
-  'EXPECTTEST_ACCEPT', // accept test expectations
-  'CI', // CI environment indicator
-  'GIT_LFS_SKIP_SMUDGE', // skip LFS downloads
-
-  // GPU/Device selection (just device IDs)
-  'CUDA_VISIBLE_DEVICES', // GPU device selection
-  'JAX_PLATFORMS', // JAX platform selection
-
-  // Display/terminal settings
-  'COLUMNS', // terminal width
-  'TMUX', // TMUX socket info
-
-  // Test/debug configuration
-  'POSTGRESQL_VERSION', // postgres version string
-  'FIRESTORE_EMULATOR_HOST', // emulator host:port
-  'HARNESS_QUIET', // quiet mode flag
-  'TEST_CROSSCHECK_LISTS_MATCH_UPDATE', // test update flag
-  'DBT_PER_DEVELOPER_ENVIRONMENTS', // DBT config
-  'STATSIG_FORD_DB_CHECKS', // statsig DB check flag
-
-  // Build configuration
-  'ANT_ENVIRONMENT', // Anthropic environment name
-  'ANT_SERVICE', // Anthropic service name
-  'MONOREPO_ROOT_DIR', // monorepo root path
-
-  // Version selectors
-  'PYENV_VERSION', // Python version selection
-
-  // Credentials (approved subset - these don't change exfil risk)
-  'PGPASSWORD', // Postgres password
-  'GH_TOKEN', // GitHub token
-  'GROWTHBOOK_API_KEY', // self-hosted growthbook
-])
-
-/**
  * Strips full-line comments from a command.
  * This handles cases where Claude adds comments in bash commands, e.g.:
  *   "# Check the logs directory\nls /home/user/logs"
@@ -587,9 +474,7 @@ export function stripSafeWrappers(command: string): string {
     const envVarMatch = stripped.match(ENV_VAR_PATTERN)
     if (envVarMatch) {
       const varName = envVarMatch[1]!
-      const isAntOnlySafe =
-        process.env.USER_TYPE === 'ant' && ANT_ONLY_SAFE_ENV_VARS.has(varName)
-      if (SAFE_ENV_VARS.has(varName) || isAntOnlySafe) {
+      if (SAFE_ENV_VARS.has(varName)) {
         stripped = stripped.replace(ENV_VAR_PATTERN, '')
       }
     }
@@ -1570,8 +1455,6 @@ export async function awaitClassifierAutoApproval(
         isNonInteractiveSession,
       )
 
-  logClassifierResultForAnts(command, 'allow', descriptions, classifierResult)
-
   if (
     feature('BASH_CLASSIFIER') &&
     classifierResult.matches &&
@@ -1635,8 +1518,6 @@ export async function executeAsyncClassifierCheck(
     throw error
   }
 
-  logClassifierResultForAnts(command, 'allow', descriptions, classifierResult)
-
   // Don't auto-approve if user already made a decision or has interacted
   // with the permission dialog (e.g., arrow keys, tab, typing)
   if (!callbacks.shouldContinue()) return
@@ -1678,65 +1559,17 @@ export async function bashToolHasPermission(
   const injectionCheckDisabled = isEnvTruthy(
     process.env.CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK,
   )
-  // GrowthBook killswitch for shadow mode — when off, skip the native parse
-  // entirely. Computed once; feature() must stay inline in the ternary below.
-  const shadowEnabled = feature('TREE_SITTER_BASH_SHADOW')
-    ? getFeatureValue_CACHED_MAY_BE_STALE('tengu_birch_trellis', true)
-    : false
   // Parse once here; the resulting AST feeds both parseForSecurityFromAst
   // and bashToolCheckCommandOperatorPermissions.
-  let astRoot = injectionCheckDisabled
+  const astRoot = injectionCheckDisabled
     ? null
-    : feature('TREE_SITTER_BASH_SHADOW') && !shadowEnabled
-      ? null
-      : await parseCommandRaw(input.command)
-  let astResult: ParseForSecurityResult = astRoot
+    : await parseCommandRaw(input.command)
+  const astResult: ParseForSecurityResult = astRoot
     ? parseForSecurityFromAst(input.command, astRoot)
     : { kind: 'parse-unavailable' }
   let astSubcommands: string[] | null = null
   let astRedirects: Redirect[] | undefined
   let astCommands: SimpleCommand[] | undefined
-  let shadowLegacySubs: string[] | undefined
-
-  // Shadow-test tree-sitter: record its verdict, then force parse-unavailable
-  // so the legacy path stays authoritative. parseCommand stays gated on
-  // TREE_SITTER_BASH (not SHADOW) so legacy internals remain pure regex.
-  // One event per bash call captures both divergence AND unavailability
-  // reasons; module-load failures are separately covered by the
-  // session-scoped tengu_tree_sitter_load event.
-  if (feature('TREE_SITTER_BASH_SHADOW')) {
-    const available = astResult.kind !== 'parse-unavailable'
-    let tooComplex = false
-    let semanticFail = false
-    let subsDiffer = false
-    if (available) {
-      tooComplex = astResult.kind === 'too-complex'
-      semanticFail =
-        astResult.kind === 'simple' && !checkSemantics(astResult.commands).ok
-      const tsSubs =
-        astResult.kind === 'simple'
-          ? astResult.commands.map(c => c.text)
-          : undefined
-      const legacySubs = splitCommand(input.command)
-      shadowLegacySubs = legacySubs
-      subsDiffer =
-        tsSubs !== undefined &&
-        (tsSubs.length !== legacySubs.length ||
-          tsSubs.some((s, i) => s !== legacySubs[i]))
-    }
-    logEvent('tengu_tree_sitter_shadow', {
-      available,
-      astTooComplex: tooComplex,
-      astSemanticFail: semanticFail,
-      subsDiffer,
-      injectionCheckDisabled,
-      killswitchOff: !shadowEnabled,
-      cmdOverLength: input.command.length > 10000,
-    })
-    // Always force legacy — shadow mode is observational only.
-    astResult = { kind: 'parse-unavailable' }
-    astRoot = null
-  }
 
   if (astResult.kind === 'too-complex') {
     // Parse succeeded but found structure we can't statically analyze
@@ -1900,22 +1733,6 @@ export async function bashToolHasPermission(
         throw new AbortError()
       }
 
-      if (denyResult) {
-        logClassifierResultForAnts(
-          input.command,
-          'deny',
-          denyDescriptions,
-          denyResult,
-        )
-      }
-      if (askResult) {
-        logClassifierResultForAnts(
-          input.command,
-          'ask',
-          askDescriptions,
-          askResult,
-        )
-      }
 
       // Deny takes precedence
       if (denyResult?.matches && denyResult.confidence === 'high') {
@@ -2147,8 +1964,7 @@ export async function bashToolHasPermission(
   const cwd = getCwd()
   const cwdMingw =
     getPlatform() === 'windows' ? windowsPathToPosixPath(cwd) : cwd
-  const rawSubcommands =
-    astSubcommands ?? shadowLegacySubs ?? splitCommand(input.command)
+  const rawSubcommands = astSubcommands ?? splitCommand(input.command)
   const { subcommands, astCommandsByIdx } = filterCdCwdSubcommands(
     rawSubcommands,
     astCommands,

@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { Anthropic } from '@anthropic-ai/sdk'
 import {
   getSystemPrompt,
@@ -8,7 +8,6 @@ import { microcompactMessages } from 'src/services/compact/microCompact.js'
 import { getSdkBetas } from '../bootstrap/state.js'
 import { getCommandName } from '../commands.js'
 import { getSystemContext } from '../context.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
   AUTOCOMPACT_BUFFER_TOKENS,
   getEffectiveContextWindowSize,
@@ -197,11 +196,11 @@ export interface ContextData {
   readonly model: string
   readonly memoryFiles: MemoryFile[]
   readonly mcpTools: McpTool[]
-  /** Ant-only: per-tool breakdown of deferred built-in tools */
+  /** Per-tool breakdown of deferred built-in tools. */
   readonly deferredBuiltinTools?: DeferredBuiltinTool[]
-  /** Ant-only: per-tool breakdown of always-loaded built-in tools */
+  /** Per-tool breakdown of always-loaded built-in tools. */
   readonly systemTools?: SystemToolDetail[]
-  /** Ant-only: per-section breakdown of system prompt */
+  /** Per-section breakdown of the system prompt. */
   readonly systemPromptSections?: SystemPromptSectionDetail[]
   readonly agents: Agent[]
   readonly slashCommands?: SlashCommandInfo
@@ -408,30 +407,28 @@ async function countBuiltInToolTokens(
         )
       : 0
 
-  // Build per-tool breakdown for always-loaded tools (ant-only, proportional
+  // Build per-tool breakdown for always-loaded tools (proportional
   // split of the bulk count based on rough schema size estimation). Excludes
   // SkillTool since its tokens are shown in the separate Skills category.
   let systemToolDetails: SystemToolDetail[] = []
-  if (process.env.USER_TYPE === 'ant') {
-    const toolsForBreakdown = alwaysLoadedTools.filter(
-      t => !toolMatchesName(t, SKILL_TOOL_NAME),
+  const toolsForBreakdown = alwaysLoadedTools.filter(
+    t => !toolMatchesName(t, SKILL_TOOL_NAME),
+  )
+  if (toolsForBreakdown.length > 0) {
+    const estimates = toolsForBreakdown.map(t =>
+      roughTokenCountEstimation(jsonStringify(t.inputSchema ?? {})),
     )
-    if (toolsForBreakdown.length > 0) {
-      const estimates = toolsForBreakdown.map(t =>
-        roughTokenCountEstimation(jsonStringify(t.inputSchema ?? {})),
-      )
-      const estimateTotal = estimates.reduce((s, e) => s + e, 0) || 1
-      const distributable = Math.max(
-        0,
-        alwaysLoadedTokens - TOOL_TOKEN_COUNT_OVERHEAD,
-      )
-      systemToolDetails = toolsForBreakdown
-        .map((t, i) => ({
-          name: t.name,
-          tokens: Math.round((estimates[i]! / estimateTotal) * distributable),
-        }))
-        .sort((a, b) => b.tokens - a.tokens)
-    }
+    const estimateTotal = estimates.reduce((s, e) => s + e, 0) || 1
+    const distributable = Math.max(
+      0,
+      alwaysLoadedTokens - TOOL_TOKEN_COUNT_OVERHEAD,
+    )
+    systemToolDetails = toolsForBreakdown
+      .map((t, i) => ({
+        name: t.name,
+        tokens: Math.round((estimates[i]! / estimateTotal) * distributable),
+      }))
+      .sort((a, b) => b.tokens - a.tokens)
   }
 
   // Count deferred builtin tools individually for details
@@ -1017,14 +1014,11 @@ export async function analyzeContextUsage(
   }
 
   // Built-in tools right after system prompt (skills shown separately below)
-  // Ant users get a per-tool breakdown via systemToolDetails
+  // Include a per-tool breakdown when systemToolDetails is available.
   const systemToolsTokens = builtInToolTokens - skillFrontmatterTokens
   if (systemToolsTokens > 0) {
     cats.push({
-      name:
-        process.env.USER_TYPE === 'ant'
-          ? '[ANT-ONLY] System tools'
-          : 'System tools',
+      name: 'System tools',
       tokens: systemToolsTokens,
       color: 'inactive',
     })
@@ -1103,32 +1097,8 @@ export async function analyzeContextUsage(
   )
 
   // Reserved space after messages (not counted in actualUsage shown to user).
-  // Under reactive-only mode (cobalt_raccoon), proactive autocompact never
-  // fires and the reserved buffer is a lie — skip it entirely and let Free
-  // space fill the grid. feature() guard keeps the flag string out of
-  // external builds. Same for context-collapse (marble_origami) — collapse
-  // owns the threshold ladder and autocompact is suppressed in
-  // shouldAutoCompact, so the 33k buffer shown here would be a lie too.
   let reservedTokens = 0
-  let skipReservedBuffer = false
-  if (feature('REACTIVE_COMPACT')) {
-    if (getFeatureValue_CACHED_MAY_BE_STALE('tengu_cobalt_raccoon', false)) {
-      skipReservedBuffer = true
-    }
-  }
-  if (feature('CONTEXT_COLLAPSE')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { isContextCollapseEnabled } =
-      require('../services/contextCollapse/index.js') as typeof import('../services/contextCollapse/index.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    if (isContextCollapseEnabled()) {
-      skipReservedBuffer = true
-    }
-  }
-  if (skipReservedBuffer) {
-    // No buffer category pushed — reactive compaction is transparent and
-    // doesn't need a visible reservation in the grid.
-  } else if (isAutoCompact && autoCompactThreshold !== undefined) {
+  if (isAutoCompact && autoCompactThreshold !== undefined) {
     // Autocompact buffer (from effective context)
     reservedTokens = contextWindow - autoCompactThreshold
     cats.push({
@@ -1350,12 +1320,9 @@ export async function analyzeContextUsage(
     model: runtimeModel,
     memoryFiles: memoryFileDetails,
     mcpTools: mcpToolDetails,
-    deferredBuiltinTools:
-      process.env.USER_TYPE === 'ant' ? deferredBuiltinDetails : undefined,
-    systemTools:
-      process.env.USER_TYPE === 'ant' ? systemToolDetails : undefined,
-    systemPromptSections:
-      process.env.USER_TYPE === 'ant' ? systemPromptSections : undefined,
+    deferredBuiltinTools: deferredBuiltinDetails,
+    systemTools: systemToolDetails,
+    systemPromptSections,
     agents: agentDetails,
     slashCommands:
       slashCommandTokens > 0

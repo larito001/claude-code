@@ -1,6 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
-import { feature } from 'bun:bundle';
+import { feature } from 'src/utils/features.js';
 import { Box, Text, useTheme, useThemeSetting, useTerminalFocus } from '../../ink.js';
 import type { KeyboardEvent } from '../../ink/events/keyboard-event.js';
 import * as React from 'react';
@@ -8,7 +7,6 @@ import { useState, useCallback } from 'react';
 import { useKeybinding, useKeybindings } from '../../keybindings/useKeybinding.js';
 import figures from 'figures';
 import { type GlobalConfig, saveGlobalConfig, getCurrentProjectConfig, type OutputStyle } from '../../utils/config.js';
-import { normalizeApiKeyForConfig } from '../../utils/authPortable.js';
 import { getGlobalConfig, getAutoUpdaterDisabledReason, formatAutoUpdaterDisabledReason } from '../../utils/config.js';
 import chalk from 'chalk';
 import { permissionModeTitle, permissionModeFromString, toExternalPermissionMode, isExternalPermissionMode, EXTERNAL_PERMISSION_MODES, PERMISSION_MODES, type ExternalPermissionMode, type PermissionMode } from '../../utils/permissions/PermissionMode.js';
@@ -18,8 +16,7 @@ import { logEvent, type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPAT
 import { ThemePicker } from '../ThemePicker.js';
 import { useAppState, useSetAppState, useAppStateStore } from '../../state/AppState.js';
 import { ModelPicker } from '../ModelPicker.js';
-import { modelDisplayString, isOpus1mMergeEnabled } from '../../utils/model/model.js';
-import { isBilledAsExtraUsage } from '../../utils/extraUsage.js';
+import { modelDisplayString } from '../../utils/model/model.js';
 import { ClaudeMdExternalIncludesDialog } from '../ClaudeMdExternalIncludesDialog.js';
 import { ChannelDowngradeDialog, type ChannelDowngradeChoice } from '../ChannelDowngradeDialog.js';
 import { Dialog } from '../design-system/Dialog.js';
@@ -35,9 +32,8 @@ import { useIsInsideModal } from '../../context/modalContext.js';
 import { SearchBox } from '../SearchBox.js';
 import { isSupportedTerminal, hasAccessToIDEExtensionDiffFeature } from '../../utils/ide.js';
 import { getInitialSettings, getSettingsForSource, updateSettingsForSource } from '../../utils/settings/settings.js';
-import { getUserMsgOptIn, setUserMsgOptIn } from '../../bootstrap/state.js';
 import { DEFAULT_OUTPUT_STYLE_NAME } from 'src/constants/outputStyles.js';
-import { isEnvTruthy, isRunningOnHomespace } from 'src/utils/envUtils.js';
+import { isEnvTruthy } from 'src/utils/envUtils.js';
 import type { LocalJSXCommandContext, CommandResultDisplay } from '../../commands.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js';
 import { isAgentSwarmsEnabled } from '../../utils/agentSwarmsEnabled.js';
@@ -125,13 +121,6 @@ export function Config({
   // config is fully 'enabled' — even if currently circuit-broken ('disabled'),
   // an opted-in user should still see it in settings (it's a temporary state).
   const showAutoInDefaultModePicker = feature('TRANSCRIPT_CLASSIFIER') ? hasAutoModeOptInAnySource() || getAutoModeEnabledState() === 'enabled' : false;
-  // Chat/Transcript view picker is visible to entitled users (pass the GB
-  // gate) even if they haven't opted in this session — it IS the persistent
-  // opt-in. 'chat' written here is read at next startup by main.tsx which
-  // sets userMsgOptIn if still entitled.
-  /* eslint-disable @typescript-eslint/no-require-imports */
-  const showDefaultViewPicker = feature('KAIROS') || feature('KAIROS_BRIEF') ? (require('../../tools/BriefTool/BriefTool.js') as typeof import('../../tools/BriefTool/BriefTool.js')).isBriefEntitled() : false;
-  /* eslint-enable @typescript-eslint/no-require-imports */
   const setAppState = useSetAppState();
   const [changes, setChanges] = useState<{
     [key: string]: unknown;
@@ -157,15 +146,9 @@ export function Config({
       thinkingEnabled: s_4.thinkingEnabled,
       fastMode: s_4.fastMode,
       promptSuggestionEnabled: s_4.promptSuggestionEnabled,
-      isBriefOnly: s_4.isBriefOnly,      settings: s_4.settings
+      settings: s_4.settings
     };
   });
-  // Bootstrap state snapshot — userMsgOptIn is outside AppState, so
-  // revertChanges needs to restore it separately. Without this, cycling
-  // defaultView to 'chat' then Escape leaves the tool active while the
-  // display filter reverts — the exact ambient-activation behavior this
-  // PR's entitlement/opt-in split is meant to prevent.
-  const [initialUserMsgOptIn] = useState(() => getUserMsgOptIn());
   // Set on first user-visible change; gates revertChanges() on Escape so
   // opening-then-closing doesn't trigger redundant disk writes.
   const isDirty = React.useRef(false);
@@ -208,7 +191,7 @@ export function Config({
       mainLoopModelForSession: null
     }));
     setChanges(prev_0 => {
-      const valStr = modelDisplayString(value) + (isBilledAsExtraUsage(value, false, isOpus1mMergeEnabled()) ? ' · Billed as extra usage' : '');
+      const valStr = modelDisplayString(value);
       if ('model' in prev_0) {
         const {
           model,
@@ -338,7 +321,7 @@ export function Config({
       });
     }
   },
-  // Fast mode toggle (ant-only, eliminated from external builds)
+  // Fast mode toggle, shown only when the backend reports support.
   ...(isFastModeEnabled() && isFastModeAvailable() ? [{
     id: 'fastMode',
     label: `Fast mode (${FAST_MODE_MODEL_DISPLAY} only)`,
@@ -387,8 +370,8 @@ export function Config({
       });
     }
   }] : []),
-  // Speculation toggle (ant-only)
-  ...("external" === 'ant' ? [{
+  // Speculative execution is a provider-neutral performance feature.
+  ...([{
     id: 'speculationEnabled',
     label: 'Speculative execution',
     value: globalConfig.speculationEnabled ?? true,
@@ -409,7 +392,7 @@ export function Config({
         enabled: enabled_2
       });
     }
-  }] : []), ...(isFileCheckpointingAvailable ? [{
+  }]), ...(isFileCheckpointingAvailable ? [{
     id: 'fileCheckpointingEnabled',
     label: 'Rewind code (checkpoints)',
     value: globalConfig.fileCheckpointingEnabled,
@@ -671,46 +654,7 @@ export function Config({
     value: currentOutputStyle,
     type: 'managedEnum' as const,
     onChange: () => {} // handled by OutputStylePicker submenu
-  }, ...(showDefaultViewPicker ? [{
-    id: 'defaultView',
-    label: 'What you see by default',
-    // 'default' means the setting is unset — currently resolves to
-    // transcript (main.tsx falls through when defaultView !== 'chat').
-    // String() narrows the conditional-schema-spread union to string.
-    value: settingsData?.defaultView === undefined ? 'default' : String(settingsData.defaultView),
-    options: ['transcript', 'chat', 'default'],
-    type: 'enum' as const,
-    onChange(selected: string) {
-      const defaultView = selected === 'default' ? undefined : selected as 'chat' | 'transcript';
-      updateSettingsForSource('localSettings', {
-        defaultView
-      });
-      setSettingsData(prev_17 => ({
-        ...prev_17,
-        defaultView
-      }));
-      const nextBrief = defaultView === 'chat';
-      setAppState(prev_18 => {
-        if (prev_18.isBriefOnly === nextBrief) return prev_18;
-        return {
-          ...prev_18,
-          isBriefOnly: nextBrief
-        };
-      });
-      // Keep userMsgOptIn in sync so the tool list follows the view.
-      // Two-way now (same as /brief) — accepting a cache invalidation
-      // is better than leaving the tool on after switching away.
-      // Reverted on Escape via initialUserMsgOptIn snapshot.
-      setUserMsgOptIn(nextBrief);
-      setChanges(prev_19 => ({
-        ...prev_19,
-        'Default view': selected
-      }));
-      logEvent('tengu_default_view_setting_changed', {
-        value: (defaultView ?? 'unset') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      });
-    }
-  }] : []), {
+  }, {
     id: 'language',
     label: 'Language',
     value: currentLanguage ?? 'Default (English)',
@@ -874,60 +818,6 @@ export function Config({
     onChange() {
       // Will be handled by toggleSetting function
     }
-  }] : []), ...(process.env.ANTHROPIC_API_KEY && !isRunningOnHomespace() ? [{
-    id: 'apiKey',
-    label: <Text>
-                Use custom API key:{' '}
-                <Text bold>
-                  {normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY)}
-                </Text>
-              </Text>,
-    searchText: 'Use custom API key',
-    value: Boolean(process.env.ANTHROPIC_API_KEY && globalConfig.customApiKeyResponses?.approved?.includes(normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY))),
-    type: 'boolean' as const,
-    onChange(useCustomKey: boolean) {
-      saveGlobalConfig(current_22 => {
-        const updated = {
-          ...current_22
-        };
-        if (!updated.customApiKeyResponses) {
-          updated.customApiKeyResponses = {
-            approved: [],
-            rejected: []
-          };
-        }
-        if (!updated.customApiKeyResponses.approved) {
-          updated.customApiKeyResponses = {
-            ...updated.customApiKeyResponses,
-            approved: []
-          };
-        }
-        if (!updated.customApiKeyResponses.rejected) {
-          updated.customApiKeyResponses = {
-            ...updated.customApiKeyResponses,
-            rejected: []
-          };
-        }
-        if (process.env.ANTHROPIC_API_KEY) {
-          const truncatedKey = normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY);
-          if (useCustomKey) {
-            updated.customApiKeyResponses = {
-              ...updated.customApiKeyResponses,
-              approved: [...(updated.customApiKeyResponses.approved ?? []).filter(k => k !== truncatedKey), truncatedKey],
-              rejected: (updated.customApiKeyResponses.rejected ?? []).filter(k_0 => k_0 !== truncatedKey)
-            };
-          } else {
-            updated.customApiKeyResponses = {
-              ...updated.customApiKeyResponses,
-              approved: (updated.customApiKeyResponses.approved ?? []).filter(k_1 => k_1 !== truncatedKey),
-              rejected: [...(updated.customApiKeyResponses.rejected ?? []).filter(k_2 => k_2 !== truncatedKey), truncatedKey]
-            };
-          }
-        }
-        return updated;
-      });
-      setGlobalConfig(getGlobalConfig());
-    }
   }] : [])];
 
   // Filter settings based on search query
@@ -985,19 +875,6 @@ export function Config({
       });
       return `Set ${key} to ${chalk.bold(value_2)}`;
     });
-    // Check for API key changes
-    // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
-    // processes but ignored by Claude Code itself (see auth.ts).
-    const effectiveApiKey = isRunningOnHomespace() ? undefined : process.env.ANTHROPIC_API_KEY;
-    const initialUsingCustomKey = Boolean(effectiveApiKey && initialConfig.current.customApiKeyResponses?.approved?.includes(normalizeApiKeyForConfig(effectiveApiKey)));
-    const currentUsingCustomKey = Boolean(effectiveApiKey && globalConfig.customApiKeyResponses?.approved?.includes(normalizeApiKeyForConfig(effectiveApiKey)));
-    if (initialUsingCustomKey !== currentUsingCustomKey) {
-      formattedChanges.push(`${currentUsingCustomKey ? 'Enabled' : 'Disabled'} custom API key`);
-      logEvent('tengu_config_changed', {
-        key: 'env.ANTHROPIC_API_KEY' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        value: currentUsingCustomKey as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      });
-    }
     if (globalConfig.theme !== initialConfig.current.theme) {
       formattedChanges.push(`Set theme to ${chalk.bold(globalConfig.theme)}`);
     }
@@ -1075,7 +952,6 @@ export function Config({
     updateSettingsForSource('localSettings', {
       spinnerTipsEnabled: il?.spinnerTipsEnabled,
       prefersReducedMotion: il?.prefersReducedMotion,
-      defaultView: il?.defaultView,
       outputStyle: il?.outputStyle
     });
     const iu = initialUserSettings;
@@ -1115,18 +991,12 @@ export function Config({
       thinkingEnabled: ia.thinkingEnabled,
       fastMode: ia.fastMode,
       promptSuggestionEnabled: ia.promptSuggestionEnabled,
-      isBriefOnly: ia.isBriefOnly,      settings: ia.settings,
+      settings: ia.settings,
       // Reconcile auto-mode state after useAutoModeDuringPlan revert above —
       // the onChange handler may have activated/deactivated auto mid-plan.
       toolPermissionContext: transitionPlanAutoMode(prev_23.toolPermissionContext)
     }));
-    // Bootstrap state: restore userMsgOptIn. Only touched by the defaultView
-    // onChange above, so no feature() guard needed here (that path only
-    // exists when showDefaultViewPicker is true).
-    if (getUserMsgOptIn() !== initialUserMsgOptIn) {
-      setUserMsgOptIn(initialUserMsgOptIn);
-    }
-  }, [themeSetting, setTheme, initialLocalSettings, initialUserSettings, initialAppState, initialUserMsgOptIn, setAppState]);
+  }, [themeSetting, setTheme, initialLocalSettings, initialUserSettings, initialAppState, setAppState]);
 
   // Escape: revert all changes (if any) and close.
   const handleEscape = useCallback(() => {

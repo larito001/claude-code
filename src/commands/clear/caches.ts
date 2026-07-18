@@ -2,7 +2,6 @@
  * Session cache clearing utilities.
  * This module is imported at startup by main.tsx, so keep imports minimal.
  */
-import { feature } from 'bun:bundle'
 import {
   clearInvokedSkills,
   setLastEmittedDate,
@@ -17,7 +16,6 @@ import {
 } from '../../context.js'
 import { clearFileSuggestionCaches } from '../../hooks/fileSuggestions.js'
 import { clearAllPendingCallbacks } from '../../hooks/useSwarmPermissionPoller.js'
-import { clearAllDumpState } from '../../services/api/dumpPrompts.js'
 import { resetPromptCacheBreakDetection } from '../../services/api/promptCacheBreakDetection.js'
 import { runPostCompactCleanup } from '../../services/compact/postCompactCleanup.js'
 import { resetAllLSPDiagnosticState } from '../../services/lsp/LSPDiagnosticRegistry.js'
@@ -87,19 +85,10 @@ export function clearSessionCaches(
   // Clear swarm permission pending callbacks
   if (!hasPreserved) clearAllPendingCallbacks()
 
-  // Clear attribution caches (file content cache, pending bash states)
-  // Dynamic import to preserve dead code elimination for COMMIT_ATTRIBUTION feature flag
-  if (feature('COMMIT_ATTRIBUTION')) {
-    void import('../../utils/attributionHooks.js').then(
-      ({ clearAttributionCaches }) => clearAttributionCaches(),
-    )
-  }
   // Clear repository detection caches
   clearRepositoryCaches()
   // Clear bash command prefix caches (Haiku-extracted prefixes)
   clearCommandPrefixCaches()
-  // Clear dump prompts state
-  if (!hasPreserved) clearAllDumpState()
   // Clear invoked skills cache (each entry holds full skill file content)
   clearInvokedSkills(preservedAgentIds)
   // Clear git dir resolution cache

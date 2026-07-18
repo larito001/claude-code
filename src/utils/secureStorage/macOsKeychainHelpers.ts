@@ -2,7 +2,6 @@
 
 import { createHash } from 'crypto'
 import { userInfo } from 'os'
-import { getOauthConfig } from 'src/constants/oauth.js'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
 import type { SecureStorageData } from './types.js'
 
@@ -23,7 +22,7 @@ export function getMacOsKeychainStorageServiceName(
   const dirHash = isDefaultDir
     ? ''
     : `-${createHash('sha256').update(configDir).digest('hex').substring(0, 8)}`
-  return `Claude Code${getOauthConfig().OAUTH_FILE_SUFFIX}${serviceSuffix}${dirHash}`
+  return `Claude Code${serviceSuffix}${dirHash}`
 }
 
 export function getUsername(): string {
@@ -37,16 +36,13 @@ export function getUsername(): string {
 // --
 
 // Cache for keychain reads to avoid repeated expensive security CLI calls.
-// TTL bounds staleness for cross-process scenarios (another CC instance
-// refreshing/invalidating tokens) without forcing a blocking spawnSync on
+// TTL bounds staleness when another process refreshes MCP tokens without a
+// blocking spawnSync on
 // every read. In-process writes invalidate via clearKeychainCache() directly.
 //
-// The sync read() path takes ~500ms per `security` spawn. With 50+ claude.ai
-// MCP connectors authenticating at startup, a short TTL expires mid-storm and
-// triggers repeat sync reads — observed as a 5.5s event-loop stall
-// (go/ccshare/adamj-20260326-212235). 30s of cross-process staleness is fine:
-// OAuth tokens expire in hours, and the only cross-process writer is another
-// CC instance's /login or refresh.
+// The sync read() path is relatively expensive, so a short TTL can expire
+// while many MCP servers authenticate at startup and trigger repeated reads.
+// Thirty seconds of cross-process staleness is acceptable for MCP tokens.
 //
 export const KEYCHAIN_CACHE_TTL_MS = 30_000
 

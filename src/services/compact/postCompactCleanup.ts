@@ -1,4 +1,3 @@
-import { feature } from 'bun:bundle'
 import type { QuerySource } from '../../constants/querySource.js'
 import { clearSystemPromptSections } from '../../constants/systemPromptSections.js'
 import { getUserContext } from '../../context.js'
@@ -7,7 +6,6 @@ import { clearClassifierApprovals } from '../../utils/classifierApprovals.js'
 import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
 import { clearBetaTracingState } from '../../utils/telemetry/betaSessionTracing.js'
-import { resetMicrocompactState } from './microCompact.js'
 
 /**
  * Run cleanup of caches and tracking state after compaction.
@@ -22,7 +20,7 @@ import { resetMicrocompactState } from './microCompact.js'
  * querySource: pass the compacting query's source so we can skip
  * resets that would clobber main-thread module-level state. Subagents
  * (agent:*) run in the same process and share module-level state
- * (context-collapse store, getMemoryFiles one-shot hook flag,
+ * (getMemoryFiles one-shot hook flag,
  * getUserContext cache); resetting those when a SUBAGENT compacts
  * would corrupt the MAIN thread's state. All compaction callers should
  * pass querySource — undefined is only safe for callers that are
@@ -30,24 +28,14 @@ import { resetMicrocompactState } from './microCompact.js'
  */
 export function runPostCompactCleanup(querySource?: QuerySource): void {
   // Subagents (agent:*) run in the same process and share module-level
-  // state with the main thread. Only reset main-thread module-level state
-  // (context-collapse, memory file cache) for main-thread compacts.
+  // state with the main thread. Only reset main-thread memory state for
+  // main-thread compacts.
   // Same startsWith pattern as isMainThread (index.ts:188).
   const isMainThreadCompact =
     querySource === undefined ||
     querySource.startsWith('repl_main_thread') ||
     querySource === 'sdk'
 
-  resetMicrocompactState()
-  if (feature('CONTEXT_COLLAPSE')) {
-    if (isMainThreadCompact) {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      ;(
-        require('../contextCollapse/index.js') as typeof import('../contextCollapse/index.js')
-      ).resetContextCollapse()
-      /* eslint-enable @typescript-eslint/no-require-imports */
-    }
-  }
   if (isMainThreadCompact) {
     // getUserContext is a memoized outer layer wrapping getClaudeMds() →
     // getMemoryFiles(). If only the inner getMemoryFiles cache is cleared,
@@ -68,10 +56,5 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
   // skills, and dynamic additions are handled by skillChangeDetector /
   // cacheUtils resets. See compactConversation() for full rationale.
   clearBetaTracingState()
-  if (feature('COMMIT_ATTRIBUTION')) {
-    void import('../../utils/attributionHooks.js').then(m =>
-      m.sweepFileContentCache(),
-    )
-  }
   clearSessionMessagesCache()
 }

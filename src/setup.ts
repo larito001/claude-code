@@ -1,6 +1,6 @@
 /* eslint-disable custom-rules/no-process-exit */
 
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import chalk from 'chalk'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -28,7 +28,6 @@ import { clearMemoryFileCaches } from './utils/claudemd.js'
 import { getCurrentProjectConfig, getGlobalConfig } from './utils/config.js'
 import { logForDiagnosticsNoPII } from './utils/diagLogs.js'
 import { env } from './utils/env.js'
-import { envDynamic } from './utils/envDynamic.js'
 import { isBareMode, isEnvTruthy } from './utils/envUtils.js'
 import { errorMessage } from './utils/errors.js'
 import { findCanonicalGitRoot, findGitRoot, getIsGit } from './utils/git.js'
@@ -62,7 +61,6 @@ export async function setup(
   tmuxEnabled: boolean,
   customSessionId?: string | null,
   worktreePRNumber?: number,
-  messagingSocketPath?: string,
 ): Promise<void> {
   logForDiagnosticsNoPII('info', 'setup_started')
 
@@ -81,24 +79,6 @@ export async function setup(
   // Set custom session ID if provided
   if (customSessionId) {
     switchSession(asSessionId(customSessionId))
-  }
-
-  // --bare / SIMPLE: skip UDS messaging server and teammate snapshot.
-  // Scripted calls don't receive injected messages and don't use swarm teammates.
-  // Explicit --messaging-socket-path is the escape hatch (per #23222 gate pattern).
-  if (!isBareMode() || messagingSocketPath !== undefined) {
-    // Start UDS messaging server (Mac/Linux only).
-    // Enabled by default for ants — creates a socket in tmpdir if no
-    // --messaging-socket-path is passed. Awaited so the server is bound
-    // and $CLAUDE_CODE_MESSAGING_SOCKET is exported before any hook
-    // (SessionStart in particular) can spawn and snapshot process.env.
-    if (feature('UDS_INBOX')) {
-      const m = await import('./utils/udsMessaging.js')
-      await m.startUdsMessaging(
-        messagingSocketPath ?? m.getDefaultUdsSocketPath(),
-        { isExplicit: messagingSocketPath !== undefined },
-      )
-    }
   }
 
   // Teammate snapshot — SIMPLE-only gate (no escape hatch, swarm not used in bare)
@@ -292,13 +272,6 @@ export async function setup(
   // raced ahead and memoized an empty bundledSkills list.
   if (!isBareMode()) {
     initSessionMemory() // Synchronous - registers hook, gate check happens lazily
-    if (feature('CONTEXT_COLLAPSE')) {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      ;(
-        require('./services/contextCollapse/index.js') as typeof import('./services/contextCollapse/index.js')
-      ).initContextCollapse()
-      /* eslint-enable @typescript-eslint/no-require-imports */
-    }
   }
   void lockCurrentVersion() // Lock current version to prevent deletion by other processes
   logForDiagnosticsNoPII('info', 'setup_background_jobs_launched')
@@ -327,46 +300,16 @@ export async function setup(
       m.setupPluginHookHotReload() // Set up hot reload for plugin hooks when settings change
     }
   })
-  // --bare: skip attribution hook install + repo classification +
+  // --bare: skip attribution hook install +
   // session-file-access analytics + team memory watcher. These are background
   // bookkeeping for commit attribution + usage metrics — scripted calls don't
   // commit code, and the 49ms attribution hook stat check (measured) is pure
   // overhead. NOT an early-return: the --dangerously-skip-permissions safety
   // gate, tengu_started beacon, and apiKeyHelper prefetch below must still run.
   if (!isBareMode()) {
-    if (process.env.USER_TYPE === 'ant') {
-      // Prime repo classification cache for auto-undercover mode. Default is
-      // undercover ON until proven internal; if this resolves to internal, clear
-      // the prompt cache so the next turn picks up the OFF state.
-      void import('./utils/commitAttribution.js').then(async m => {
-        if (await m.isInternalModelRepo()) {
-          const { clearSystemPromptSections } = await import(
-            './constants/systemPromptSections.js'
-          )
-          clearSystemPromptSections()
-        }
-      })
-    }
-    if (feature('COMMIT_ATTRIBUTION')) {
-      // Dynamic import to enable dead code elimination (module contains excluded strings).
-      // Defer to next tick so the git subprocess spawn runs after first render
-      // rather than during the setup() microtask window.
-      setImmediate(() => {
-        void import('./utils/attributionHooks.js').then(
-          ({ registerAttributionHooks }) => {
-            registerAttributionHooks() // Register attribution tracking hooks (ant-only feature)
-          },
-        )
-      })
-    }
     void import('./utils/sessionFileAccessHooks.js').then(m =>
       m.registerSessionFileAccessHooks(),
     ) // Register session file access analytics hooks
-    if (feature('TEAMMEM')) {
-      void import('./services/teamMemorySync/watcher.js').then(m =>
-        m.startTeamMemoryWatcher(),
-      ) // Start team memory sync watcher
-    }
   }
   initSinks() // Attach error log + analytics sinks and drain queued events
 
@@ -411,33 +354,6 @@ export async function setup(
         `--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons`,
       )
       process.exit(1)
-    }
-
-    if (
-      process.env.USER_TYPE === 'ant' &&
-      // Skip for Desktop's local agent mode — same trust model as CCR/BYOC
-      // (trusted Anthropic-managed launcher intentionally pre-approving everything).
-      // Precedent: permissionSetup.ts:861, applySettingsChange.ts:55 (PR #19116)
-      process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent' &&
-      // Same for CCD (Claude Code in Desktop) — apps#29127 passes the flag
-      // unconditionally to unlock mid-session bypass switching
-      process.env.CLAUDE_CODE_ENTRYPOINT !== 'claude-desktop'
-    ) {
-      // Only await if permission mode is set to bypass
-      const [isDocker, hasInternet] = await Promise.all([
-        envDynamic.getIsDocker(),
-        env.hasInternetAccess(),
-      ])
-      const isBubblewrap = envDynamic.getIsBubblewrapSandbox()
-      const isSandbox = process.env.IS_SANDBOX === '1'
-      const isSandboxed = isDocker || isBubblewrap || isSandbox
-      if (!isSandboxed || hasInternet) {
-        // biome-ignore lint/suspicious/noConsole:: intentional console output
-        console.error(
-          `--dangerously-skip-permissions can only be used in Docker/sandbox containers with no internet access but got Docker: ${isDocker}, Bubblewrap: ${isBubblewrap}, IS_SANDBOX: ${isSandbox}, hasInternet: ${hasInternet}`,
-        )
-        process.exit(1)
-      }
     }
   }
 

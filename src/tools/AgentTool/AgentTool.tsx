@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle';
+import { feature } from 'src/utils/features.js';
 import * as React from 'react';
 import { buildTool, type ToolDef, toolMatchesName } from 'src/Tool.js';
 import type { Message as MessageType, NormalizedUserMessage } from 'src/types/message.js';
@@ -10,7 +10,6 @@ import { isCoordinatorMode } from '../../coordinator/coordinatorMode.js';
 import { startAgentSummarization } from '../../services/AgentSummary/agentSummary.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../services/analytics/index.js';
-import { clearDumpState } from '../../services/api/dumpPrompts.js';
 import { completeAgentTask as completeAsyncAgent, createActivityDescriptionResolver, createProgressTracker, enqueueAgentNotification, failAgentTask as failAsyncAgent, getProgressUpdate, getTokenCountFromTracker, isLocalAgentTask, killAsyncAgent, registerAgentForeground, registerAsyncAgent, unregisterAgentForeground, updateAgentProgress as updateAsyncAgentProgress, updateProgressFromMessage } from '../../tasks/LocalAgentTask/LocalAgentTask.js';
 import { assembleToolPool } from '../../tools.js';
 import { asAgentId } from '../../types/ids.js';
@@ -54,7 +53,7 @@ import { runAgent } from './runAgent.js';
 import { renderGroupedAgentToolUse, renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseRejectedMessage, renderToolUseTag, userFacingName, userFacingNameBackgroundColor } from './UI.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../../proactive/index.js') as typeof import('../../proactive/index.js') : null;
+const proactiveModule = feature('PROACTIVE') ? require('../../proactive/index.js') as typeof import('../../proactive/index.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 // Progress display constants (for showing background hint)
@@ -99,32 +98,17 @@ const fullInputSchema = lazySchema(() => {
   });
 });
 
-// Strip optional fields from the schema when the backing feature is off so
-// the model never sees them. Done via .omit() rather than conditional spread
-// inside .extend() because the spread-ternary breaks Zod's type inference
-// (field type collapses to `unknown`). The ternary return produces a union
-// type, but call() destructures via the explicit AgentToolInput type below
-// which always includes all optional fields.
 export const inputSchema = lazySchema(() => {
-  const schema = feature('KAIROS') ? fullInputSchema() : fullInputSchema().omit({
-    cwd: true
-  });
+  const schema = fullInputSchema();
 
-  // GrowthBook-in-lazySchema is acceptable here (unlike subagent_type, which
-  // was removed in 906da6c723): the divergence window is one-session-per-
-  // gate-flip via _CACHED_MAY_BE_STALE disk read, and worst case is either
-  // "schema shows a no-op param" (gate flips on mid-session: param ignored
-  // by forceAsync) or "schema hides a param that would've worked" (gate
-  // flips off mid-session: everything still runs async via memoized
-  // forceAsync). No Zod rejection, no crash — unlike required→optional.
   return isBackgroundTasksDisabled || isForkSubagentEnabled() ? schema.omit({
     run_in_background: true
   }) : schema;
 });
 type InputSchema = ReturnType<typeof inputSchema>;
 
-// Explicit type widens the schema inference to always include all optional
-// fields even when .omit() strips them for gating (cwd, run_in_background).
+// Explicit type widens the schema inference to include run_in_background even
+// when the runtime schema omits it for background-disabled configurations.
 // subagent_type is optional; call() defaults it to general-purpose when the
 // fork gate is off, or routes to the fork path when the gate is on.
 type AgentToolInput = z.infer<ReturnType<typeof baseInputSchema>> & {
@@ -459,9 +443,7 @@ export const AgentTool = buildTool({
         // Log agent memory loaded event for subagents
         if (selectedAgent.memory) {
           logEvent('tengu_agent_memory_loaded', {
-            ...("external" === 'ant' && {
-              agent_type: selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-            }),
+            agent_type: selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
             scope: selectedAgent.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
             source: 'subagent' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
           });
@@ -564,7 +546,7 @@ export const AgentTool = buildTool({
       description
     };
 
-    // Helper to wrap execution with a cwd override: explicit cwd arg (KAIROS)
+    // Helper to wrap execution with a cwd override: explicit cwd arg
     // takes precedence over worktree isolation path.
     const cwdOverridePath = cwd ?? worktreeInfo?.worktreePath;
     const wrapWithCwd = <T,>(fn: () => T): T => cwdOverridePath ? runWithCwdOverride(cwdOverridePath, fn) : fn();
@@ -959,7 +941,6 @@ export const AgentTool = buildTool({
                   } finally {
                     stopBackgroundedSummarization?.();
                     clearInvokedSkillsForAgent(syncAgentId);
-                    clearDumpState(syncAgentId);
                     // Note: worktree cleanup is done before enqueueAgentNotification
                     // in both try and catch paths so we can include worktree info
                   }
@@ -1115,12 +1096,6 @@ export const AgentTool = buildTool({
           // Clean up scoped skills so they don't accumulate in the global map
           clearInvokedSkillsForAgent(syncAgentId);
 
-          // Clean up dumpState entry for this agent to prevent unbounded growth
-          // Skip if backgrounded — the backgrounded agent's finally handles cleanup
-          if (!wasBackgrounded) {
-            clearDumpState(syncAgentId);
-          }
-
           // Cancel auto-background timer if agent completed before it fired
           cancelAutoBackground?.();
 
@@ -1212,8 +1187,7 @@ export const AgentTool = buildTool({
 
     // Only route through auto mode classifier when in auto mode
     // In all other modes, auto-approve sub-agent generation
-    // Note: "external" === 'ant' guard enables dead code elimination for external builds
-    if ("external" === 'ant' && appState.toolPermissionContext.mode === 'auto') {
+    if (appState.toolPermissionContext.mode === 'auto') {
       return {
         behavior: 'passthrough',
         message: 'Agent tool requires permission to spawn sub-agents.'

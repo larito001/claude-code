@@ -67,7 +67,6 @@ export const KEYBINDING_ACTIONS = [
   'app:exit',
   'app:toggleTodos',
   'app:toggleTranscript',
-  'app:toggleBrief',
   'app:toggleTeammatePreview',
   'app:toggleTerminal',
   'app:redraw',
@@ -150,7 +149,7 @@ export const KEYBINDING_ACTIONS = [
   'diff:viewDetails',
   'diff:previousFile',
   'diff:nextFile',
-  // Model picker actions (ant-only)
+  // Model picker effort actions.
   'modelPicker:decreaseEffort',
   'modelPicker:increaseEffort',
   // Select component actions (distinct from confirm: to avoid collisions)

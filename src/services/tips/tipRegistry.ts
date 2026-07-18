@@ -7,10 +7,9 @@ import {
   getSettingsForSource,
 } from 'src/utils/settings/settings.js'
 import { shouldOfferTerminalSetup } from '../../commands/terminalSetup/terminalSetup.js'
-import { getDesktopUpsellConfig } from '../../components/DesktopUpsell/DesktopUpsellStartup.js'
 import { color } from '../../components/design-system/color.js'
 import { getShortcutDisplay } from '../../keybindings/shortcutFormat.js'
-import { isKairosCronEnabled } from '../../tools/ScheduleCronTool/prompt.js'
+import { isCronSchedulingEnabled } from '../../tools/ScheduleCronTool/prompt.js'
 import { is1PApiCustomer } from '../../utils/auth.js'
 import { countConcurrentSessions } from '../../utils/concurrentSessions.js'
 import { getGlobalConfig } from '../../utils/config.js'
@@ -99,7 +98,6 @@ const externalTips: Tip[] = [
       `Use Plan Mode to prepare for a complex request before making changes. Press ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} twice to enable.`,
     cooldownSessions: 5,
     isRelevant: async () => {
-      if (process.env.USER_TYPE === 'ant') return false
       const config = getGlobalConfig()
       // Show to users who haven't used plan mode recently (7+ days)
       const daysSinceLastUse = config.lastPlanModeUse
@@ -313,19 +311,6 @@ const externalTips: Tip[] = [
     },
   },
   {
-    id: 'install-github-app',
-    content: async () =>
-      'Run /install-github-app to tag @claude right from your Github issues and PRs',
-    cooldownSessions: 10,
-    isRelevant: async () => !getGlobalConfig().githubActionSetupCount,
-  },
-  {
-    id: 'install-slack-app',
-    content: async () => 'Run /install-slack-app to use Claude in Slack',
-    cooldownSessions: 10,
-    isRelevant: async () => !getGlobalConfig().slackAppInstallCount,
-  },
-  {
     id: 'permissions',
     content: async () =>
       'Use /permissions to pre-approve and pre-deny bash, edit, and MCP tools',
@@ -391,9 +376,7 @@ const externalTips: Tip[] = [
   {
     id: 'shift-tab',
     content: async () =>
-      process.env.USER_TYPE === 'ant'
-        ? `Hit ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} to cycle between default mode and auto mode`
-        : `Hit ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} to cycle between default mode, auto-accept edit mode, and plan mode`,
+      `Hit ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} to cycle between default mode, auto-accept edit mode, and plan mode`,
     cooldownSessions: 10,
     isRelevant: async () => true,
   },
@@ -425,48 +408,11 @@ const externalTips: Tip[] = [
     },
   },
   {
-    id: 'desktop-app',
-    content: async () =>
-      'Run Claude Code locally or remotely using the Claude desktop app: clau.de/desktop',
-    cooldownSessions: 15,
-    isRelevant: async () => getPlatform() !== 'linux',
-  },
-  {
-    id: 'desktop-shortcut',
-    content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
-      return `Continue your session in Claude Code Desktop with ${blue('/desktop')}`
-    },
-    cooldownSessions: 15,
-    isRelevant: async () => {
-      if (!getDesktopUpsellConfig().enable_shortcut_tip) return false
-      return (
-        process.platform === 'darwin' ||
-        (process.platform === 'win32' && process.arch === 'x64')
-      )
-    },
-  },
-  {
-    id: 'web-app',
-    content: async () =>
-      'Run tasks in the cloud while you keep coding locally · clau.de/web',
-    cooldownSessions: 15,
-    isRelevant: async () => true,
-  },
-  {
-    id: 'mobile-app',
-    content: async () =>
-      '/mobile to use Claude Code from the Claude app on your phone',
-    cooldownSessions: 15,
-    isRelevant: async () => true,
-  },
-  {
     id: 'opusplan-mode-reminder',
     content: async () =>
       `Your default model setting is Opus Plan Mode. Press ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} twice to activate Plan Mode and plan with Claude Opus.`,
     cooldownSessions: 2,
     async isRelevant() {
-      if (process.env.USER_TYPE === 'ant') return false
       const config = getGlobalConfig()
       const modelSetting = getUserSpecifiedModelSetting()
       const hasOpusPlanMode = modelSetting === 'opusplan'
@@ -568,7 +514,7 @@ const externalTips: Tip[] = [
     cooldownSessions: 3,
     isRelevant: async () => {
       if (!is1PApiCustomer()) return false
-      if (!isKairosCronEnabled()) return false
+      if (!isCronSchedulingEnabled()) return false
       return (
         getFeatureValue_CACHED_MAY_BE_STALE<'off' | 'copy_a' | 'copy_b'>(
           'tengu_timber_lark',
@@ -577,38 +523,23 @@ const externalTips: Tip[] = [
       )
     },
   },
+]
+const frameworkTips: Tip[] = [
   {
-    id: 'feedback-command',
-    content: async () => 'Use /feedback to help us improve!',
+    id: 'important-claudemd',
+    content: async () =>
+      'Use "IMPORTANT:" prefix for must-follow CLAUDE.md rules',
+    cooldownSessions: 30,
+    isRelevant: async () => true,
+  },
+  {
+    id: 'skillify',
+    content: async () =>
+      'Use /skillify at the end of a workflow to turn it into a reusable skill',
     cooldownSessions: 15,
-    async isRelevant() {
-      if (process.env.USER_TYPE === 'ant') {
-        return false
-      }
-      const config = getGlobalConfig()
-      return config.numStartups > 5
-    },
+    isRelevant: async () => true,
   },
 ]
-const internalOnlyTips: Tip[] =
-  process.env.USER_TYPE === 'ant'
-    ? [
-        {
-          id: 'important-claudemd',
-          content: async () =>
-            '[ANT-ONLY] Use "IMPORTANT:" prefix for must-follow CLAUDE.md rules',
-          cooldownSessions: 30,
-          isRelevant: async () => true,
-        },
-        {
-          id: 'skillify',
-          content: async () =>
-            '[ANT-ONLY] Use /skillify at the end of a workflow to turn it into a reusable skill',
-          cooldownSessions: 15,
-          isRelevant: async () => true,
-        },
-      ]
-    : []
 
 function getCustomTips(): Tip[] {
   const settings = getInitialSettings()
@@ -634,7 +565,7 @@ export async function getRelevantTips(context?: TipContext): Promise<Tip[]> {
   }
 
   // Otherwise, filter built-in tips as before and combine with custom
-  const tips = [...externalTips, ...internalOnlyTips]
+  const tips = [...externalTips, ...frameworkTips]
   const isRelevant = await Promise.all(tips.map(_ => _.isRelevant(context)))
   const filtered = tips
     .filter((_, index) => isRelevant[index])

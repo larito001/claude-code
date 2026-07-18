@@ -4,19 +4,8 @@
  * This module contains beta tracing features enabled when
  * ENABLE_BETA_TRACING_DETAILED=1 and BETA_TRACING_ENDPOINT are set.
  *
- * For external users, tracing is enabled in SDK/headless mode, or in
- * interactive mode when the org is allowlisted via the
- * tengu_trace_lantern GrowthBook gate.
- * For ant users, tracing is enabled in all modes.
- *
- * Visibility Rules:
- * | Content          | External | Ant  |
- * |------------------|----------|------|
- * | System prompts   | ✅                  | ✅   |
- * | Model output     | ✅                  | ✅   |
- * | Thinking output  | ❌                  | ✅   |
- * | Tools            | ✅                  | ✅   |
- * | new_context      | ✅                  | ✅   |
+ * Detailed content tracing is disabled by default and requires both explicit
+ * environment variables. Thinking text is never captured.
  *
  * Features:
  * - Per-agent message tracking with hash-based deduplication
@@ -27,8 +16,6 @@
 
 import type { Span } from '@opentelemetry/api'
 import { createHash } from 'crypto'
-import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { sanitizeToolNameForAnalytics } from '../../services/analytics/metadata.js'
 import type { AssistantMessage, UserMessage } from '../../types/message.js'
 import { isEnvTruthy } from '../envUtils.js'
@@ -72,8 +59,7 @@ const MAX_CONTENT_SIZE = 60 * 1024 // 60KB (Honeycomb limit is 64KB, staying saf
 /**
  * Check if beta detailed tracing is enabled.
  * - Requires ENABLE_BETA_TRACING_DETAILED=1 and BETA_TRACING_ENDPOINT
- * - For external users, enabled in SDK/headless mode OR when org is
- *   allowlisted via the tengu_trace_lantern GrowthBook gate
+ * Detailed content tracing is strictly opt-in through environment variables.
  */
 export function isBetaTracingEnabled(): boolean {
   const baseEnabled =
@@ -84,17 +70,7 @@ export function isBetaTracingEnabled(): boolean {
     return false
   }
 
-  // For external users, enable in SDK/headless mode OR when org is allowlisted.
-  // Gate reads from disk cache, so first run after allowlisting returns false;
-  // works from second run onward (same behavior as enhanced_telemetry_beta).
-  if (process.env.USER_TYPE !== 'ant') {
-    return (
-      getIsNonInteractiveSession() ||
-      getFeatureValue_CACHED_MAY_BE_STALE('tengu_trace_lantern', false)
-    )
-  }
-
-  return true
+  return baseEnabled
 }
 
 /**
@@ -407,7 +383,6 @@ export function addBetaLLMResponseAttributes(
   endAttributes: Record<string, string | number | boolean>,
   metadata?: {
     modelOutput?: string
-    thinkingOutput?: string
   },
 ): void {
   if (!isBetaTracingEnabled() || !metadata) {
@@ -426,20 +401,6 @@ export function addBetaLLMResponseAttributes(
     }
   }
 
-  // Add thinking_output - ant-only
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    metadata.thinkingOutput !== undefined
-  ) {
-    const { content: thinkingOutput, truncated: thinkingTruncated } =
-      truncateContent(metadata.thinkingOutput)
-    endAttributes['response.thinking_output'] = thinkingOutput
-    if (thinkingTruncated) {
-      endAttributes['response.thinking_output_truncated'] = true
-      endAttributes['response.thinking_output_original_length'] =
-        metadata.thinkingOutput.length
-    }
-  }
 }
 
 /**

@@ -5,7 +5,6 @@ import {
   type InstallStatus,
   installGlobalPackage,
 } from 'src/utils/autoUpdater.js'
-import { regenerateCompletionCache } from 'src/utils/completionCache.js'
 import {
   getGlobalConfig,
   type InstallMethod,
@@ -246,7 +245,6 @@ export async function update() {
             `Successfully updated from ${MACRO.VERSION} to version ${result.latestVersion}`,
           ) + '\n',
         )
-        await regenerateCompletionCache()
       }
       await gracefulShutdown(0)
     } catch (error) {
@@ -292,16 +290,12 @@ export async function update() {
     process.stderr.write('Try:\n')
     process.stderr.write('  • Check your internet connection\n')
     process.stderr.write('  • Run with --debug flag for more details\n')
-    const packageName =
-      MACRO.PACKAGE_URL ||
-      (process.env.USER_TYPE === 'ant'
-        ? '@anthropic-ai/claude-cli'
-        : '@anthropic-ai/claude-code')
+    const packageName = MACRO.PACKAGE_URL || '@anthropic-ai/claude-code'
     process.stderr.write(
       `  • Manually check: npm view ${packageName} version\n`,
     )
 
-    process.stderr.write('  • Check if you need to login: npm whoami\n')
+    process.stderr.write('  • Check npm registry access: npm whoami\n')
     await gracefulShutdown(1)
   }
 
@@ -377,7 +371,6 @@ export async function update() {
           `Successfully updated from ${MACRO.VERSION} to version ${latestVersion}`,
         ) + '\n',
       )
-      await regenerateCompletionCache()
       break
     case 'no_permissions':
       process.stderr.write(

@@ -25,7 +25,7 @@ function shouldUseVCR(): boolean {
     return true
   }
 
-  if (process.env.USER_TYPE === 'ant' && isEnvTruthy(process.env.FORCE_VCR)) {
+  if (isEnvTruthy(process.env.CLAUDE_CODE_VCR)) {
     return true
   }
 
@@ -132,7 +132,7 @@ export async function withVCR(
 
   if (env.isCI && !isEnvTruthy(process.env.VCR_RECORD)) {
     throw new Error(
-      `Anthropic API fixture missing: ${filename}. Re-run tests with VCR_RECORD=1, then commit the result. Input messages:\n${jsonStringify(dehydratedInput, null, 2)}`,
+      `API fixture missing: ${filename}. Re-run tests with VCR_RECORD=1, then commit the result. Input messages:\n${jsonStringify(dehydratedInput, null, 2)}`,
     )
   }
 

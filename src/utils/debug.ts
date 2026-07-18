@@ -57,12 +57,12 @@ export const isDebugMode = memoize((): boolean => {
 })
 
 /**
- * Enables debug logging mid-session (e.g. via /debug). Non-ants don't write
- * debug logs by default, so this lets them start capturing without restarting
+ * Enables debug logging mid-session (e.g. via /debug). This lets users start
+ * capturing without restarting
  * with --debug. Returns true if logging was already active.
  */
 export function enableDebugLogging(): boolean {
-  const wasActive = isDebugMode() || process.env.USER_TYPE === 'ant'
+  const wasActive = isDebugMode()
   runtimeDebugEnabled = true
   isDebugMode.cache.clear?.()
   return wasActive
@@ -106,9 +106,7 @@ function shouldLogDebugMessage(message: string): boolean {
     return false
   }
 
-  // Non-ants only write debug logs when debug mode is active (via --debug at
-  // startup or /debug mid-session). Ants always log for /share, bug reports.
-  if (process.env.USER_TYPE !== 'ant' && !isDebugMode()) {
+  if (!isDebugMode()) {
     return false
   }
 
@@ -253,15 +251,11 @@ const updateLatestDebugLogSymlink = memoize(async (): Promise<void> => {
 })
 
 /**
- * Logs errors for Ants only, always visible in production.
+ * Logs an error when debug logging is enabled.
  */
-export function logAntError(context: string, error: unknown): void {
-  if (process.env.USER_TYPE !== 'ant') {
-    return
-  }
-
+export function logDebugError(context: string, error: unknown): void {
   if (error instanceof Error && error.stack) {
-    logForDebugging(`[ANT-ONLY] ${context} stack trace:\n${error.stack}`, {
+    logForDebugging(`${context} stack trace:\n${error.stack}`, {
       level: 'error',
     })
   }

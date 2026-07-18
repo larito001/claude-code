@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { UUID } from 'crypto'
 import type { Dirent } from 'fs'
 // readFileTailSync 的同步 fs 原语 — 与 fs/promises 分开
@@ -43,8 +43,6 @@ import {
 import type { AttributionSnapshotMessage } from '../types/logs.js'
 import {
   type ContentReplacementEntry,
-  type ContextCollapseCommitEntry,
-  type ContextCollapseSnapshotEntry,
   type Entry,
   type FileHistorySnapshotMessage,
   type LogOption,
@@ -186,7 +184,7 @@ const EPHEMERAL_PROGRESS_TYPES = new Set([
   'bash_progress',
   'powershell_progress',
   'mcp_progress',
-  ...(feature('PROACTIVE') || feature('KAIROS')
+  ...(feature('PROACTIVE')
     ? (['sleep_progress'] as const)
     : []),
 ])
@@ -316,11 +314,6 @@ export function sessionIdExists(sessionId: string): boolean {
 // exported for testing
 export function getNodeEnv(): string {
   return process.env.NODE_ENV || 'development'
-}
-
-// exported for testing
-export function getUserType(): string {
-  return process.env.USER_TYPE || 'external'
 }
 
 function getEntrypoint(): string | undefined {
@@ -553,7 +546,7 @@ class Project {
    * reads during progressive loading.
    *
    * Called from two contexts with different file-ordering implications:
-   * - During compaction (compact.ts, reactiveCompact.ts): writes metadata
+   * - During compaction: writes metadata
    *   just before the boundary marker is emitted - these entries end up
    *   before the boundary and are recovered by scanPreBoundaryMetadata.
    * - On session exit (cleanup handler): writes metadata at EOF after all
@@ -911,7 +904,7 @@ class Project {
           // stamped sessionId=FRESH (from insertContentReplacement), and
           // loadFullLog's sessionId-keyed contentReplacements lookup misses →
           // replacement records lost → FROZEN misclassification.
-          userType: getUserType(),
+          userType: 'api_key',
           entrypoint: getEntrypoint(),
           cwd: getCwd(),
           sessionId,
@@ -1062,14 +1055,6 @@ class Project {
         ? getAgentTranscriptPath(entry.agentId)
         : sessionFile
       void this.enqueueWrite(targetFile, entry)
-    } else if (entry.type === 'marble-origami-commit') {
-      // Always append. Commit order matters for restore (later commits may
-      // reference earlier commits' summary messages), so these must be
-      // written in the order received and read back sequentially.
-      void this.enqueueWrite(sessionFile, entry)
-    } else if (entry.type === 'marble-origami-snapshot') {
-      // Always append. Last-wins on restore — later entries supersede.
-      void this.enqueueWrite(sessionFile, entry)
     } else {
       const messageSet = await getSessionMessages(sessionId)
       if (entry.type === 'queue-operation') {
@@ -1303,53 +1288,6 @@ export function adoptResumedSessionFile(): void {
   const project = getProject()
   project.sessionFile = getTranscriptPath()
   project.reAppendSessionMetadata(true)
-}
-
-/**
- * Append a context-collapse commit entry to the transcript. One entry per
- * commit, in commit order. On resume these are collected into an ordered
- * array and handed to restoreFromEntries() which rebuilds the commit log.
- */
-export async function recordContextCollapseCommit(commit: {
-  collapseId: string
-  summaryUuid: string
-  summaryContent: string
-  summary: string
-  firstArchivedUuid: string
-  lastArchivedUuid: string
-}): Promise<void> {
-  const sessionId = getSessionId() as UUID
-  if (!sessionId) return
-  await getProject().appendEntry({
-    type: 'marble-origami-commit',
-    sessionId,
-    ...commit,
-  })
-}
-
-/**
- * Snapshot the staged queue + spawn state. Written after each ctx-agent
- * spawn resolves (when staged contents may have changed). Last-wins on
- * restore — the loader keeps only the most recent snapshot entry.
- */
-export async function recordContextCollapseSnapshot(snapshot: {
-  staged: Array<{
-    startUuid: string
-    endUuid: string
-    summary: string
-    risk: number
-    stagedAt: number
-  }>
-  armed: boolean
-  lastSpawnTokens: number
-}): Promise<void> {
-  const sessionId = getSessionId() as UUID
-  if (!sessionId) return
-  await getProject().appendEntry({
-    type: 'marble-origami-snapshot',
-    sessionId,
-    ...snapshot,
-  })
 }
 
 export async function flushSessionStorage(): Promise<void> {
@@ -1590,89 +1528,6 @@ function applyPreservedSegmentRelinks(
 }
 
 /**
- * Delete messages that Snip executions removed from the in-memory array,
- * and relink parentUuid across the gaps.
- *
- * Unlike compact_boundary which truncates a prefix, snip removes
- * middle ranges. The JSONL is append-only, so removed messages stay on disk
- * and the surviving messages' parentUuid chains walk through them. Without
- * this filter, buildConversationChain reconstructs the full unsnipped history
- * and resume immediately PTLs (adamr-20260320-165831: 397K displayed → 1.65M
- * actual).
- *
- * Deleting alone is not enough: the surviving message AFTER a removed range
- * has parentUuid pointing INTO the gap. buildConversationChain would hit
- * messages.get(undefined) and stop, orphaning everything before the gap. So
- * after delete we relink: for each survivor with a dangling parentUuid, walk
- * backward through the removed region's own parent links to the first
- * non-removed ancestor.
- *
- * The boundary records removedUuids at execution time so we can replay the
- * exact removal on load. Older boundaries without removedUuids are skipped —
- * resume loads their pre-snip history (the pre-fix behavior).
- *
- * Mutates the Map in place.
- */
-function applySnipRemovals(messages: Map<UUID, TranscriptMessage>): void {
-  // Structural check — snipMetadata only exists on the boundary subtype.
-  // Avoids the subtype literal which is in excluded-strings.txt
-  // (HISTORY_SNIP is ant-only; the literal must not leak into external builds).
-  type WithSnipMeta = { snipMetadata?: { removedUuids?: UUID[] } }
-  const toDelete = new Set<UUID>()
-  for (const entry of messages.values()) {
-    const removedUuids = (entry as WithSnipMeta).snipMetadata?.removedUuids
-    if (!removedUuids) continue
-    for (const uuid of removedUuids) toDelete.add(uuid)
-  }
-  if (toDelete.size === 0) return
-
-  // Capture each to-delete entry's own parentUuid BEFORE deleting so we can
-  // walk backward through contiguous removed ranges. Entries not in the Map
-  // (already absent, e.g. from a prior compact_boundary prune) contribute no
-  // link; the relink walk will stop at the gap and pick up null (chain-root
-  // behavior — same as if compact truncated there, which it did).
-  const deletedParent = new Map<UUID, UUID | null>()
-  let removedCount = 0
-  for (const uuid of toDelete) {
-    const entry = messages.get(uuid)
-    if (!entry) continue
-    deletedParent.set(uuid, entry.parentUuid)
-    messages.delete(uuid)
-    removedCount++
-  }
-
-  // Relink survivors with dangling parentUuid. Walk backward through
-  // deletedParent until we hit a UUID not in toDelete (or null). Path
-  // compression: after resolving, seed the map with the resolved link so
-  // subsequent survivors sharing the same chain segment don't re-walk.
-  const resolve = (start: UUID): UUID | null => {
-    const path: UUID[] = []
-    let cur: UUID | null | undefined = start
-    while (cur && toDelete.has(cur)) {
-      path.push(cur)
-      cur = deletedParent.get(cur)
-      if (cur === undefined) {
-        cur = null
-        break
-      }
-    }
-    for (const p of path) deletedParent.set(p, cur)
-    return cur
-  }
-  let relinkedCount = 0
-  for (const [uuid, msg] of messages) {
-    if (!msg.parentUuid || !toDelete.has(msg.parentUuid)) continue
-    messages.set(uuid, { ...msg, parentUuid: resolve(msg.parentUuid) })
-    relinkedCount++
-  }
-
-  logEvent('tengu_snip_resume_filtered', {
-    removed_count: removedCount,
-    relinked_count: relinkedCount,
-  })
-}
-
-/**
  * O(n) single-pass: find the message with the latest timestamp matching a predicate.
  * Replaces the `[...values].filter(pred).sort((a,b) => Date(b)-Date(a))[0]` pattern
  * which is O(n log n) + 2n Date allocations.
@@ -1853,7 +1708,7 @@ function recoverOrphanedParallelToolResults(
  * delta = 0: round-trip consistent
  *
  * Called from loadConversationForResume — fires once per resume, not on
- * /share or log-listing chain rebuilds.
+ * transcript export or log-listing chain rebuilds.
  */
 export function checkResumeConsistency(chain: Message[]): void {
   for (let i = chain.length - 1; i >= 0; i--) {
@@ -1936,8 +1791,6 @@ export async function loadTranscriptFromFile(
       tags,
       fileHistorySnapshots,
       attributionSnapshots,
-      contextCollapseCommits,
-      contextCollapseSnapshot,
       leafUuids,
       contentReplacements,
       worktreeStates,
@@ -1976,13 +1829,6 @@ export async function loadTranscriptFromFile(
         undefined,
         contentReplacements.get(sessionId) ?? [],
       ),
-      contextCollapseCommits: contextCollapseCommits.filter(
-        e => e.sessionId === sessionId,
-      ),
-      contextCollapseSnapshot:
-        contextCollapseSnapshot?.sessionId === sessionId
-          ? contextCollapseSnapshot
-          : undefined,
       worktreeSession: worktreeStates.has(sessionId)
         ? worktreeStates.get(sessionId)
         : undefined,
@@ -2609,8 +2455,6 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
       fileHistorySnapshots,
       attributionSnapshots,
       contentReplacements,
-      contextCollapseCommits,
-      contextCollapseSnapshot,
       leafUuids,
     } = await loadTranscriptFile(sessionFile)
 
@@ -2672,16 +2516,6 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
       contentReplacements: sessionId
         ? (contentReplacements.get(sessionId) ?? [])
         : log.contentReplacements,
-      // Filter to the resumed session's entries. loadTranscriptFile reads
-      // the file sequentially so the array is already in commit order;
-      // filter preserves that.
-      contextCollapseCommits: sessionId
-        ? contextCollapseCommits.filter(e => e.sessionId === sessionId)
-        : undefined,
-      contextCollapseSnapshot:
-        sessionId && contextCollapseSnapshot?.sessionId === sessionId
-          ? contextCollapseSnapshot
-          : undefined,
     }
   } catch {
     // If loading fails, return the original log
@@ -3123,8 +2957,6 @@ export async function loadTranscriptFile(
   attributionSnapshots: Map<UUID, AttributionSnapshotMessage>
   contentReplacements: Map<UUID, ContentReplacementRecord[]>
   agentContentReplacements: Map<AgentId, ContentReplacementRecord[]>
-  contextCollapseCommits: ContextCollapseCommitEntry[]
-  contextCollapseSnapshot: ContextCollapseSnapshotEntry | undefined
   leafUuids: Set<UUID>
 }> {
   const messages = new Map<UUID, TranscriptMessage>()
@@ -3146,10 +2978,6 @@ export async function loadTranscriptFile(
     AgentId,
     ContentReplacementRecord[]
   >()
-  // 数组，而不是映射——提交顺序很重要（嵌套折叠）。
-  const contextCollapseCommits: ContextCollapseCommitEntry[] = []
-  // 最后获胜者 — 后来的条目取代。
-  let contextCollapseSnapshot: ContextCollapseSnapshotEntry | undefined
 
   try {
     // For large transcripts, avoid materializing megabytes of stale content.
@@ -3278,17 +3106,6 @@ export async function loadTranscriptFile(
           entry.parentUuid = progressBridge.get(entry.parentUuid) ?? null
         }
         messages.set(entry.uuid, entry)
-        // 紧凑边界：先前的大理石折纸提交条目参考
-        // 不会出现在后边界链中的消息。 >5MB
-        // 向后扫描路径通过不读取而自然地丢弃它们
-        // 前边界字节； <5MB 路径读取所有内容，因此丢弃
-        // 这里。如果没有这个， getStats().collapsedSpans 在 /context 中
-        // 过度计数（projectView 默默地跳过过时的提交，但
-        // 它们仍在日志中）。
-        if (isCompactBoundaryMessage(entry)) {
-          contextCollapseCommits.length = 0
-          contextCollapseSnapshot = undefined
-        }
       } else if (entry.type === 'summary' && entry.leafUuid) {
         summaries.set(entry.leafUuid, entry.summary)
       } else if (entry.type === 'custom-title' && entry.sessionId) {
@@ -3325,10 +3142,6 @@ export async function loadTranscriptFile(
           contentReplacements.set(entry.sessionId, existing)
           existing.push(...entry.replacements)
         }
-      } else if (entry.type === 'marble-origami-commit') {
-        contextCollapseCommits.push(entry)
-      } else if (entry.type === 'marble-origami-snapshot') {
-        contextCollapseSnapshot = entry
       }
     }
   } catch {
@@ -3336,7 +3149,6 @@ export async function loadTranscriptFile(
   }
 
   applyPreservedSegmentRelinks(messages)
-  applySnipRemovals(messages)
 
   // 在加载时计算一次叶子 UUID
   // 只有用户/助理消息才应被视为锚定恢复的离开。
@@ -3440,8 +3252,6 @@ export async function loadTranscriptFile(
     attributionSnapshots,
     contentReplacements,
     agentContentReplacements,
-    contextCollapseCommits,
-    contextCollapseSnapshot,
     leafUuids,
   }
 }
@@ -3459,8 +3269,6 @@ async function loadSessionFile(sessionId: UUID): Promise<{
   fileHistorySnapshots: Map<UUID, FileHistorySnapshotMessage>
   attributionSnapshots: Map<UUID, AttributionSnapshotMessage>
   contentReplacements: Map<UUID, ContentReplacementRecord[]>
-  contextCollapseCommits: ContextCollapseCommitEntry[]
-  contextCollapseSnapshot: ContextCollapseSnapshotEntry | undefined
 }> {
   const sessionFile = join(
     getSessionProjectDir() ?? getProjectDir(getOriginalCwd()),
@@ -3514,8 +3322,6 @@ export async function getLastSessionLog(
     fileHistorySnapshots,
     attributionSnapshots,
     contentReplacements,
-    contextCollapseCommits,
-    contextCollapseSnapshot,
   } = await loadSessionFile(sessionId)
   if (messages.size === 0) return null
   // Prime getSessionMessages cache so recordTranscript (called after REPL
@@ -3555,13 +3361,6 @@ export async function getLastSessionLog(
       contentReplacements.get(sessionId) ?? [],
     ),
     worktreeSession: worktreeStates.get(sessionId),
-    contextCollapseCommits: contextCollapseCommits.filter(
-      e => e.sessionId === sessionId,
-    ),
-    contextCollapseSnapshot:
-      contextCollapseSnapshot?.sessionId === sessionId
-        ? contextCollapseSnapshot
-        : undefined,
   }
 }
 
@@ -3984,11 +3783,10 @@ export async function loadAllSubagentTranscriptsFromDisk(): Promise<{
 // without awaiting recordTranscript's return value (race-free hint tracking).
 export function isLoggableMessage(m: Message): boolean {
   if (m.type === 'progress') return false
-  // IMPORTANT: We deliberately filter out most attachments for non-ants because
-  // they have sensitive info for training that we don't want exposed to the public.
+  // Most attachments are ephemeral and can contain sensitive runtime details.
   // When enabled, we allow hook_additional_context through since it contains
   // user-configured hook output that is useful for session context on resume.
-  if (m.type === 'attachment' && getUserType() !== 'ant') {
+  if (m.type === 'attachment') {
     if (
       m.attachment.type === 'hook_additional_context' &&
       isEnvTruthy(process.env.CLAUDE_CODE_SAVE_HOOK_ADDITIONAL_CONTEXT)
@@ -4015,12 +3813,10 @@ function collectReplIds(messages: readonly Message[]): Set<string> {
 }
 
 /**
- * For external users, make REPL invisible in the persisted transcript: strip
+ * Make REPL invisible in the persisted transcript: strip
  * REPL tool_use/tool_result pairs and promote isVirtual messages to real. On
  * --resume the model then sees a coherent native-tool-call history (assistant
  * called Bash, got result, called Read, got result) without the REPL wrapper.
- * Ant transcripts keep the wrapper so /share training data sees REPL usage.
- *
  * replIds is pre-collected from the FULL session array, not the slice being
  * transformed — recordTranscript receives incremental slices where the REPL
  * tool_use (earlier render) and its tool_result (later render, after async
@@ -4086,12 +3882,10 @@ export function cleanMessagesForLogging(
   allMessages: readonly Message[] = messages,
 ): Transcript {
   const filtered = messages.filter(isLoggableMessage) as Transcript
-  return getUserType() !== 'ant'
-    ? transformMessagesForExternalTranscript(
-        filtered,
-        collectReplIds(allMessages),
-      )
-    : filtered
+  return transformMessagesForExternalTranscript(
+    filtered,
+    collectReplIds(allMessages),
+  )
 }
 
 /**
@@ -4522,7 +4316,7 @@ function extractFirstPromptFromChunk(chunk: string): string {
 
         if (SKIP_FIRST_PROMPT_PATTERN.test(result)) {
           if (
-            (feature('PROACTIVE') || feature('KAIROS')) &&
+            (feature('PROACTIVE')) &&
             result.startsWith(`<${TICK_TAG}>`)
           )
             hasTickMessages = true
@@ -4542,7 +4336,7 @@ function extractFirstPromptFromChunk(chunk: string): string {
   if (firstCommandFallback) return firstCommandFallback
   // Proactive sessions have only tick messages — give them a synthetic prompt
   // so they're not filtered out by enrichLogs
-  if ((feature('PROACTIVE') || feature('KAIROS')) && hasTickMessages)
+  if ((feature('PROACTIVE')) && hasTickMessages)
     return 'Proactive session'
   return ''
 }

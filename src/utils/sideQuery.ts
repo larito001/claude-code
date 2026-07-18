@@ -82,10 +82,10 @@ function extractFirstUserMessageText(messages: MessageParam[]): string {
  * Lightweight API wrapper for "side queries" outside the main conversation loop.
  *
  * Use this instead of direct client.beta.messages.create() calls to ensure
- * proper OAuth token validation with fingerprint attribution headers.
+ * consistent API-key validation and attribution headers.
  *
  * This handles:
- * - Fingerprint computation for OAuth validation
+ * - Provider credential validation
  * - Attribution header injection
  * - CLI system prompt prefix
  * - Proper betas for the model

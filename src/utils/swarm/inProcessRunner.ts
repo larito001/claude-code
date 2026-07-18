@@ -9,7 +9,7 @@
  * - Cleanup on completion or abort
  */
 
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import { getSystemPrompt } from '../../constants/prompts.js'
 import { TEAMMATE_MESSAGE_TAG } from '../../constants/xml.js'
@@ -29,7 +29,6 @@ import {
   compactConversation,
   ERROR_MESSAGE_USER_ABORT,
 } from '../../services/compact/compact.js'
-import { resetMicrocompactState } from '../../services/compact/microCompact.js'
 import type { AppState } from '../../state/AppState.js'
 import type { Tool, ToolUseContext } from '../../Tool.js'
 import { appendTeammateMessage } from '../../tasks/InProcessTeammateTask/InProcessTeammateTask.js'
@@ -947,12 +946,6 @@ export async function runInProcessTeammate(
       // Log agent memory loaded event for in-process teammates
       if (agentDefinition.memory) {
         logEvent('tengu_agent_memory_loaded', {
-          ...(process.env.USER_TYPE === 'ant'
-            ? {
-                agent_type:
-                  agentDefinition.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              }
-            : {}),
           scope:
             agentDefinition.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           source:
@@ -1104,7 +1097,6 @@ export async function runInProcessTeammate(
         contextMessages = buildPostCompactMessages(compactedSummary)
         // Reset microcompact state since full compact replaces all
         // messages — old tool IDs are no longer relevant
-        resetMicrocompactState()
         // Reset content replacement state — compact replaces all messages
         // so old tool_use_ids are gone. Stale Map entries are harmless
         // (UUID keys never match) but accumulate memory over long runs.

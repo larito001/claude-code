@@ -16,6 +16,7 @@ import {
   registerFileReadListener,
 } from '../../tools/FileReadTool/FileReadTool.js'
 import { isFsInaccessible } from '../../utils/errors.js'
+import { feature } from '../../utils/features.js'
 import { cloneFileStateCache } from '../../utils/fileStateCache.js'
 import {
   type REPLHookContext,
@@ -240,7 +241,7 @@ const updateMagicDocs = sequential(async function (
 })
 
 export async function initMagicDocs(): Promise<void> {
-  if (process.env.USER_TYPE === 'ant') {
+  if (feature('MAGIC_DOCS')) {
     // Register listener to detect magic docs when files are read
     registerFileReadListener((filePath: string, content: string) => {
       const result = detectMagicDocHeader(content)

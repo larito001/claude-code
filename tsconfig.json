@@ -16,7 +16,6 @@
     "baseUrl": ".",
     "paths": {
       "src/*": ["./src/*"],
-      "bun:bundle": ["./src/stubs/bun-bundle.d.ts"],
       "bun:ffi": ["./src/stubs/bun-ffi.d.ts"]
     },
     "types": ["bun-types"]

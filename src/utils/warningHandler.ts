@@ -1,48 +1,29 @@
-import { posix, win32 } from 'path'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from 'src/services/analytics/index.js'
 import { logForDebugging } from './debug.js'
 import { isEnvTruthy } from './envUtils.js'
-import { getPlatform } from './platform.js'
 
 // Track warnings to avoid spam — bounded to prevent unbounded memory growth
 export const MAX_WARNING_KEYS = 1000
 const warningCounts = new Map<string, number>()
 
-// Check if running from a build directory (development mode)
-// This is a sync version of the logic in getCurrentInstallationType()
-function isRunningFromBuildDirectory(): boolean {
-  let invokedPath = process.argv[1] || ''
-  let execPath = process.execPath || process.argv[0] || ''
-
-  // On Windows, convert backslashes to forward slashes for consistent path matching
-  if (getPlatform() === 'windows') {
-    invokedPath = invokedPath.split(win32.sep).join(posix.sep)
-    execPath = execPath.split(win32.sep).join(posix.sep)
-  }
-
-  const pathsToCheck = [invokedPath, execPath]
-  const buildDirs = [
-    '/build-ant/',
-    '/build-external/',
-    '/build-external-native/',
-    '/build-ant-native/',
-  ]
-
-  return pathsToCheck.some(path => buildDirs.some(dir => path.includes(dir)))
+// Source entrypoints are development runs even when NODE_ENV is unset.
+function isRunningFromSource(): boolean {
+  const invokedPath = (process.argv[1] || '').replaceAll('\\', '/')
+  return /\/src\/entrypoints\/[^/]+\.[cm]?[jt]sx?$/.test(invokedPath)
 }
 
-// Warnings we know about and want to suppress from users
-const INTERNAL_WARNINGS = [
+// Known runtime warnings that are noisy but still useful in debug logs.
+const KNOWN_NOISY_WARNINGS = [
   /MaxListenersExceededWarning.*AbortSignal/,
   /MaxListenersExceededWarning.*EventTarget/,
 ]
 
-function isInternalWarning(warning: Error): boolean {
+function isKnownNoisyWarning(warning: Error): boolean {
   const warningStr = `${warning.name}: ${warning.message}`
-  return INTERNAL_WARNINGS.some(pattern => pattern.test(warningStr))
+  return KNOWN_NOISY_WARNINGS.some(pattern => pattern.test(warningStr))
 }
 
 // Store reference to our warning handler so we can detect if it's already installed
@@ -64,12 +45,10 @@ export function initializeWarningHandler(): void {
     return
   }
 
-  // For external users, remove default Node.js handler to suppress stderr output
-  // For internal users, only keep default warnings for development builds
-  // Check development mode directly to avoid async call in init
-  // This preserves the same logic as getCurrentInstallationType() without async
+  // Keep Node's default stderr handler in development; release runs route
+  // warnings through the bounded diagnostic handler below.
   const isDevelopment =
-    process.env.NODE_ENV === 'development' || isRunningFromBuildDirectory()
+    process.env.NODE_ENV === 'development' || isRunningFromSource()
   if (!isDevelopment) {
     process.removeAllListeners('warning')
   }
@@ -90,27 +69,23 @@ export function initializeWarningHandler(): void {
         warningCounts.set(warningKey, count + 1)
       }
 
-      const isInternal = isInternalWarning(warning)
+      const isKnownNoisy = isKnownNoisyWarning(warning)
 
-      // Always log to Statsig for monitoring
-      // Include full details for ant users only, since they may contain code or filepaths
+      // Emit only the warning class and bounded occurrence count. Full details
+      // may contain code or paths and stay in the explicit debug log.
       logEvent('tengu_node_warning', {
-        is_internal: isInternal ? 1 : 0,
+        is_internal: isKnownNoisy ? 1 : 0,
         occurrence_count: count + 1,
         classname:
           warning.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        ...(process.env.USER_TYPE === 'ant' && {
-          message:
-            warning.message as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        }),
       })
 
       // In debug mode, show all warnings with context
       if (isEnvTruthy(process.env.CLAUDE_DEBUG)) {
-        const prefix = isInternal ? '[Internal Warning]' : '[Warning]'
+        const prefix = isKnownNoisy ? '[Known Runtime Warning]' : '[Warning]'
         logForDebugging(`${prefix} ${warning.toString()}`, { level: 'warn' })
       }
-      // Hide all warnings from users - they are only logged to Statsig for monitoring
+      // Release-mode warnings remain available through configured diagnostics.
     } catch {
       // Fail silently - we don't want the warning handler to cause issues
     }

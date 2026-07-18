@@ -1,6 +1,5 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import type { Theme } from './theme.js'
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import { getCanonicalName } from './model/model.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
@@ -13,8 +12,7 @@ export type ThinkingConfig =
   | { type: 'disabled' }
 
 /**
- * Build-time gate (feature) + runtime gate (GrowthBook). The build flag
- * controls code inclusion in external builds; the GB flag controls rollout.
+ * Local capability gate plus provider-neutral runtime override.
  */
 export function isUltrathinkEnabled(): boolean {
   if (!feature('ULTRATHINK')) {
@@ -91,11 +89,6 @@ export function modelSupportsThinking(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(model, 'thinking')
   if (supported3P !== undefined) {
     return supported3P
-  }
-  if (process.env.USER_TYPE === 'ant') {
-    if (resolveAntModel(model.toLowerCase())) {
-      return true
-    }
   }
   // IMPORTANT: Do not change thinking support without notifying the model
   // launch DRI and research. This can greatly affect model quality and bashing.

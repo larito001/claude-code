@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle';
+import { feature } from 'src/utils/features.js';
 import type { ContentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 import { randomUUID } from 'crypto';
 import { setPromptId } from 'src/bootstrap/state.js';
@@ -9,10 +9,8 @@ import type { AssistantMessage, AttachmentMessage, Message, NormalizedUserMessag
 import { addInvokedSkill, getSessionId } from '../../bootstrap/state.js';
 import { COMMAND_MESSAGE_TAG, COMMAND_NAME_TAG } from '../../constants/xml.js';
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED, logEvent } from '../../services/analytics/index.js';
-import { getDumpPromptsPath } from '../../services/api/dumpPrompts.js';
+import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../services/analytics/index.js';
 import { buildPostCompactMessages } from '../../services/compact/compact.js';
-import { resetMicrocompactState } from '../../services/compact/microCompact.js';
 import type { Progress as AgentProgress } from '../../tools/AgentTool/AgentTool.js';
 import { runAgent } from '../../tools/AgentTool/runAgent.js';
 import { renderToolUseProgressMessage } from '../../tools/AgentTool/UI.js';
@@ -22,7 +20,6 @@ import { createAttachmentMessage, getAttachmentMessages } from '../attachments.j
 import { logForDebugging } from '../debug.js';
 import { isEnvTruthy } from '../envUtils.js';
 import { AbortError, MalformedCommandError } from '../errors.js';
-import { getDisplayPath } from '../file.js';
 import { extractResultText, prepareForkedCommandContext } from '../forkedAgent.js';
 import { getFsImplementation } from '../fsOperations.js';
 import { isFullscreenEnvEnabled } from '../fullscreen.js';
@@ -56,10 +53,6 @@ async function executeForkedSlashCommand(command: CommandBase & PromptCommand, a
     command_name: command.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     invocation_trigger: 'user-slash' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     ...(command.pluginInfo && {
-      _PROTO_plugin_name: command.pluginInfo.pluginManifest.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-      ...(pluginMarketplace && {
-        _PROTO_marketplace_name: pluginMarketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED
-      }),
       ...buildPluginCommandTelemetryFields(command.pluginInfo)
     })
   });
@@ -166,11 +159,6 @@ async function executeForkedSlashCommand(command: CommandBase & PromptCommand, a
   }
   let resultText = extractResultText(agentMessages, 'Command completed');
   logForDebugging(`Forked slash command /${command.name} completed with agent ${agentId}`);
-
-  // Prepend debug log for ant users so it appears inside the command output
-  if ("external" === 'ant') {
-    resultText = `[ANT-ONLY] API calls: ${getDisplayPath(getDumpPromptsPath(agentId))}\n${resultText}`;
-  }
 
   // Return the result as a user message (simulates the agent's output)
   const messages: UserMessage[] = [createUserMessage({
@@ -305,13 +293,6 @@ export async function processSlashCommand(inputString: string, precedingInputBlo
         marketplace
       } = parsePluginIdentifier(repository);
       const isOfficial = isOfficialMarketplaceName(marketplace);
-      // _PROTO_* routes to PII-tagged plugin_name/marketplace_name BQ columns
-      // (unredacted, all users); plugin_name/plugin_repository stay in
-      // additional_metadata as redacted variants for general-access dashboards.
-      eventData._PROTO_plugin_name = pluginManifest.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED;
-      if (marketplace) {
-        eventData._PROTO_marketplace_name = marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED;
-      }
       eventData.plugin_repository = (isOfficial ? repository : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
       eventData.plugin_name = (isOfficial ? pluginManifest.name : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
       if (isOfficial && pluginManifest.version) {
@@ -322,17 +303,15 @@ export async function processSlashCommand(inputString: string, precedingInputBlo
     logEvent('tengu_input_command', {
       ...eventData,
       invocation_trigger: 'user-slash' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...("external" === 'ant' && {
-        skill_name: commandName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        ...(returnedCommand.type === 'prompt' && {
-          skill_source: returnedCommand.source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        }),
-        ...(returnedCommand.loadedFrom && {
-          skill_loaded_from: returnedCommand.loadedFrom as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        }),
-        ...(returnedCommand.kind && {
-          skill_kind: returnedCommand.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        })
+      skill_name: commandName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      ...(returnedCommand.type === 'prompt' && {
+        skill_source: returnedCommand.source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+      }),
+      ...(returnedCommand.loadedFrom && {
+        skill_loaded_from: returnedCommand.loadedFrom as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+      }),
+      ...(returnedCommand.kind && {
+        skill_kind: returnedCommand.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       })
     });
     return {
@@ -376,10 +355,6 @@ export async function processSlashCommand(inputString: string, precedingInputBlo
       marketplace
     } = parsePluginIdentifier(repository);
     const isOfficial = isOfficialMarketplaceName(marketplace);
-    eventData._PROTO_plugin_name = pluginManifest.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED;
-    if (marketplace) {
-      eventData._PROTO_marketplace_name = marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED;
-    }
     eventData.plugin_repository = (isOfficial ? repository : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
     eventData.plugin_name = (isOfficial ? pluginManifest.name : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
     if (isOfficial && pluginManifest.version) {
@@ -390,17 +365,15 @@ export async function processSlashCommand(inputString: string, precedingInputBlo
   logEvent('tengu_input_command', {
     ...eventData,
     invocation_trigger: 'user-slash' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    ...("external" === 'ant' && {
-      skill_name: commandName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...(returnedCommand.type === 'prompt' && {
-        skill_source: returnedCommand.source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      ...(returnedCommand.loadedFrom && {
-        skill_loaded_from: returnedCommand.loadedFrom as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      ...(returnedCommand.kind && {
-        skill_kind: returnedCommand.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      })
+    skill_name: commandName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    ...(returnedCommand.type === 'prompt' && {
+      skill_source: returnedCommand.source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+    }),
+    ...(returnedCommand.loadedFrom && {
+      skill_loaded_from: returnedCommand.loadedFrom as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+    }),
+    ...(returnedCommand.kind && {
+      skill_kind: returnedCommand.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
     })
   });
 
@@ -590,7 +563,6 @@ async function getMessagesForSlashCommand(commandName: string, args: string, set
               // messages — old tool IDs are no longer relevant. Budget state
               // (on toolUseContext) needs no reset: stale entries are inert
               // (UUIDs never repeat, so they're never looked up).
-              resetMicrocompactState();
               return {
                 messages: buildPostCompactMessages(compactionResultWithSlashMessages),
                 shouldQuery: false,
@@ -784,15 +756,10 @@ async function getMessagesForPromptSlashCommand(command: CommandBase & PromptCom
   const mainMessageContent: ContentBlockParam[] = imageContentBlocks.length > 0 || precedingInputBlocks.length > 0 ? [...imageContentBlocks, ...precedingInputBlocks, ...result] : result;
 
   // Extract attachments from command arguments (@-mentions, MCP resources,
-  // agent mentions in SKILL.md). skipSkillDiscovery prevents the SKILL.md
-  // content itself from triggering discovery — it's meta-content, not user
-  // intent, and a large SKILL.md (e.g. 110KB) would fire chunked AKI queries
-  // adding seconds of latency to every skill invocation.
+  // and agent mentions in SKILL.md).
   const attachmentMessages = await toArray(getAttachmentMessages(result.filter((block): block is TextBlockParam => block.type === 'text').map(block => block.text).join(' '), context, null, [],
   // queuedCommands - handled by query.ts for mid-turn attachments
-  context.messages, 'repl_main_thread', {
-    skipSkillDiscovery: true
-  }));
+  context.messages, 'repl_main_thread'));
   const messages = [createUserMessage({
     content: metadata,
     uuid

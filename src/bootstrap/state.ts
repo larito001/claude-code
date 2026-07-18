@@ -1,4 +1,3 @@
-import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type { Attributes, Meter, MetricOptions } from '@opentelemetry/api'
 import type { logs } from '@opentelemetry/api-logs'
 import type { LoggerProvider } from '@opentelemetry/sdk-logs'
@@ -69,14 +68,12 @@ type State = {
   initialMainLoopModel: ModelSetting
   modelStrings: ModelStrings | null
   isInteractive: boolean
-  kairosActive: boolean
   // When true, ensureToolResultPairing throws on mismatch instead of
   // repairing with synthetic placeholders. HFI opts in at startup so
   // trajectories fail fast rather than conditioning the model on fake
   // tool_results.
   strictToolResultPairing: boolean
   sdkAgentProgressSummariesEnabled: boolean
-  userMsgOptIn: boolean
   clientType: string
   sessionSource: string | undefined
   questionPreviewFormat: 'markdown' | 'html' | undefined
@@ -107,14 +104,6 @@ type State = {
   // Agent color state
   agentColorMap: Map<string, AgentColorName>
   agentColorIndex: number
-  // Last API request for bug reports
-  lastAPIRequest: Omit<BetaMessageStreamParams, 'messages'> | null
-  // Messages from the last API request (ant-only; reference, not clone).
-  // Captures the exact post-compaction, CLAUDE.md-injected message set sent
-  // to the API so /share's serialized_conversation.json reflects reality.
-  lastAPIRequestMessages: BetaMessageStreamParams['messages'] | null
-  // Last auto-mode classifier request(s) for /share transcript
-  lastClassifierRequests: unknown[] | null
   // CLAUDE.md content cached by context.ts for the auto-mode classifier.
   // Breaks the yoloClassifier → claudemd → filesystem → permissions cycle.
   cachedClaudeMdContent: string | null
@@ -174,18 +163,11 @@ type State = {
       agentId: string | null
     }
   >
-  // Track slow operations for dev bar display (ant-only)
-  slowOperations: Array<{
-    operation: string
-    durationMs: number
-    timestamp: number
-  }>
   // SDK-provided betas (e.g., context-1m-2025-08-07)
   sdkBetas: string[] | undefined
   // Main thread agent type (from --agent flag or settings)
   mainThreadAgentType: string | undefined
   // Remote mode (--remote flag)
-  isRemoteMode: boolean
   // System prompt section cache state
   systemPromptSectionCache: Map<string, string | null>
   // Last date emitted to the model (for detecting midnight date changes)
@@ -218,10 +200,6 @@ type State = {
   // enabled, keep sending the header so cooldown enter/exit doesn't
   // double-bust the prompt cache. The `speed` body param stays dynamic.
   fastModeHeaderLatched: boolean | null
-  // Sticky-on latch for the cache-editing beta header. Once cached
-  // microcompact is first enabled, keep sending the header so mid-session
-  // GrowthBook/settings toggles don't bust the prompt cache.
-  cacheEditingHeaderLatched: boolean | null
   // Sticky-on latch for clearing thinking from prior tool loops. Triggered
   // when >1h since last API call (confirmed cache miss — no cache-hit
   // benefit to keeping thinking). Once latched, stays on so the newly-warmed
@@ -285,10 +263,8 @@ function getInitialState(): State {
     initialMainLoopModel: null,
     modelStrings: null,
     isInteractive: false,
-    kairosActive: false,
     strictToolResultPairing: false,
     sdkAgentProgressSummariesEnabled: false,
-    userMsgOptIn: false,
     clientType: 'cli',
     sessionSource: undefined,
     questionPreviewFormat: undefined,
@@ -323,11 +299,6 @@ function getInitialState(): State {
     // Agent color state
     agentColorMap: new Map(),
     agentColorIndex: 0,
-    // Last API request for bug reports
-    lastAPIRequest: null,
-    lastAPIRequestMessages: null,
-    // Last auto-mode classifier request(s) for /share transcript
-    lastClassifierRequests: null,
     cachedClaudeMdContent: null,
     // In-memory error log for recent errors
     inMemoryErrorLog: [],
@@ -361,13 +332,11 @@ function getInitialState(): State {
     // Track invoked skills for preservation across compaction
     invokedSkills: new Map(),
     // Track slow operations for dev bar display
-    slowOperations: [],
     // SDK-provided betas
     sdkBetas: undefined,
     // Main thread agent type
     mainThreadAgentType: undefined,
     // Remote mode
-    isRemoteMode: false,
     // System prompt section cache state
     systemPromptSectionCache: new Map(),
     // Last date emitted to the model
@@ -386,7 +355,6 @@ function getInitialState(): State {
     // Beta header latches (null = not yet triggered)
     afkModeHeaderLatched: null,
     fastModeHeaderLatched: null,
-    cacheEditingHeaderLatched: null,
     thinkingClearLatched: null,
     // Current prompt ID
     promptId: null,
@@ -1047,31 +1015,12 @@ export function setSdkAgentProgressSummariesEnabled(value: boolean): void {
   STATE.sdkAgentProgressSummariesEnabled = value
 }
 
-export function getKairosActive(): boolean {
-  return STATE.kairosActive
-}
-
-export function setKairosActive(value: boolean): void {
-  STATE.kairosActive = value
-}
-
 export function getStrictToolResultPairing(): boolean {
   return STATE.strictToolResultPairing
 }
 
 export function setStrictToolResultPairing(value: boolean): void {
   STATE.strictToolResultPairing = value
-}
-
-// Field name 'userMsgOptIn' avoids excluded-string substrings ('BriefTool',
-// 'SendUserMessage' — case-insensitive). All callers are inside feature()
-// guards so these accessors don't need their own (matches getKairosActive).
-export function getUserMsgOptIn(): boolean {
-  return STATE.userMsgOptIn
-}
-
-export function setUserMsgOptIn(value: boolean): void {
-  STATE.userMsgOptIn = value
 }
 
 export function getSessionSource(): string | undefined {
@@ -1110,39 +1059,6 @@ export function setFlagSettingsInline(
   settings: Record<string, unknown> | null,
 ): void {
   STATE.flagSettingsInline = settings
-}
-
-export function setLastAPIRequest(
-  params: Omit<BetaMessageStreamParams, 'messages'> | null,
-): void {
-  STATE.lastAPIRequest = params
-}
-
-export function getLastAPIRequest(): Omit<
-  BetaMessageStreamParams,
-  'messages'
-> | null {
-  return STATE.lastAPIRequest
-}
-
-export function setLastAPIRequestMessages(
-  messages: BetaMessageStreamParams['messages'] | null,
-): void {
-  STATE.lastAPIRequestMessages = messages
-}
-
-export function getLastAPIRequestMessages():
-  | BetaMessageStreamParams['messages']
-  | null {
-  return STATE.lastAPIRequestMessages
-}
-
-export function setLastClassifierRequests(requests: unknown[] | null): void {
-  STATE.lastClassifierRequests = requests
-}
-
-export function getLastClassifierRequests(): unknown[] | null {
-  return STATE.lastClassifierRequests
 }
 
 export function setCachedClaudeMdContent(content: string | null): void {
@@ -1470,78 +1386,12 @@ export function clearInvokedSkillsForAgent(agentId: string): void {
   }
 }
 
-// Slow operations tracking for dev bar
-const MAX_SLOW_OPERATIONS = 10
-const SLOW_OPERATION_TTL_MS = 10000
-
-export function addSlowOperation(operation: string, durationMs: number): void {
-  if (process.env.USER_TYPE !== 'ant') return
-  // Skip tracking for editor sessions (user editing a prompt file in $EDITOR)
-  // These are intentionally slow since the user is drafting text
-  if (operation.includes('exec') && operation.includes('claude-prompt-')) {
-    return
-  }
-  const now = Date.now()
-  // Remove stale operations
-  STATE.slowOperations = STATE.slowOperations.filter(
-    op => now - op.timestamp < SLOW_OPERATION_TTL_MS,
-  )
-  // Add new operation
-  STATE.slowOperations.push({ operation, durationMs, timestamp: now })
-  // Keep only the most recent operations
-  if (STATE.slowOperations.length > MAX_SLOW_OPERATIONS) {
-    STATE.slowOperations = STATE.slowOperations.slice(-MAX_SLOW_OPERATIONS)
-  }
-}
-
-const EMPTY_SLOW_OPERATIONS: ReadonlyArray<{
-  operation: string
-  durationMs: number
-  timestamp: number
-}> = []
-
-export function getSlowOperations(): ReadonlyArray<{
-  operation: string
-  durationMs: number
-  timestamp: number
-}> {
-  // Most common case: nothing tracked. Return a stable reference so the
-  // caller's setState() can bail via Object.is instead of re-rendering at 2fps.
-  if (STATE.slowOperations.length === 0) {
-    return EMPTY_SLOW_OPERATIONS
-  }
-  const now = Date.now()
-  // Only allocate a new array when something actually expired; otherwise keep
-  // the reference stable across polls while ops are still fresh.
-  if (
-    STATE.slowOperations.some(op => now - op.timestamp >= SLOW_OPERATION_TTL_MS)
-  ) {
-    STATE.slowOperations = STATE.slowOperations.filter(
-      op => now - op.timestamp < SLOW_OPERATION_TTL_MS,
-    )
-    if (STATE.slowOperations.length === 0) {
-      return EMPTY_SLOW_OPERATIONS
-    }
-  }
-  // Safe to return directly: addSlowOperation() reassigns STATE.slowOperations
-  // before pushing, so the array held in React state is never mutated.
-  return STATE.slowOperations
-}
-
 export function getMainThreadAgentType(): string | undefined {
   return STATE.mainThreadAgentType
 }
 
 export function setMainThreadAgentType(agentType: string | undefined): void {
   STATE.mainThreadAgentType = agentType
-}
-
-export function getIsRemoteMode(): boolean {
-  return STATE.isRemoteMode
-}
-
-export function setIsRemoteMode(value: boolean): void {
-  STATE.isRemoteMode = value
 }
 
 // System prompt section accessors
@@ -1629,14 +1479,6 @@ export function setFastModeHeaderLatched(v: boolean): void {
   STATE.fastModeHeaderLatched = v
 }
 
-export function getCacheEditingHeaderLatched(): boolean | null {
-  return STATE.cacheEditingHeaderLatched
-}
-
-export function setCacheEditingHeaderLatched(v: boolean): void {
-  STATE.cacheEditingHeaderLatched = v
-}
-
 export function getThinkingClearLatched(): boolean | null {
   return STATE.thinkingClearLatched
 }
@@ -1652,7 +1494,6 @@ export function setThinkingClearLatched(v: boolean): void {
 export function clearBetaHeaderLatches(): void {
   STATE.afkModeHeaderLatched = null
   STATE.fastModeHeaderLatched = null
-  STATE.cacheEditingHeaderLatched = null
   STATE.thinkingClearLatched = null
 }
 

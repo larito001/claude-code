@@ -1,4 +1,4 @@
-import type { NonNullableUsage } from '../../entrypoints/sdk/sdkUtilityTypes.js'
+import type { NonNullableUsage } from '@anthropic-ai/claude-agent-sdk'
 
 /**
  * Zero-initialized usage object. Extracted from logging.ts so that

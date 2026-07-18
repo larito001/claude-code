@@ -670,24 +670,18 @@ async function installFromGitHub(
       `Invalid GitHub repository format: ${repo}. Expected format: owner/repo`,
     )
   }
-  // Use HTTPS for CCR (no SSH keys), SSH for normal CLI
-  const gitUrl = isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)
-    ? `https://github.com/${repo}.git`
-    : `git@github.com:${repo}.git`
+  const gitUrl = `https://github.com/${repo}.git`
   return installFromGit(gitUrl, targetPath, ref, sha)
 }
 
 /**
  * Resolve a git-subdir `url` field to a clonable git URL.
- * Accepts GitHub owner/repo shorthand (converted to ssh or https depending on
- * CLAUDE_CODE_REMOTE) or any URL that passes validateGitUrl (https, http,
- * file, git@ ssh).
+ * Accepts GitHub owner/repo shorthand (converted to HTTPS) or any URL that
+ * passes validateGitUrl (https, http, file, git@ ssh).
  */
 function resolveGitSubdirUrl(url: string): string {
   if (/^[a-zA-Z0-9-_.]+\/[a-zA-Z0-9-_.]+$/.test(url)) {
-    return isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)
-      ? `https://github.com/${url}.git`
-      : `git@github.com:${url}.git`
+    return `https://github.com/${url}.git`
   }
   return validateGitUrl(url)
 }
@@ -2306,7 +2300,7 @@ async function loadPluginFromMarketplaceEntry(
         )
         pluginPath = versionedPath
       } else {
-        // Seed cache probe (CCR pre-baked images, read-only). Seed content is
+        // Seed cache probe (pre-baked images, read-only). Seed content is
         // frozen at image build time — no freshness concern, 'whatever's there'
         // is what the image builder put there. Primary cache is NOT probed
         // here; ref-tracked sources fall through to clone (the re-clone IS
@@ -3123,7 +3117,7 @@ export const loadAllPlugins = memoize(async (): Promise<PluginLoadResult> => {
  * CLAUDE_CODE_SYNC_PLUGIN_INSTALL=1 delegates to the full loader — that
  * mode explicitly opts into blocking install before first query, and
  * main.tsx's getClaudeCodeMcpConfigs()/getInitialSettings().agent run
- * BEFORE runHeadless() can warm this cache. First-run CCR/headless has
+ * BEFORE runHeadless() can warm this cache. First-run headless mode has
  * no installed_plugins.json, so cache-only would miss plugin MCP servers
  * and plugin settings (the agent key). The interactive startup win is
  * preserved since interactive mode doesn't set SYNC_PLUGIN_INSTALL.

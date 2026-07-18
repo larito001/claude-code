@@ -1,10 +1,8 @@
 /**
- * Perfetto Tracing for Claude Code (Ant-only)
+ * Opt-in Perfetto tracing for local performance diagnostics.
  *
  * This module generates traces in the Chrome Trace Event format that can be
  * viewed in ui.perfetto.dev or Chrome's chrome://tracing.
- *
- * NOTE: This feature is ant-only and eliminated from external builds.
  *
  * The trace file includes:
  * - Agent hierarchy (parent-child relationships in a swarm)
@@ -22,7 +20,7 @@
  * 5. Open in ui.perfetto.dev to visualize
  */
 
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { mkdirSync, writeFileSync } from 'fs'
 import { mkdir, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
@@ -256,7 +254,7 @@ export function initializePerfettoTracing(): void {
     `[Perfetto] initializePerfettoTracing called, env value: ${envValue}`,
   )
 
-  // Wrap in feature() for dead code elimination - entire block removed from external builds
+  // Avoid registering tracing hooks unless the capability is explicitly enabled.
   if (feature('PERFETTO_TRACING')) {
     if (!envValue || isEnvDefinedFalsy(envValue)) {
       logForDebugging(

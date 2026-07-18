@@ -4,7 +4,6 @@ import isEqual from 'lodash-es/isEqual.js'
 import memoize from 'lodash-es/memoize.js'
 import { join } from 'path'
 import { z } from 'zod/v4'
-import { OAUTH_BETA_HEADER } from '../../constants/oauth.js'
 import { getAnthropicClient } from '../../services/api/client.js'
 import { logForDebugging } from '../debug.js'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
@@ -43,7 +42,6 @@ function getCachePath(): string {
 }
 
 function isModelCapabilitiesEligible(): boolean {
-  if (process.env.USER_TYPE !== 'ant') return false
   if (getAPIProvider() !== 'firstParty') return false
   if (!isFirstPartyAnthropicBaseUrl()) return false
   return true
@@ -87,9 +85,8 @@ export async function refreshModelCapabilities(): Promise<void> {
 
   try {
     const anthropic = await getAnthropicClient({ maxRetries: 1 })
-    const betas = false ? [OAUTH_BETA_HEADER] : undefined
     const parsed: ModelCapability[] = []
-    for await (const entry of anthropic.models.list({ betas })) {
+    for await (const entry of anthropic.models.list()) {
       const result = ModelCapabilitySchema().safeParse(entry)
       if (result.success) parsed.push(result.data)
     }

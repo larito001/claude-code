@@ -111,7 +111,7 @@ type Props = {
   isLoading: boolean
   focusedInputDialog: string | undefined
   // Returns true if submission succeeded, false if rejected (e.g., query already running)
-  // Dead code elimination: parameter named onSubmitMessage to avoid "teammate" string in external builds
+  // Returns true when the injected message was accepted by the active query.
   onSubmitMessage: (formatted: string) => boolean
 }
 

@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import type { Permutations } from 'src/types/utils.js'
 import { getSessionId } from '../bootstrap/state.js'
@@ -367,7 +367,7 @@ export function isQueuedCommandEditable(cmd: QueuedCommand): boolean {
  */
 export function isQueuedCommandVisible(cmd: QueuedCommand): boolean {
   if (
-    (feature('KAIROS') || feature('KAIROS_CHANNELS')) &&
+    (feature('MCP_CHANNELS')) &&
     cmd.origin?.kind === 'channel'
   )
     return true
@@ -535,7 +535,7 @@ export function getCommandsByMaxPriority(
  * Returns true if the command is a slash command that should be routed through
  * processSlashCommand rather than sent to the model as text.
  *
- * Commands with `skipSlashCommands` (e.g. bridge/CCR messages) are NOT treated
+ * Commands with `skipSlashCommands` (for example SDK-injected messages) are NOT treated
  * as slash commands — their text is meant for the model.
  */
 export function isSlashCommand(cmd: QueuedCommand): boolean {

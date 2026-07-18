@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { writeFile } from 'fs/promises'
 import { z } from 'zod/v4'
 import {
@@ -125,7 +125,7 @@ export const outputSchema = lazySchema(() =>
       .boolean()
       .optional()
       .describe(
-        'True when the user edited the plan (CCR web UI or Ctrl+G); determines whether the plan is echoed back in tool_result',
+        'True when the user edited the plan with Ctrl+G; determines whether the plan is echoed back in tool_result',
       ),
     awaitingLeaderApproval: z
       .boolean()
@@ -168,7 +168,7 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
     // watching the TUI. The plan-approval dialog would hang. Paired with the
     // same gate on EnterPlanMode so plan mode isn't a trap.
     if (
-      (feature('KAIROS') || feature('KAIROS_CHANNELS')) &&
+      (feature('MCP_CHANNELS')) &&
       getAllowedChannels().length > 0
     ) {
       return false
@@ -248,7 +248,7 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
       'plan' in input && typeof input.plan === 'string' ? input.plan : undefined
     const plan = inputPlan ?? getPlan(context.agentId)
 
-    // Sync disk so VerifyPlanExecution and Read see the edit.
+    // Sync disk so Read, hooks, and downstream verification agents see the edit.
     if (inputPlan !== undefined && filePath) {
       await writeFile(filePath, inputPlan, 'utf-8').catch(e => logError(e))
     }

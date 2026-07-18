@@ -10,10 +10,9 @@
  * The model sees where the message came from and decides which tool to reply
  * with (the channel's MCP tool, SendUserMessage, or both).
  *
- * feature('KAIROS') || feature('KAIROS_CHANNELS'). Runtime gate tengu_harbor.
- * Requires claude.ai OAuth auth — API key users are blocked until
- * console gets a channelsEnabled admin surface. Teams/Enterprise orgs
- * must explicitly opt in via channelsEnabled: true in managed settings.
+ * feature('MCP_CHANNELS'). Runtime gate tengu_harbor.
+ * Access is controlled locally through an explicit session channel list and
+ * the trusted plugin allowlist; it does not depend on a provider account.
  */
 
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js'
@@ -131,7 +130,6 @@ export type ChannelGateResult =
       kind:
         | 'capability'
         | 'disabled'
-        | 'auth'
         | 'policy'
         | 'session'
         | 'marketplace'
@@ -161,11 +159,9 @@ export function findChannelEntry(
 
 /**
  * Gate an MCP server's channel-notification path. Caller checks
- * feature('KAIROS') || feature('KAIROS_CHANNELS') first (build-time
+ * feature('MCP_CHANNELS') first (build-time
  * elimination). Gate order: capability → runtime gate (tengu_harbor) →
- * auth (OAuth only) → org policy → session --channels → allowlist.
- * API key users are blocked at the auth layer — channels requires
- * claude.ai auth; console orgs have no admin opt-in surface yet.
+ * session --channels → allowlist.
  *
  *   skip      Not a channel server, or managed org hasn't opted in, or
  *             not in session --channels. Connection stays up; handler
@@ -193,7 +189,7 @@ export function gateChannelServer(
   }
 
   // Overall runtime gate. After capability so normal MCP servers never hit
-  // this path. Before auth/policy so the killswitch works regardless of
+  // this path. Before session policy so the killswitch works regardless of
   // session state.
   if (!isChannelsEnabled()) {
     return {
@@ -203,22 +199,6 @@ export function gateChannelServer(
     }
   }
 
-  // OAuth-only. API key users (console) are blocked — there's no
-  // channelsEnabled admin surface in console yet, so the policy opt-in
-  // flow doesn't exist for them. Drop this when console parity lands.
-  if (!null?.accessToken) {
-    return {
-      action: 'skip',
-      kind: 'auth',
-      reason: 'channels are unavailable in this API-key-only build',
-    }
-  }
-
-  // Teams/Enterprise opt-in. Managed orgs must explicitly enable channels.
-  // Default OFF — absent or false blocks. Keyed off subscription tier, not
-  // "policy settings exist" — a team org with zero configured policy keys
-  // (remote endpoint returns 404) is still a managed org and must not fall
-  // through to the unmanaged path.
   // User-level session opt-in. A server must be explicitly listed in
   // --channels to push inbound this session — protects against a trusted
   // server surprise-adding the capability.

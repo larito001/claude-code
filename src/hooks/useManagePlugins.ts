@@ -207,18 +207,6 @@ export function useManagePlugins({
         hook_count,
         mcp_count,
         lsp_count,
-        // Ant-only: which plugins are enabled, to correlate with RSS/FPS.
-        // Kept separate from base metrics so it doesn't flow into
-        // logForDiagnosticsNoPII.
-        ant_enabled_names:
-          process.env.USER_TYPE === 'ant' && enabled.length > 0
-            ? (enabled
-                .map(p => p.name)
-                .sort()
-                .join(
-                  ',',
-                ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-            : undefined,
       }
     } catch (error) {
       // Only plugin loading errors should reach here - log for monitoring

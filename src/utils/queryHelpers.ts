@@ -158,15 +158,7 @@ export function* normalizeMessage(message: Message): Generator<SDKMessage> {
         message.data.type === 'bash_progress' ||
         message.data.type === 'powershell_progress'
       ) {
-        // Filter bash progress to send only one per minute
-        // Only emit for Claude Code Remote for now
-        if (
-          !isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) &&
-          !process.env.CLAUDE_CODE_CONTAINER_ID
-        ) {
-          break
-        }
-
+        // Filter shell progress to send only one update per minute.
         // Use parentToolUseID as the key since toolUseID changes for each progress message
         const trackingKey = message.parentToolUseID
         const now = Date.now()

@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
@@ -117,16 +117,6 @@ const getCoordinatorUserContext: (
   : () => ({})
 /* eslint-enable @typescript-eslint/no-require-imports */
 
-// 死代码消除：为片段压缩功能按条件导入
-/* eslint-disable @typescript-eslint/no-require-imports */
-const snipModule = feature('HISTORY_SNIP')
-  ? (require('./services/compact/snipCompact.js') as typeof import('./services/compact/snipCompact.js'))
-  : null
-const snipProjection = feature('HISTORY_SNIP')
-  ? (require('./services/compact/snipProjection.js') as typeof import('./services/compact/snipProjection.js'))
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
-
 export type QueryEngineConfig = {
   cwd: string
   tools: Tools
@@ -155,21 +145,6 @@ export type QueryEngineConfig = {
   setSDKStatus?: (status: SDKStatus) => void
   abortController?: AbortController
   orphanedPermission?: OrphanedPermission
-  /**
-   * 片段边界处理程序：接收每个生成的系统消息以及
-   * 当前的可变消息存储。如果消息不是则返回未定义
-   * 剪切边界；否则返回重播的截图结果。注入者
-   * 当启用 HISTORY_SNIP 时询问（），以便功能门控字符串保留在内部
-   * 门控模块（使 QueryEngine 不包含排除的字符串并且可测试
-   * 尽管 feature() 在 Bun 测试下返回 false）。仅 SDK：REPL
-   * 通过以下方式保留 UI 回滚和按需项目的完整历史记录
-   * 项目SnippedView； QueryEngine 在此处截断以将内存限制为 long
-   * 无头会话（无需保留 UI）。
-   */
-  snipReplay?: (
-    yieldedSystemMsg: Message,
-    store: Message[],
-  ) => { messages: Message[]; executed: boolean } | undefined
 }
 
 /**
@@ -188,12 +163,6 @@ export class QueryEngine {
   private totalUsage: NonNullableUsage
   private hasHandledOrphanedPermission = false
   private readFileState: FileStateCache
-  // 回合范围技能发现跟踪（提供 was_discovered 于
-  // 天狗_技能_工具_调用）。必须坚持跨越两者
-  // processUserInputContext 在submitMessage 内重建，但被清除
-  // 在每个提交消息的开头，以避免无限制的增长
-  // SDK模式下很多回合。
-  private discoveredSkillNames = new Set<string>()
   private loadedNestedMemoryPaths = new Set<string>()
 
   constructor(config: QueryEngineConfig) {
@@ -234,7 +203,6 @@ export class QueryEngine {
       orphanedPermission,
     } = this.config
 
-    this.discoveredSkillNames.clear()
     setCwd(cwd)
     const persistSession = !isSessionPersistenceDisabled()
     const startTime = Date.now()
@@ -369,7 +337,6 @@ export class QueryEngine {
       nestedMemoryAttachmentTriggers: new Set<string>(),
       loadedNestedMemoryPaths: this.loadedNestedMemoryPaths,
       dynamicSkillDirTriggers: new Set<string>(),
-      discoveredSkillNames: this.discoveredSkillNames,
       setInProgressToolUseIDs: () => {},
       setResponseLength: () => {},
       updateFileHistoryState: (
@@ -516,7 +483,6 @@ export class QueryEngine {
       nestedMemoryAttachmentTriggers: new Set<string>(),
       loadedNestedMemoryPaths: this.loadedNestedMemoryPaths,
       dynamicSkillDirTriggers: new Set<string>(),
-      discoveredSkillNames: this.discoveredSkillNames,
       setInProgressToolUseIDs: () => {},
       setResponseLength: () => {},
       updateFileHistoryState: processUserInputContext.updateFileHistoryState,
@@ -525,8 +491,8 @@ export class QueryEngine {
     }
 
     headlessProfilerCheckpoint('before_skills_plugins')
-    // 仅缓存：headless/SDK/CCR 启动不得在网络上阻塞
-    // 参考跟踪插件。 CCR 通过 CLAUDE_CODE_SYNC_PLUGIN_INSTALL 填充缓存
+    // 仅缓存：headless/SDK 启动不得在网络上阻塞。
+    // CLAUDE_CODE_SYNC_PLUGIN_INSTALL 可在此之前填充缓存，
     // (headlessPluginInstall) 或 CLAUDE_CODE_PLUGIN_SEED_DIR 在此运行之前；
     // 需要新源的 SDK 调用者可以调用 /reload-plugins。
     const [skills, { enabled: enabledPlugins }] = await Promise.all([
@@ -893,24 +859,6 @@ export class QueryEngine {
           // 不产出流式请求开始消息
           break
         case 'system': {
-          // Snip boundary: replay on our store to remove zombie messages and
-          // stale markers. The yielded boundary is a signal, not data to push —
-          // the replay produces its own equivalent boundary. Without this,
-          // markers persist and re-trigger on every turn, and mutableMessages
-          // never shrinks (memory leak in long SDK sessions). The subtype
-          // check lives inside the injected callback so feature-gated strings
-          // stay out of this file (excluded-strings check).
-          const snipResult = this.config.snipReplay?.(
-            message,
-            this.mutableMessages,
-          )
-          if (snipResult !== undefined) {
-            if (snipResult.executed) {
-              this.mutableMessages.length = 0
-              this.mutableMessages.push(...snipResult.messages)
-            }
-            break
-          }
           this.mutableMessages.push(message)
           // Yield compact boundary messages to SDK
           if (
@@ -1270,15 +1218,6 @@ export async function* ask({
     setSDKStatus,
     abortController,
     orphanedPermission,
-    ...(feature('HISTORY_SNIP')
-      ? {
-          snipReplay: (yielded: Message, store: Message[]) => {
-            if (!snipProjection!.isSnipBoundaryMessage(yielded))
-              return undefined
-            return snipModule!.snipCompactIfNeeded(store, { force: true })
-          },
-        }
-      : {}),
   })
 
   try {

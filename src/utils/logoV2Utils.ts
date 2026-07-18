@@ -1,7 +1,6 @@
 import { getSessionId } from '../bootstrap/state.js'
 import { stringWidth } from '../ink/stringWidth.js'
 import type { LogOption } from '../types/logs.js'
-import { getSubscriptionName } from './auth.js'
 import { getCwd } from './cwd.js'
 import { getDisplayPath } from './file.js'
 import {
@@ -249,9 +248,7 @@ export function getLogoDisplayData(): {
   const cwd = process.env.DEMO_VERSION
     ? '/code/claude'
     : getDisplayPath(getCwd())
-  const billingType = false
-    ? getSubscriptionName()
-    : 'API Usage Billing'
+  const billingType = 'API Key Billing'
   const agentName = getInitialSettings().agent
 
   return {
@@ -302,20 +299,9 @@ export function formatModelAndBilling(
 
 /**
  * Gets recent release notes for Logo v2 display
- * For ants, uses commits bundled at build time
- * For external users, uses public changelog
+ * Uses the public changelog cache.
  */
 export function getRecentReleaseNotesSync(maxItems: number): string[] {
-  // For ants, use bundled changelog
-  if (process.env.USER_TYPE === 'ant') {
-    const changelog = MACRO.VERSION_CHANGELOG
-    if (changelog) {
-      const commits = changelog.trim().split('\n').filter(Boolean)
-      return commits.slice(0, maxItems)
-    }
-    return []
-  }
-
   const changelog = getStoredChangelogFromMemory()
   if (!changelog) {
     return []

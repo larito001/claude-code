@@ -1,7 +1,4 @@
-import type {
-  McpbManifest,
-  McpbUserConfigurationOption,
-} from '@anthropic-ai/mcpb'
+import type { McpbManifest } from '@anthropic-ai/mcpb'
 import axios from 'axios'
 import { createHash } from 'crypto'
 import { chmod, writeFile } from 'fs/promises'
@@ -32,7 +29,7 @@ export type UserConfigValues = Record<
 /**
  * User configuration schema from DXT manifest
  */
-export type UserConfigSchema = Record<string, McpbUserConfigurationOption>
+export type UserConfigSchema = NonNullable<McpbManifest['user_config']>
 
 /**
  * Result of loading an MCPB file (success case)

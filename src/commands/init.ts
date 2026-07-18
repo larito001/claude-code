@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { Command } from '../commands.js'
 import { maybeMarkProjectOnboardingComplete } from '../projectOnboardingState.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
@@ -22,7 +22,7 @@ Usage notes:
 \`\`\`
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
 \`\`\``
 
 const NEW_INIT_PROMPT = `Set up a minimal CLAUDE.md (and optionally skills and hooks) for this repo. CLAUDE.md is loaded into every Claude Code session, so it must be concise — only include what Claude would get wrong without it.
@@ -125,7 +125,7 @@ Prefix the file with:
 \`\`\`
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
 \`\`\`
 
 If CLAUDE.md already exists: read it, propose specific changes as diffs, and explain why each change improves it. Do not silently overwrite.
@@ -227,9 +227,7 @@ const command = {
   type: 'prompt',
   name: 'init',
   get description() {
-    return feature('NEW_INIT') &&
-      (process.env.USER_TYPE === 'ant' ||
-        isEnvTruthy(process.env.CLAUDE_CODE_NEW_INIT))
+    return feature('NEW_INIT') && isEnvTruthy(process.env.CLAUDE_CODE_NEW_INIT)
       ? 'Initialize new CLAUDE.md file(s) and optional skills/hooks with codebase documentation'
       : 'Initialize a new CLAUDE.md file with codebase documentation'
   },
@@ -243,9 +241,7 @@ const command = {
       {
         type: 'text',
         text:
-          feature('NEW_INIT') &&
-          (process.env.USER_TYPE === 'ant' ||
-            isEnvTruthy(process.env.CLAUDE_CODE_NEW_INIT))
+          feature('NEW_INIT') && isEnvTruthy(process.env.CLAUDE_CODE_NEW_INIT)
             ? NEW_INIT_PROMPT
             : OLD_INIT_PROMPT,
       },

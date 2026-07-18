@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { UUID } from 'crypto'
 import { randomUUID } from 'crypto'
 import uniqBy from 'lodash-es/uniqBy.js'
@@ -14,7 +14,6 @@ import { getSystemContext, getUserContext } from '../../context.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import { query } from '../../query.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import { getDumpPromptsPath } from '../../services/api/dumpPrompts.js'
 import { cleanupAgentTracking } from '../../services/api/promptCacheBreakDetection.js'
 import {
   connectToServer,
@@ -42,7 +41,6 @@ import type {
 } from '../../types/message.js'
 import { createAttachmentMessage } from '../../utils/attachments.js'
 import { AbortError } from '../../utils/errors.js'
-import { getDisplayPath } from '../../utils/file.js'
 import {
   cloneFileStateCache,
   createFileStateCacheWithSizeLimit,
@@ -358,13 +356,6 @@ export async function* runAgent({
     registerPerfettoAgent(agentId, agentDefinition.agentType, parentId)
   }
 
-  // Log API calls path for subagents (ant-only)
-  if (process.env.USER_TYPE === 'ant') {
-    logForDebugging(
-      `[Subagent ${agentDefinition.agentType}] API calls: ${getDisplayPath(getDumpPromptsPath(agentId))}`,
-    )
-  }
-
   // Handle message forking for context sharing
   // Filter out incomplete tool calls from parent messages to avoid API errors
   const contextMessages: Message[] = forkContextMessages
@@ -513,7 +504,6 @@ export async function* runAgent({
           toolUseContext,
           resolvedAgentModel,
           additionalWorkingDirectories,
-          resolvedTools,
         ),
       )
 
@@ -845,17 +835,6 @@ export async function* runAgent({
     // `run_in_background` shell loop (e.g. test fixture fake-logs.sh) outlives
     // the agent as a PPID=1 zombie once the main session eventually exits.
     killShellTasksForAgent(agentId, toolUseContext.getAppState, rootSetAppState)
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    if (feature('MONITOR_TOOL')) {
-      const mcpMod =
-        require('../../tasks/MonitorMcpTask/MonitorMcpTask.js') as typeof import('../../tasks/MonitorMcpTask/MonitorMcpTask.js')
-      mcpMod.killMonitorMcpTasksForAgent(
-        agentId,
-        toolUseContext.getAppState,
-        rootSetAppState,
-      )
-    }
-    /* eslint-enable @typescript-eslint/no-require-imports */
   }
 }
 
@@ -908,9 +887,7 @@ async function getAgentSystemPrompt(
   toolUseContext: Pick<ToolUseContext, 'options'>,
   resolvedAgentModel: string,
   additionalWorkingDirectories: string[],
-  resolvedTools: readonly Tool[],
 ): Promise<string[]> {
-  const enabledToolNames = new Set(resolvedTools.map(t => t.name))
   try {
     const agentPrompt = agentDefinition.getSystemPrompt({ toolUseContext })
     const prompts = [agentPrompt]
@@ -919,14 +896,12 @@ async function getAgentSystemPrompt(
       prompts,
       resolvedAgentModel,
       additionalWorkingDirectories,
-      enabledToolNames,
     )
   } catch (_error) {
     return enhanceSystemPromptWithEnvDetails(
       [DEFAULT_AGENT_PROMPT],
       resolvedAgentModel,
       additionalWorkingDirectories,
-      enabledToolNames,
     )
   }
 }

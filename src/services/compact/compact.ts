@@ -1,9 +1,9 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type { UUID } from 'crypto'
 import uniqBy from 'lodash-es/uniqBy.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-const sessionTranscriptModule = feature('KAIROS')
+const sessionTranscriptModule = feature('SESSION_TRANSCRIPT')
   ? (require('../sessionTranscript/sessionTranscript.js') as typeof import('../sessionTranscript/sessionTranscript.js'))
   : null
 
@@ -68,10 +68,6 @@ import {
 } from '../../utils/messages.js'
 import { expandPath } from '../../utils/path.js'
 import { getPlan, getPlanFilePath } from '../../utils/plans.js'
-import {
-  isSessionActivityTrackingActive,
-  sendSessionActivitySignal,
-} from '../../utils/sessionActivity.js'
 import { processSessionStartHooks } from '../../utils/sessionStart.js'
 import {
   getTranscriptPath,
@@ -107,7 +103,6 @@ import {
 } from '../api/errors.js'
 import { notifyCompaction } from '../api/promptCacheBreakDetection.js'
 import { getRetryDelay } from '../api/withRetry.js'
-import { logPermissionContextForAnts } from '../internalLogging.js'
 import {
   roughTokenCountEstimation,
   roughTokenCountEstimationForMessages,
@@ -197,29 +192,6 @@ export function stripImagesFromMessages(messages: Message[]): Message[] {
       },
     } as typeof message
   })
-}
-
-/**
- * Strip attachment types that are re-injected post-compaction anyway.
- * skill_discovery/skill_listing are re-surfaced by resetSentSkillNames()
- * + the next turn's discovery signal, so feeding them to the summarizer
- * wastes tokens and pollutes the summary with stale skill suggestions.
- *
- * No-op when EXPERIMENTAL_SKILL_SEARCH is off (the attachment types
- * don't exist on external builds).
- */
-export function stripReinjectedAttachments(messages: Message[]): Message[] {
-  if (feature('EXPERIMENTAL_SKILL_SEARCH')) {
-    return messages.filter(
-      m =>
-        !(
-          m.type === 'attachment' &&
-          (m.attachment.type === 'skill_discovery' ||
-            m.attachment.type === 'skill_listing')
-        ),
-    )
-  }
-  return messages
 }
 
 export const ERROR_MESSAGE_NOT_ENOUGH_MESSAGES =
@@ -401,7 +373,6 @@ export async function compactConversation(
     const preCompactTokenCount = tokenCountWithEstimation(messages)
 
     const appState = context.getAppState()
-    void logPermissionContextForAnts(appState.toolPermissionContext, 'summary')
 
     context.onCompactProgress?.({
       type: 'hooks_start',
@@ -521,12 +492,10 @@ export async function compactConversation(
     context.readFileState.clear()
     context.loadedNestedMemoryPaths?.clear()
 
-    // Intentionally NOT resetting sentSkillNames: re-injecting the full
+    // Intentionally do not reset sentSkillNames: re-injecting the full
     // skill_listing (~4K tokens) post-compact is pure cache_creation with
     // marginal benefit. The model still has SkillTool in its schema and
-    // invoked_skills attachment (below) preserves used-skill content. Ants
-    // with EXPERIMENTAL_SKILL_SEARCH already skip re-injection via the
-    // early-return in getSkillListingAttachments.
+    // invoked_skills attachment (below) preserves used-skill content.
 
     // Run async attachment generation in parallel
     const [fileAttachments, asyncAgentAttachments] = await Promise.all([
@@ -683,7 +652,7 @@ export async function compactConversation(
       // session) purely for this telemetry breakdown. Computed here, past
       // the compaction-API await, so the sync walk doesn't starve the
       // render loop before compaction even starts. Same deferral pattern
-      // as reactiveCompact.ts.
+      // as the main compaction path.
       ...(() => {
         try {
           return tokenStatsToStatsigMetrics(analyzeContext(messages))
@@ -710,9 +679,9 @@ export async function compactConversation(
     // instead of the user-set session name.
     reAppendSessionMetadata()
 
-    // Write a reduced transcript segment for the pre-compaction messages
-    // (assistant mode only). Fire-and-forget — errors are logged internally.
-    if (feature('KAIROS')) {
+    // Optionally preserve pre-compaction text in the local memory log.
+    // Fire-and-forget — errors are logged internally.
+    if (feature('SESSION_TRANSCRIPT')) {
       void sessionTranscriptModule?.writeSessionTranscriptSegment(messages)
     }
 
@@ -1056,7 +1025,7 @@ export async function partialCompactConversation(
     // the 16KB tail window that readLiteMetadata reads for --resume display.
     reAppendSessionMetadata()
 
-    if (feature('KAIROS')) {
+    if (feature('SESSION_TRANSCRIPT')) {
       void sessionTranscriptModule?.writeSessionTranscriptSegment(
         messagesToSummarize,
       )
@@ -1156,18 +1125,11 @@ async function streamCompactSummary({
     'tengu_compact_cache_prefix',
     true,
   )
-  // Send keep-alive signals during compaction to prevent remote session
-  // WebSocket idle timeouts from dropping bridge connections. Compaction
-  // API calls can take 5-10+ seconds, during which no other messages
-  // flow through the transport — without keep-alives, the server may
-  // close the WebSocket for inactivity.
-  // Two signals: (1) PUT /worker heartbeat via sessionActivity, and
-  // (2) re-emit 'compacting' status so the SDK event stream stays active
-  // and the server doesn't consider the session stale.
-  const activityInterval = isSessionActivityTrackingActive()
+  // Re-emit compacting status while a long compaction runs so SDK consumers
+  // can distinguish active work from a stalled stream.
+  const activityInterval = context.setSDKStatus
     ? setInterval(
         (statusSetter?: (status: 'compacting' | null) => void) => {
-          sendSessionActivitySignal()
           statusSetter?.('compacting')
         },
         30_000,
@@ -1292,10 +1254,7 @@ async function streamCompactSummary({
       const streamingGen = queryModelWithStreaming({
         messages: normalizeMessagesForAPI(
           stripImagesFromMessages(
-            stripReinjectedAttachments([
-              ...getMessagesAfterCompactBoundary(messages),
-              summaryRequest,
-            ]),
+            [...getMessagesAfterCompactBoundary(messages), summaryRequest],
           ),
           context.options.tools,
         ),

@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true
+  },
+  "include": [
+    "src/global.d.ts",
+    "src/entrypoints/agentSdkTypes.ts",
+    "src/entrypoints/sdk/coreTypes.ts",
+    "src/utils/features.ts",
+    "src/proactive/index.ts",
+    "src/proactive/useProactive.ts",
+    "src/types/message.ts",
+    "src/types/messageQueueTypes.ts",
+    "src/types/notebook.ts",
+    "src/types/tools.ts",
+    "src/types/utils.ts"
+  ]
+}

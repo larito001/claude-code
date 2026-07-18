@@ -23,32 +23,26 @@ import { startMdmRawRead } from './utils/settings/mdm/rawRead.js';
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startMdmRawRead();
-import { feature } from 'bun:bundle';
+import { feature } from 'src/utils/features.js';
 import { Command as CommanderCommand, InvalidArgumentError, Option } from '@commander-js/extra-typings';
 import chalk from 'chalk';
 import { readFileSync } from 'fs';
 import mapValues from 'lodash-es/mapValues.js';
-import pickBy from 'lodash-es/pickBy.js';
 import uniqBy from 'lodash-es/uniqBy.js';
 import React from 'react';
-import { getOauthConfig } from './constants/oauth.js';
 import { getSystemContext, getUserContext } from './context.js';
 import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from './ink.js';
 import { launchRepl } from './replLauncher.js';
-import { hasGrowthBookEnvOverride, initializeGrowthBook, refreshGrowthBookAfterAuthChange } from './services/analytics/growthbook.js';
-import { fetchBootstrapData } from './services/api/bootstrap.js';
 import { prefetchOfficialMcpUrls } from './services/mcp/officialRegistry.js';
 import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from './services/mcp/types.js';
-import { isPolicyAllowed, loadPolicyLimits, refreshPolicyLimits, waitForPolicyLimitsToLoad } from './services/policyLimits/index.js';
-import { loadRemoteManagedSettings, refreshRemoteManagedSettings } from './services/remoteManagedSettings/index.js';
 import type { ToolInputJSONSchema } from './Tool.js';
 import { createSyntheticOutputTool, isSyntheticOutputToolEnabled } from './tools/SyntheticOutputTool/SyntheticOutputTool.js';
 import { getTools } from './tools.js';
 import { canUserConfigureAdvisor, getInitialAdvisorSetting, isAdvisorEnabled, isValidAdvisorModel, modelSupportsAdvisor } from './utils/advisor.js';
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js';
-import { count, uniq } from './utils/array.js';
+import { count } from './utils/array.js';
 import { installAsciicastRecorder } from './utils/asciicast.js';
 import { prefetchAwsCredentialsAndBedRockInfoIfSafe, prefetchGcpCredentialsIfSafe } from './utils/auth.js';
 import { checkHasTrustDialogAccepted, getGlobalConfig, isAutoUpdaterDisabled, saveGlobalConfig } from './utils/config.js';
@@ -76,20 +70,17 @@ const getTeammateModeSnapshot = () => require('./utils/swarm/backends/teammateMo
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModeModule = feature('COORDINATOR_MODE') ? require('./coordinator/coordinatorMode.js') as typeof import('./coordinator/coordinatorMode.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
-import { relative, resolve } from 'path';
+import { resolve } from 'path';
 import { isAnalyticsDisabled } from 'src/services/analytics/config.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
-import { initializeAnalyticsGates } from 'src/services/analytics/sink.js';
 import { getOriginalCwd, setAdditionalDirectoriesForClaudeMd, setMainLoopModelOverride, setMainThreadAgentType } from './bootstrap/state.js';
 import { getCommands } from './commands.js';
 import type { StatsStore } from './context/stats.js';
 import { launchInvalidSettingsDialog, launchResumeChooser } from './dialogLaunchers.js';
 import { SHOW_CURSOR } from './ink/termio/dec.js';
 import { exitWithError, exitWithMessage, getRenderContext, renderAndRun, showSetupScreens } from './interactiveHelpers.js';
-import { initBuiltinPlugins } from './plugins/bundled/index.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
-import { checkQuotaStatus } from './services/claudeAiLimits.js';
 import { getMcpToolsCommandsAndResources, prefetchAllMcpResources } from './services/mcp/client.js';
 import { VALID_INSTALLABLE_SCOPES, VALID_UPDATE_SCOPES } from './services/plugins/pluginCliCommands.js';
 import { initBundledSkills } from './skills/bundled/index.js';
@@ -100,12 +91,11 @@ import type { Message as MessageType } from './types/message.js';
 import { assertMinVersion } from './utils/autoUpdater.js';
 import { getContextWindowForModel } from './utils/context.js';
 import { loadConversationForResume } from './utils/conversationRecovery.js';
-import { buildDeepLinkBanner } from './utils/deepLink/banner.js';
-import { hasNodeOption, isBareMode, isEnvTruthy, isInProtectedNamespace } from './utils/envUtils.js';
+import { hasNodeOption, isBareMode, isEnvTruthy } from './utils/envUtils.js';
 import { refreshExampleCommands } from './utils/exampleCommands.js';
 import type { FpsMetrics } from './utils/fpsTracker.js';
 import { getWorktreePaths } from './utils/getWorktreePaths.js';
-import { findGitRoot, getBranch, getIsGit, getWorktreeCount } from './utils/git.js';
+import { getBranch, getIsGit, getWorktreeCount } from './utils/git.js';
 import { getGhAuthStatus } from './utils/github/ghAuthStatus.js';
 import { safeParseJSON } from './utils/json.js';
 import { logError } from './utils/log.js';
@@ -113,7 +103,7 @@ import { getModelDeprecationWarning } from './utils/model/deprecation.js';
 import { getDefaultMainLoopModel, getUserSpecifiedModelSetting, normalizeModelStringForAPI, parseUserSpecifiedModel } from './utils/model/model.js';
 import { ensureModelStringsInitialized } from './utils/model/modelStrings.js';
 import { PERMISSION_MODES } from './utils/permissions/PermissionMode.js';
-import { checkAndDisableBypassPermissions, getAutoModeEnabledStateIfCached, initializeToolPermissionContext, initialPermissionModeFromCLI, isDefaultPermissionModeAuto, parseToolListFromCLI, removeDangerousPermissions, stripDangerousPermissionsForAutoMode, verifyAutoModeGateAccess } from './utils/permissions/permissionSetup.js';
+import { checkAndDisableBypassPermissions, getAutoModeEnabledStateIfCached, initializeToolPermissionContext, initialPermissionModeFromCLI, isDefaultPermissionModeAuto, parseToolListFromCLI, stripDangerousPermissionsForAutoMode, verifyAutoModeGateAccess } from './utils/permissions/permissionSetup.js';
 import { cleanupOrphanedPluginVersionsInBackground } from './utils/plugins/cacheUtils.js';
 import { initializeVersionedPlugins } from './utils/plugins/installedPluginsManager.js';
 import { getManagedPluginNames } from './utils/plugins/managedPlugins.js';
@@ -126,7 +116,7 @@ import { ensureMdmSettingsLoaded } from './utils/settings/mdm/settings.js';
 import { getInitialSettings, getManagedSettingsKeysForLogging, getSettingsForSource, getSettingsWithErrors } from './utils/settings/settings.js';
 import { resetSettingsCache } from './utils/settings/settingsCache.js';
 import type { ValidationError } from './utils/settings/validation.js';
-import { DEFAULT_TASKS_MODE_TASK_LIST_ID, TASK_STATUSES } from './utils/tasks.js';
+import { DEFAULT_TASKS_MODE_TASK_LIST_ID } from './utils/tasks.js';
 import { logPluginLoadErrors, logPluginsEnabledForSession } from './utils/telemetry/pluginTelemetry.js';
 import { logSkillsLoaded } from './utils/telemetry/skillLoadedEvent.js';
 import { generateTempFilePath } from './utils/tempfile.js';
@@ -135,11 +125,7 @@ import { validateUuid } from './utils/uuid.js';
 
 import { registerMcpAddCommand } from 'src/commands/mcp/addCommand.js';
 import { registerMcpXaaIdpCommand } from 'src/commands/mcp/xaaIdpCommand.js';
-import { logPermissionContextForAnts } from 'src/services/internalLogging.js';
-import { fetchClaudeAIMcpConfigsIfEligible } from 'src/services/mcp/claudeai.js';
-import { clearServerCache } from 'src/services/mcp/client.js';
-import { areMcpConfigsAllowedWithEnterpriseMcpConfig, dedupClaudeAiMcpServers, doesEnterpriseMcpConfigExist, filterMcpServersByPolicy, getClaudeCodeMcpConfigs, getMcpServerSignature, parseMcpConfig, parseMcpConfigFromFilePath } from 'src/services/mcp/config.js';
-import { excludeCommandsByServer, excludeResourcesByServer } from 'src/services/mcp/utils.js';
+import { areMcpConfigsAllowedWithEnterpriseMcpConfig, doesEnterpriseMcpConfigExist, filterMcpServersByPolicy, getClaudeCodeMcpConfigs, parseMcpConfig, parseMcpConfigFromFilePath } from 'src/services/mcp/config.js';
 import { isXaaEnabled } from 'src/services/mcp/xaaIdpLogin.js';
 import { getRelevantTips } from 'src/services/tips/tipRegistry.js';
 import { logContextMetrics } from 'src/utils/api.js';
@@ -159,7 +145,7 @@ import { setCwd } from 'src/utils/Shell.js';
 import { type ProcessedResume, processResumedConversation } from 'src/utils/sessionRestore.js';
 import { parseSettingSourcesFlag } from 'src/utils/settings/constants.js';
 import { plural } from 'src/utils/stringUtils.js';
-import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, getUserMsgOptIn, setAllowedChannels, setAllowedSettingSources, setClientType, setCwdState, setFlagSettingsPath, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionPersistenceDisabled, setSessionSource, setUserMsgOptIn, switchSession } from './bootstrap/state.js';
+import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, setAllowedChannels, setAllowedSettingSources, setClientType, setCwdState, setFlagSettingsPath, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionPersistenceDisabled, setSessionSource, switchSession } from './bootstrap/state.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') as typeof import('./utils/permissions/autoModeState.js') : null;
@@ -167,13 +153,10 @@ const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/
 import { migrateAutoUpdatesToSettings } from './migrations/migrateAutoUpdatesToSettings.js';
 import { migrateBypassPermissionsAcceptedToSettings } from './migrations/migrateBypassPermissionsAcceptedToSettings.js';
 import { migrateEnableAllProjectMcpServersToSettings } from './migrations/migrateEnableAllProjectMcpServersToSettings.js';
-import { migrateFennecToOpus } from './migrations/migrateFennecToOpus.js';
 import { migrateLegacyOpusToCurrent } from './migrations/migrateLegacyOpusToCurrent.js';
 import { migrateOpusToOpus1m } from './migrations/migrateOpusToOpus1m.js';
 import { migrateSonnet1mToSonnet45 } from './migrations/migrateSonnet1mToSonnet45.js';
-import { migrateSonnet45ToSonnet46 } from './migrations/migrateSonnet45ToSonnet46.js';
 import { resetAutoModeOptInForDefaultOffer } from './migrations/resetAutoModeOptInForDefaultOffer.js';
-import { resetProToOpusDefault } from './migrations/resetProToOpusDefault.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { initializeLspServerManager } from './services/lsp/manager.js';
 import { shouldEnablePromptSuggestion } from './services/PromptSuggestion/promptSuggestion.js';
@@ -182,14 +165,13 @@ import { onChangeAppState } from './state/onChangeAppState.js';
 import { createStore } from './state/store.js';
 import { asSessionId } from './types/ids.js';
 import { filterAllowedSdkBetas } from './utils/betas.js';
-import { isInBundledMode, isRunningWithBun } from './utils/bundledMode.js';
+import { isInBundledMode } from './utils/bundledMode.js';
 import { logForDiagnosticsNoPII } from './utils/diagLogs.js';
 import { filterExistingPaths, getKnownPathsForRepo } from './utils/githubRepoPathMapping.js';
 import { clearPluginCache, loadAllPluginsCacheOnly } from './utils/plugins/pluginLoader.js';
 import { migrateChangelogFromConfig } from './utils/releaseNotes.js';
 import { SandboxManager } from './utils/sandbox/sandbox-adapter.js';
 import { shouldEnableThinkingByDefault, type ThinkingConfig } from './utils/thinking.js';
-import { initUser, resetUserCache } from './utils/user.js';
 import { getTmuxInstallInstructions, isTmuxAvailable, parsePRReference } from './utils/worktree.js';
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
@@ -216,47 +198,6 @@ function logManagedSettings(): void {
 }
 
 // 检查是否在调试/检查模式下运行
-function isBeingDebugged() {
-  const isBun = isRunningWithBun();
-
-  // 检查进程参数中的检查标志（包括所有变体）
-  const hasInspectArg = process.execArgv.some(arg => {
-    if (isBun) {
-      // 注意：Bun 存在单文件可执行文件的问题，其中应用程序参数
-      // 从 process.argv 泄漏到 process.execArgv （类似于 https://github.com/oven-sh/bun/issues/11673）
-      // 如果我们省略这个分支，这会破坏 --debug 模式的使用
-      // 我们可以跳过该检查，因为 Bun 不支持 Node.js 遗留的 --debug 或 --debug-brk 标志
-      return /--inspect(-brk)?/.test(arg);
-    } else {
-      // 在 Node.js 中，检查 --inspect 和 Legacy --debug 标志
-      return /--inspect(-brk)?|--debug(-brk)?/.test(arg);
-    }
-  });
-
-  // 检查 NODE_OPTIONS 是否包含检查标志
-  const hasInspectEnv = process.env.NODE_OPTIONS && /--inspect(-brk)?|--debug(-brk)?/.test(process.env.NODE_OPTIONS);
-
-  // 检查检查器是否可用且处于活动状态（表示正在调试）
-  try {
-    // 动态导入会更好，但是异步的 - 使用全局对象代替
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const inspector = (global as any).require('inspector');
-    const hasInspectorUrl = !!inspector.url();
-    return hasInspectorUrl || hasInspectArg || hasInspectEnv;
-  } catch {
-    // 忽略错误并回退到参数检测
-    return hasInspectArg || hasInspectEnv;
-  }
-}
-
-// 如果我们检测到节点调试或检查则退出
-if ("external" !== 'ant' && isBeingDebugged()) {
-  // 在这里直接使用 process.exit 因为我们在导入之前处于顶级代码
-  // 且 GracefulShutdown 尚不可用
-  // eslint-disable-next-line custom-rules/no-top-level-side-effects
-  process.exit(1);
-}
-
 /**
  * 每会话技能/插件遥测。从交互路径调用
  * 和 headless -p 路径（在 runHeadless 之前）——都经过
@@ -315,16 +256,11 @@ function runMigrations(): void {
     migrateAutoUpdatesToSettings();
     migrateBypassPermissionsAcceptedToSettings();
     migrateEnableAllProjectMcpServersToSettings();
-    resetProToOpusDefault();
     migrateSonnet1mToSonnet45();
     migrateLegacyOpusToCurrent();
-    migrateSonnet45ToSonnet46();
     migrateOpusToOpus1m();
     if (feature('TRANSCRIPT_CLASSIFIER')) {
       resetAutoModeOptInForDefaultOffer();
-    }
-    if ("external" === 'ant') {
-      migrateFennecToOpus();
     }
     saveGlobalConfig(prev => prev.migrationVersion === CURRENT_MIGRATION_VERSION ? prev : {
       ...prev,
@@ -378,7 +314,7 @@ export function startDeferredPrefetches(): void {
   // 测量）。当我们只测量启动性能时，请跳过所有这些。
   if (isEnvTruthy(process.env.CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER) ||
   // --bare：跳过所有预取。这些是 REPL 的缓存预热
-  // 首轮响应（initUser、getUserContext、tips、countFiles、
+  // 首轮响应（getUserContext、tips、countFiles、
   // 模型功能、变化检测器）。脚本化 -p 调用没有
   // “用户正在输入”窗口来隐藏这项工作 - 这纯粹是开销
   // 关键路径。
@@ -387,7 +323,6 @@ export function startDeferredPrefetches(): void {
   }
 
   // 进程生成预取（在第一次 API 调用时使用，用户仍在输入）
-  void initUser();
   void getUserContext();
   prefetchSystemContextIfSafe();
   void getRelevantTips();
@@ -400,7 +335,6 @@ export function startDeferredPrefetches(): void {
   void countFilesRoundedRg(getCwd(), AbortSignal.timeout(3000), []);
 
   // 分析和功能标志初始化
-  void initializeAnalyticsGates();
   void prefetchOfficialMcpUrls();
   void refreshModelCapabilities();
 
@@ -410,10 +344,6 @@ export function startDeferredPrefetches(): void {
     void skillChangeDetector.initialize();
   }
 
-  // 事件循环停顿检测器 - 当主线程被阻塞 >500 毫秒时进行记录
-  if ("external" === 'ant') {
-    void import('./utils/eventLoopStallDetector.js').then(m => m.startEventLoopStallDetector());
-  }
 }
 function loadSettingsFromFlag(settingsFile: string): void {
   try {
@@ -551,38 +481,6 @@ export async function main() {
 
   // 提前处理深层链接 URI：该路径由操作系统协议处理器调用，
   // 只需解析 URI 并打开终端，因此应在完整初始化前退出。
-  if (feature('LODESTONE')) {
-    const handleUriIdx = process.argv.indexOf('--handle-uri');
-    if (handleUriIdx !== -1 && process.argv[handleUriIdx + 1]) {
-      const {
-        enableConfigs
-      } = await import('./utils/config.js');
-      enableConfigs();
-      const uri = process.argv[handleUriIdx + 1]!;
-      const {
-        handleDeepLinkUri
-      } = await import('./utils/deepLink/protocolHandler.js');
-      const exitCode = await handleDeepLinkUri(uri);
-      process.exit(exitCode);
-    }
-
-    // macOS URL 处理器：当 LaunchServices 启动应用程序包时，URL 会通过
-    // Apple Event（而不是 argv）传入。LaunchServices 会将
-    // __CFBundleIdentifier 覆盖为启动包的 ID，这是明确的肯定信号，
-    // 比导入模块再用启发式方法猜测更省资源。
-    if (process.platform === 'darwin' && process.env.__CFBundleIdentifier === 'com.anthropic.claude-code-url-handler') {
-      const {
-        enableConfigs
-      } = await import('./utils/config.js');
-      enableConfigs();
-      const {
-        handleUrlSchemeLaunch
-      } = await import('./utils/deepLink/protocolHandler.js');
-      const urlSchemeResult = await handleUrlSchemeLaunch();
-      process.exit(urlSchemeResult ?? 1);
-    }
-  }
-
   // 在 init() 前尽早检查 -p/--print 和 --init-only 参数，以设置 isInteractiveSession。
   // 这是必需的，因为遥测初始化会调用依赖该参数的认证函数。
   const cliArgs = process.argv.slice(2);
@@ -728,19 +626,6 @@ async function run(): Promise<CommanderCommand> {
     runMigrations();
     profileCheckpoint('preAction_after_migrations');
 
-    // Load remote managed settings for enterprise customers (non-blocking)
-    // Fails open - if fetch fails, continues without remote settings
-    // Settings are applied via hot-reload when they arrive
-    // Must happen after init() to ensure config reading is allowed
-    void loadRemoteManagedSettings();
-    void loadPolicyLimits();
-    profileCheckpoint('preAction_after_remote_settings');
-
-    // Load settings sync (non-blocking, fail-open)
-    if (feature('UPLOAD_USER_SETTINGS')) {
-      void import('./services/settingsSync/index.js').then(m => m.uploadUserSettingsInBackground());
-    }
-    profileCheckpoint('preAction_after_settings_sync');
   });
   program.name('claude').description(`Claude Code - starts an interactive session by default, use -p/--print for non-interactive output`).argument('[prompt]', 'Your prompt', String)
   // Subcommands inherit helpOption via commander's copyInheritedSettings —
@@ -762,10 +647,7 @@ async function run(): Promise<CommanderCommand> {
       throw new Error('--task-budget must be a positive integer');
     }
     return tokens;
-  }).hideHelp()).option('--replay-user-messages', 'Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)', () => true).addOption(new Option('--enable-auth-status', 'Enable auth status messages in SDK mode').default(false).hideHelp()).option('--allowedTools, --allowed-tools <tools...>', 'Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")').option('--tools <tools...>', 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").').option('--disallowedTools, --disallowed-tools <tools...>', 'Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")').option('--mcp-config <configs...>', 'Load MCP servers from JSON files or strings (space-separated)').addOption(new Option('--permission-prompt-tool <tool>', 'MCP tool to use for permission prompts (only works with --print)').argParser(String).hideHelp()).addOption(new Option('--system-prompt <prompt>', 'System prompt to use for the session').argParser(String)).addOption(new Option('--system-prompt-file <file>', 'Read system prompt from a file').argParser(String).hideHelp()).addOption(new Option('--append-system-prompt <prompt>', 'Append a system prompt to the default system prompt').argParser(String)).addOption(new Option('--append-system-prompt-file <file>', 'Read system prompt from a file and append to the default system prompt').argParser(String).hideHelp()).addOption(new Option('--permission-mode <mode>', 'Permission mode to use for the session').argParser(String).choices(PERMISSION_MODES)).option('-c, --continue', 'Continue the most recent conversation in the current directory', () => true).option('-r, --resume [value]', 'Resume a conversation by session ID, or open interactive picker with optional search term', value => value || true).option('--fork-session', 'When resuming, create a new session ID instead of reusing the original (use with --resume or --continue)', () => true).addOption(new Option('--prefill <text>', 'Pre-fill the prompt input with text without submitting it').hideHelp()).addOption(new Option('--deep-link-origin', 'Signal that this session was launched from a deep link').hideHelp()).addOption(new Option('--deep-link-repo <slug>', 'Repo slug the deep link ?repo= parameter resolved to the current cwd').hideHelp()).addOption(new Option('--deep-link-last-fetch <ms>', 'FETCH_HEAD mtime in epoch ms, precomputed by the deep link trampoline').argParser(v => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  }).hideHelp()).option('--from-pr [value]', 'Resume a session linked to a PR by PR number/URL, or open interactive picker with optional search term', value => value || true).option('--no-session-persistence', 'Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)').addOption(new Option('--resume-session-at <message id>', 'When resuming, only messages up to and including the assistant message with <message.id> (use with --resume in print mode)').argParser(String).hideHelp()).addOption(new Option('--rewind-files <user-message-id>', 'Restore files to state at the specified user message and exit (requires --resume)').hideHelp())
+  }).hideHelp()).option('--replay-user-messages', 'Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)', () => true).addOption(new Option('--enable-auth-status', 'Enable auth status messages in SDK mode').default(false).hideHelp()).option('--allowedTools, --allowed-tools <tools...>', 'Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")').option('--tools <tools...>', 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").').option('--disallowedTools, --disallowed-tools <tools...>', 'Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")').option('--mcp-config <configs...>', 'Load MCP servers from JSON files or strings (space-separated)').addOption(new Option('--permission-prompt-tool <tool>', 'MCP tool to use for permission prompts (only works with --print)').argParser(String).hideHelp()).addOption(new Option('--system-prompt <prompt>', 'System prompt to use for the session').argParser(String)).addOption(new Option('--system-prompt-file <file>', 'Read system prompt from a file').argParser(String).hideHelp()).addOption(new Option('--append-system-prompt <prompt>', 'Append a system prompt to the default system prompt').argParser(String)).addOption(new Option('--append-system-prompt-file <file>', 'Read system prompt from a file and append to the default system prompt').argParser(String).hideHelp()).addOption(new Option('--permission-mode <mode>', 'Permission mode to use for the session').argParser(String).choices(PERMISSION_MODES)).option('-c, --continue', 'Continue the most recent conversation in the current directory', () => true).option('-r, --resume [value]', 'Resume a conversation by session ID, or open interactive picker with optional search term', value => value || true).option('--fork-session', 'When resuming, create a new session ID instead of reusing the original (use with --resume or --continue)', () => true).addOption(new Option('--prefill <text>', 'Pre-fill the prompt input with text without submitting it').hideHelp()).option('--from-pr [value]', 'Resume a session linked to a PR by PR number/URL, or open interactive picker with optional search term', value => value || true).option('--no-session-persistence', 'Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)').addOption(new Option('--resume-session-at <message id>', 'When resuming, only messages up to and including the assistant message with <message.id> (use with --resume in print mode)').argParser(String).hideHelp()).addOption(new Option('--rewind-files <user-message-id>', 'Restore files to state at the specified user message and exit (requires --resume)').hideHelp())
   // @[MODEL LAUNCH]: Update the example model ID in the --model help text.
   .option('--model <model>', `Model for the current session. Provide an alias for the latest model (e.g. 'sonnet' or 'opus') or a model's full name (e.g. 'claude-sonnet-4-6').`).addOption(new Option('--effort <level>', `Effort level for the current session (low, medium, high, max)`).argParser((rawValue: string) => {
     const value = rawValue.toLowerCase();
@@ -832,9 +714,6 @@ async function run(): Promise<CommanderCommand> {
     // Promise for file downloads - started early, awaited before REPL renders
     const agentsJson = options.agents;
     const agentCli = options.agent;
-    if (feature('BG_SESSIONS') && agentCli) {
-      process.env.CLAUDE_CODE_AGENT = agentCli;
-    }
 
     // NOTE: LSP manager initialization is intentionally deferred until after
     // the trust dialog is accepted. This prevents plugin LSP servers from
@@ -852,12 +731,12 @@ async function run(): Promise<CommanderCommand> {
     // Extract disable slash commands flag
     const disableSlashCommands = options.disableSlashCommands || false;
 
-    // Extract tasks mode options (ant-only)
-    const tasksOption = "external" === 'ant' && (options as {
+    // Optional task-list worker mode for automated development workflows.
+    const tasksOption = (options as {
       tasks?: boolean | string;
     }).tasks;
     const taskListId = tasksOption ? typeof tasksOption === 'string' ? tasksOption : DEFAULT_TASKS_MODE_TASK_LIST_ID : undefined;
-    if ("external" === 'ant' && taskListId) {
+    if (taskListId) {
       process.env.CLAUDE_CODE_TASK_LIST_ID = taskListId;
     }
 
@@ -941,7 +820,7 @@ async function run(): Promise<CommanderCommand> {
 
     // Enable all hook event types when explicitly requested via SDK option
     // Without this, only SessionStart and Setup events are emitted.
-    if (includeHookEvents || isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)) {
+    if (includeHookEvents) {
       setAllHookEventsEnabled(true);
     }
 
@@ -1165,7 +1044,7 @@ async function run(): Promise<CommanderCommand> {
     // devChannels is deferred: showSetupScreens shows a confirmation dialog
     // and only appends to allowedChannels on accept.
     let devChannels: ChannelEntry[] | undefined;
-    if (feature('KAIROS') || feature('KAIROS_CHANNELS')) {
+    if (feature('MCP_CHANNELS')) {
       // Parse plugin:name@marketplace / server:Y tags into typed entries.
       // Tag decides trust model downstream: plugin-kind hits marketplace
       // verification + GrowthBook allowlist, server-kind always fails
@@ -1245,28 +1124,6 @@ async function run(): Promise<CommanderCommand> {
       }
     }
 
-    // SDK opt-in for SendUserMessage via --tools. All sessions require
-    // explicit opt-in; listing it in --tools signals intent. Runs BEFORE
-    // initializeToolPermissionContext so getToolsForDefaultPreset() sees
-    // the tool as enabled when computing the base-tools disallow filter.
-    // Conditional require avoids leaking the tool-name string into
-    // external builds.
-    if ((feature('KAIROS') || feature('KAIROS_BRIEF')) && baseTools.length > 0) {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      const {
-        BRIEF_TOOL_NAME,
-        LEGACY_BRIEF_TOOL_NAME
-      } = require('./tools/BriefTool/prompt.js') as typeof import('./tools/BriefTool/prompt.js');
-      const {
-        isBriefEntitled
-      } = require('./tools/BriefTool/BriefTool.js') as typeof import('./tools/BriefTool/BriefTool.js');
-      /* eslint-enable @typescript-eslint/no-require-imports */
-      const parsed = parseToolListFromCLI(baseTools);
-      if ((parsed.includes(BRIEF_TOOL_NAME) || parsed.includes(LEGACY_BRIEF_TOOL_NAME)) && isBriefEntitled()) {
-        setUserMsgOptIn(true);
-      }
-    }
-
     // This await replaces blocking existsSync/statSync calls that were already in
     // the startup path. Wall-clock time is unchanged; we just yield to the event
     // loop during the fs I/O instead of blocking it. See #19661.
@@ -1281,17 +1138,8 @@ async function run(): Promise<CommanderCommand> {
     let toolPermissionContext = initResult.toolPermissionContext;
     const {
       warnings,
-      dangerousPermissions,
-      overlyBroadBashPermissions
+      dangerousPermissions
     } = initResult;
-
-    // Handle overly broad shell allow rules for ant users (Bash(*), PowerShell(*))
-    if ("external" === 'ant' && overlyBroadBashPermissions.length > 0) {
-      for (const permission of overlyBroadBashPermissions) {
-        logForDebugging(`Ignoring overly broad shell permission ${permission.ruleDisplay} from ${permission.sourceDisplay}`);
-      }
-      toolPermissionContext = removeDangerousPermissions(toolPermissionContext, overlyBroadBashPermissions);
-    }
     if (feature('TRANSCRIPT_CLASSIFIER') && dangerousPermissions.length > 0) {
       toolPermissionContext = stripDangerousPermissionsForAutoMode(toolPermissionContext);
     }
@@ -1302,25 +1150,6 @@ async function run(): Promise<CommanderCommand> {
       console.error(warning);
     });
     void assertMinVersion();
-
-    // claude.ai config fetch: -p mode only (interactive uses useManageMCPConnections
-    // two-phase loading). Kicked off here to overlap with setup(); awaited
-    // before runHeadless so single-turn -p sees connectors. Skipped under
-    // enterprise/strict MCP to preserve policy boundaries.
-    const claudeaiConfigPromise: Promise<Record<string, ScopedMcpServerConfig>> = isNonInteractiveSession && !strictMcpConfig && !doesEnterpriseMcpConfigExist() &&
-    // --bare / SIMPLE: skip claude.ai proxy servers (datadog, Gmail,
-    // Slack, BigQuery, PubMed — 6-14s each to connect). Scripted calls
-    // that need MCP pass --mcp-config explicitly.
-    !isBareMode() ? fetchClaudeAIMcpConfigsIfEligible().then(configs => {
-      const {
-        allowed,
-        blocked
-      } = filterMcpServersByPolicy(configs);
-      if (blocked.length > 0) {
-        process.stderr.write(`Warning: claude.ai MCP ${plural(blocked.length, 'server')} blocked by enterprise policy: ${blocked.join(', ')}\n`);
-      }
-      return allowed;
-    }) : Promise.resolve({});
 
     // Kick off MCP config loading early (safe - just reads files, no execution).
     // Both interactive and -p use getClaudeCodeMcpConfigs (local file reads only).
@@ -1424,9 +1253,6 @@ async function run(): Promise<CommanderCommand> {
     const {
       setup
     } = await import('./setup.js');
-    const messagingSocketPath = feature('UDS_INBOX') ? (options as {
-      messagingSocketPath?: string;
-    }).messagingSocketPath : undefined;
     // Parallelize setup() with commands+agents loading. setup()'s ~28ms is
     // mostly startUdsMessaging (socket bind, ~20ms) — not disk-bound, so it
     // doesn't contend with getCommands' file reads. Gated on !worktreeEnabled
@@ -1438,10 +1264,9 @@ async function run(): Promise<CommanderCommand> {
     // reads synchronously. Previously ran inside setup() after ~20ms of
     // await points, so the parallel getCommands() memoized an empty list.
     if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {
-      initBuiltinPlugins();
       initBundledSkills();
     }
-    const setupPromise = setup(preSetupCwd, permissionMode, allowDangerouslySkipPermissions, worktreeEnabled, worktreeName, tmuxEnabled, sessionId ? validateUuid(sessionId) : undefined, worktreePRNumber, messagingSocketPath);
+    const setupPromise = setup(preSetupCwd, permissionMode, allowDangerouslySkipPermissions, worktreeEnabled, worktreeName, tmuxEnabled, sessionId ? validateUuid(sessionId) : undefined, worktreePRNumber);
     const commandsPromise = worktreeEnabled ? null : getCommands(preSetupCwd);
     const agentDefsPromise = worktreeEnabled ? null : getAgentDefinitionsWithOverrides(preSetupCwd);
     // Suppress transient unhandledRejection if these reject during the
@@ -1452,20 +1277,7 @@ async function run(): Promise<CommanderCommand> {
     logForDebugging(`[STARTUP] setup() completed in ${Date.now() - setupStart}ms`);
     profileCheckpoint('action_after_setup');
 
-    // Replay user messages into stream-json only when the socket was
-    // explicitly requested. The auto-generated socket is passive — it
-    // lets tools inject if they want to, but turning it on by default
-    // shouldn't reshape stream-json for SDK consumers who never touch it.
-    // Callers who inject and also want those injections visible in the
-    // stream pass --messaging-socket-path explicitly (or --replay-user-messages).
-    let effectiveReplayUserMessages = !!options.replayUserMessages;
-    if (feature('UDS_INBOX')) {
-      if (!effectiveReplayUserMessages && outputFormat === 'stream-json') {
-        effectiveReplayUserMessages = !!(options as {
-          messagingSocketPath?: string;
-        }).messagingSocketPath;
-      }
-    }
+    const effectiveReplayUserMessages = !!options.replayUserMessages;
     if (getIsNonInteractiveSession()) {
       // Apply full merged settings env now (including project-scoped
       // .claude/settings.json PATH/GIT_DIR/GIT_WORK_TREE) so gitExe() and
@@ -1513,22 +1325,6 @@ async function run(): Promise<CommanderCommand> {
     const sessionNameArg = options.name?.trim();
     if (sessionNameArg) {
       cacheSessionTitle(sessionNameArg);
-    }
-
-    // Ant model aliases (capybara-fast etc.) resolve via the
-    // tengu_ant_model_override GrowthBook flag. _CACHED_MAY_BE_STALE reads
-    // disk synchronously; disk is populated by a fire-and-forget write. On a
-    // cold cache, parseUserSpecifiedModel returns the unresolved alias, the
-    // API 404s, and -p exits before the async write lands — crashloop on
-    // fresh pods. Awaiting init here populates the in-memory payload map that
-    // _CACHED_MAY_BE_STALE now checks first. Gated so the warm path stays
-    // non-blocking:
-    //  - explicit model via --model or ANTHROPIC_MODEL (both feed alias resolution)
-    //  - no env override (which short-circuits _CACHED_MAY_BE_STALE before disk)
-    //  - flag absent from disk (== null also catches pre-#22279 poisoned null)
-    const explicitModel = options.model || process.env.ANTHROPIC_MODEL;
-    if ("external" === 'ant' && explicitModel && explicitModel !== 'default' && !hasGrowthBookEnvOverride('tengu_ant_model_override') && getGlobalConfig().cachedGrowthBookFeatures?.['tengu_ant_model_override'] == null) {
-      await initializeGrowthBook();
     }
 
     // Special case the default model with the null keyword
@@ -1673,9 +1469,7 @@ async function run(): Promise<CommanderCommand> {
         // Log agent memory loaded event for tmux teammates
         if (customAgent.memory) {
           logEvent('tengu_agent_memory_loaded', {
-            ...("external" === 'ant' && {
-              agent_type: customAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-            }),
+            agent_type: customAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
             scope: customAgent.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
             source: 'teammate' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
           });
@@ -1688,36 +1482,13 @@ async function run(): Promise<CommanderCommand> {
         logForDebugging(`[teammate] Custom agent ${storedTeammateOpts.agentType} not found in available agents`);
       }
     }
-    maybeActivateBrief(options);
-    // defaultView: 'chat' is a persisted opt-in — check entitlement and set
-    // userMsgOptIn so the tool + prompt section activate. Interactive-only:
-    // defaultView is a display preference; SDK sessions have no display, and
-    // the assistant installer writes defaultView:'chat' to settings.local.json
-    // which would otherwise leak into --print sessions in the same directory.
-    // Runs right after maybeActivateBrief() so all startup opt-in paths fire
-    // BEFORE any isBriefEnabled() read below (proactive prompt's
-    // briefVisibility). A persisted 'chat' after a GB kill-switch falls
-    // through (entitlement fails).
-    if ((feature('KAIROS') || feature('KAIROS_BRIEF')) && !getIsNonInteractiveSession() && !getUserMsgOptIn() && getInitialSettings().defaultView === 'chat') {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      const {
-        isBriefEntitled
-      } = require('./tools/BriefTool/BriefTool.js') as typeof import('./tools/BriefTool/BriefTool.js');
-      /* eslint-enable @typescript-eslint/no-require-imports */
-      if (isBriefEntitled()) {
-        setUserMsgOptIn(true);
-      }
-    }
     // Coordinator mode has its own system prompt and filters out Sleep, so
     // the generic proactive prompt would tell it to call a tool it can't
     // access and conflict with delegation instructions.
-    if ((feature('PROACTIVE') || feature('KAIROS')) && ((options as {
+    if ((feature('PROACTIVE')) && ((options as {
       proactive?: boolean;
     }).proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE)) && !coordinatorModeModule?.isCoordinatorMode()) {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      const briefVisibility = feature('KAIROS') || feature('KAIROS_BRIEF') ? (require('./tools/BriefTool/BriefTool.js') as typeof import('./tools/BriefTool/BriefTool.js')).isBriefEnabled() ? 'Call SendUserMessage at checkpoints to mark where things stand.' : 'The user will see any text you output.' : 'The user will see any text you output.';
-      /* eslint-enable @typescript-eslint/no-require-imports */
-      const proactivePrompt = `\n# Proactive Mode\n\nYou are in proactive mode. Take initiative — explore, act, and make progress without waiting for instructions.\n\nStart by briefly greeting the user.\n\nYou will receive periodic <tick> prompts. These are check-ins. Do whatever seems most useful, or call Sleep if there's nothing to do. ${briefVisibility}`;
+      const proactivePrompt = `\n# Proactive Mode\n\nYou are in proactive mode. Take initiative — explore, act, and make progress without waiting for instructions.\n\nStart by briefly greeting the user.\n\nYou will receive periodic <tick> prompts. These are check-ins. Do whatever seems most useful, or call Sleep if there's nothing to do. The user will see any text you output.`;
       appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${proactivePrompt}` : proactivePrompt;
     }
     // Ink root is only needed for interactive sessions — patchConsole in the
@@ -1731,10 +1502,8 @@ async function run(): Promise<CommanderCommand> {
       const ctx = getRenderContext(false);
       getFpsMetrics = ctx.getFpsMetrics;
       stats = ctx.stats;
-      // Install asciicast recorder before Ink mounts (ant-only, opt-in via CLAUDE_CODE_TERMINAL_RECORDING=1)
-      if ("external" === 'ant') {
-        installAsciicastRecorder();
-      }
+      // Opt-in terminal recording for diagnostics and integration tests.
+      installAsciicastRecorder();
       const {
         createRoot
       } = await import('./ink.js');
@@ -1750,17 +1519,8 @@ async function run(): Promise<CommanderCommand> {
       });
       logForDebugging('[STARTUP] Running showSetupScreens()...');
       const setupScreensStart = Date.now();
-      const onboardingShown = await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, commands, devChannels);
+      await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, commands, devChannels);
       logForDebugging(`[STARTUP] showSetupScreens() completed in ${Date.now() - setupScreensStart}ms`);
-
-      if (onboardingShown) {
-        // Refresh services after onboarding configuration changes.
-        void refreshRemoteManagedSettings();
-        void refreshPolicyLimits();
-        // Clear user data cache BEFORE GrowthBook refresh so it picks up fresh credentials
-        resetUserCache();
-        refreshGrowthBookAfterAuthChange();
-      }
 
     }
 
@@ -1794,11 +1554,11 @@ async function run(): Promise<CommanderCommand> {
       }
     }
 
-    // Check quota status, fast mode, passes eligibility, and bootstrap data
+    // Warm provider-neutral runtime capabilities after trust is established.
     // after trust is established. These make API calls which could trigger
     // apiKeyHelper execution.
     // --bare / SIMPLE: skip — these are cache-warms for the REPL's
-    // first-turn responsiveness (quota, passes, fastMode, bootstrap data). Fast
+    // first-turn responsiveness. Fast
     // mode doesn't apply to the Agent SDK anyway (see getFastModeUnavailableReason).
     const bgRefreshThrottleMs = getFeatureValue_CACHED_MAY_BE_STALE('tengu_cicada_nap_ms', 0);
     const lastPrefetched = getGlobalConfig().startupPrefetchedAt ?? 0;
@@ -1806,12 +1566,6 @@ async function run(): Promise<CommanderCommand> {
     if (!skipStartupPrefetches) {
       const lastPrefetchedInfo = lastPrefetched > 0 ? ` last ran ${Math.round((Date.now() - lastPrefetched) / 1000)}s ago` : '';
       logForDebugging(`Starting background startup prefetches${lastPrefetchedInfo}`);
-      checkQuotaStatus().catch(error => logError(error));
-
-      // Fetch bootstrap data from the server and update all cache values.
-      void fetchBootstrapData();
-
-      // TODO: Consolidate other prefetches into a single bootstrap request.
       if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_miraculo_the_bard', false)) {
         void prefetchFastModeStatus();
       } else {
@@ -1863,29 +1617,11 @@ async function run(): Promise<CommanderCommand> {
     // Interactive mode only: print mode defers connects until headlessStore exists
     // and pushes per-server (below), so ToolSearch's pending-client handling works
     // and one slow server doesn't block the batch.
-    const localMcpPromise = isNonInteractiveSession ? Promise.resolve({
+    const mcpPromise = isNonInteractiveSession ? Promise.resolve({
       clients: [],
       tools: [],
       commands: []
     }) : prefetchAllMcpResources(regularMcpConfigs);
-    const claudeaiMcpPromise = isNonInteractiveSession ? Promise.resolve({
-      clients: [],
-      tools: [],
-      commands: []
-    }) : claudeaiConfigPromise.then(configs => Object.keys(configs).length > 0 ? prefetchAllMcpResources(configs) : {
-      clients: [],
-      tools: [],
-      commands: []
-    });
-    // Merge with dedup by name: each prefetchAllMcpResources call independently
-    // adds helper tools (ListMcpResourcesTool, ReadMcpResourceTool) via
-    // local dedup flags, so merging two calls can yield duplicates. print.ts
-    // already uniqBy's the final tool pool, but dedup here keeps appState clean.
-    const mcpPromise = Promise.all([localMcpPromise, claudeaiMcpPromise]).then(([local, claudeai]) => ({
-      clients: [...local.clients, ...claudeai.clients],
-      tools: uniqBy([...local.tools, ...claudeai.tools], 'name'),
-      commands: uniqBy([...local.commands, ...claudeai.commands], 'name')
-    }));
 
     // Start hooks early so they run in parallel with MCP connections.
     // Skip for initOnly/init/maintenance (handled separately), non-interactive
@@ -1977,7 +1713,6 @@ async function run(): Promise<CommanderCommand> {
 
     // Log context metrics once at initialization
     void logContextMetrics(regularMcpConfigs, toolPermissionContext);
-    void logPermissionContextForAnts(null, 'initialization');
     logManagedSettings();
 
     // Register PID file for concurrent-session detection (~/.claude/sessions/)
@@ -2097,7 +1832,7 @@ async function run(): Promise<CommanderCommand> {
       }
 
       // Async check of auto mode gate — corrects state and disables auto if needed.
-      // Gated on TRANSCRIPT_CLASSIFIER (not USER_TYPE) so GrowthBook kill switch runs for external builds too.
+      // Gated on TRANSCRIPT_CLASSIFIER so it remains locally configurable.
       if (feature('TRANSCRIPT_CLASSIFIER')) {
         void verifyAutoModeGateAccess(toolPermissionContext, headlessStore.getState().fastMode).then(({
           updateContext
@@ -2119,7 +1854,7 @@ async function run(): Promise<CommanderCommand> {
       }
 
       // Store SDK betas in global state for context window calculation
-      // Only store allowed betas (filters by allowlist and subscriber status)
+      // Only store allowed SDK beta headers.
       setSdkBetas(filterAllowedSdkBetas(betas));
 
       // Print-mode MCP: per-server incremental push into headlessStore.
@@ -2159,104 +1894,18 @@ async function run(): Promise<CommanderCommand> {
       // "late-connecting servers visible next turn" doesn't help. SDK init
       // message and turn-1 tool list both need configured MCP tools present.
       // Zero-server case is free via the early return in connectMcpBatch.
-      // Connectors parallelize inside getMcpToolsCommandsAndResources
-      // (processBatched with Promise.all). claude.ai is awaited too — its
-      // fetch was kicked off early (line ~2558) so only residual time blocks
-      // here. --bare skips claude.ai entirely for perf-sensitive scripts.
+      // Connectors parallelize inside getMcpToolsCommandsAndResources.
       profileCheckpoint('before_connectMcp');
       await connectMcpBatch(regularMcpConfigs, 'regular');
       profileCheckpoint('after_connectMcp');
-      // Dedup: suppress plugin MCP servers that duplicate a claude.ai
-      // connector (connector wins), then connect claude.ai servers.
-      // Bounded wait — #23725 made this blocking so single-turn -p sees
-      // connectors, but with 40+ slow connectors tengu_startup_perf p99
-      // climbed to 76s. If fetch+connect doesn't finish in time, proceed;
-      // the promise keeps running and updates headlessStore in the
-      // background so turn 2+ still sees connectors.
-      const CLAUDE_AI_MCP_TIMEOUT_MS = 5_000;
-      const claudeaiConnect = claudeaiConfigPromise.then(claudeaiConfigs => {
-        if (Object.keys(claudeaiConfigs).length > 0) {
-          const claudeaiSigs = new Set<string>();
-          for (const config of Object.values(claudeaiConfigs)) {
-            const sig = getMcpServerSignature(config);
-            if (sig) claudeaiSigs.add(sig);
-          }
-          const suppressed = new Set<string>();
-          for (const [name, config] of Object.entries(regularMcpConfigs)) {
-            if (!name.startsWith('plugin:')) continue;
-            const sig = getMcpServerSignature(config);
-            if (sig && claudeaiSigs.has(sig)) suppressed.add(name);
-          }
-          if (suppressed.size > 0) {
-            logForDebugging(`[MCP] Lazy dedup: suppressing ${suppressed.size} plugin server(s) that duplicate claude.ai connectors: ${[...suppressed].join(', ')}`);
-            // Disconnect before filtering from state. Only connected
-            // servers need cleanup — clearServerCache on a never-connected
-            // server triggers a real connect just to kill it (memoize
-            // cache-miss path, see useManageMCPConnections.ts:870).
-            for (const c of headlessStore.getState().mcp.clients) {
-              if (!suppressed.has(c.name) || c.type !== 'connected') continue;
-              c.client.onclose = undefined;
-              void clearServerCache(c.name, c.config).catch(() => {});
-            }
-            headlessStore.setState(prev => {
-              let {
-                clients,
-                tools,
-                commands,
-                resources
-              } = prev.mcp;
-              clients = clients.filter(c => !suppressed.has(c.name));
-              tools = tools.filter(t => !t.mcpInfo || !suppressed.has(t.mcpInfo.serverName));
-              for (const name of suppressed) {
-                commands = excludeCommandsByServer(commands, name);
-                resources = excludeResourcesByServer(resources, name);
-              }
-              return {
-                ...prev,
-                mcp: {
-                  ...prev.mcp,
-                  clients,
-                  tools,
-                  commands,
-                  resources
-                }
-              };
-            });
-          }
-        }
-        // Suppress claude.ai connectors that duplicate an enabled
-        // manual server (URL-signature match). Plugin dedup above only
-        // handles `plugin:*` keys; this catches manual `.mcp.json` entries.
-        // plugin:* must be excluded here — step 1 already suppressed
-        // those (claude.ai wins); leaving them in suppresses the
-        // connector too, and neither survives (gh-39974).
-        const nonPluginConfigs = pickBy(regularMcpConfigs, (_, n) => !n.startsWith('plugin:'));
-        const {
-          servers: dedupedClaudeAi
-        } = dedupClaudeAiMcpServers(claudeaiConfigs, nonPluginConfigs);
-        return connectMcpBatch(dedupedClaudeAi, 'claudeai');
-      });
-      let claudeaiTimer: ReturnType<typeof setTimeout> | undefined;
-      const claudeaiTimedOut = await Promise.race([claudeaiConnect.then(() => false), new Promise<boolean>(resolve => {
-        claudeaiTimer = setTimeout(r => r(true), CLAUDE_AI_MCP_TIMEOUT_MS, resolve);
-      })]);
-      if (claudeaiTimer) clearTimeout(claudeaiTimer);
-      if (claudeaiTimedOut) {
-        logForDebugging(`[MCP] claude.ai connectors not ready after ${CLAUDE_AI_MCP_TIMEOUT_MS}ms — proceeding; background connection continues`);
-      }
-      profileCheckpoint('after_connectMcp_claudeai');
-
       // In headless mode, start deferred prefetches immediately (no user typing delay)
       // --bare / SIMPLE: startDeferredPrefetches early-returns internally.
       // backgroundHousekeeping (initExtractMemories, pruneShellSnapshots,
-      // cleanupOldMessageFiles) and sdkHeapDumpMonitor are all bookkeeping
+      // cleanupOldMessageFiles) is bookkeeping
       // that scripted calls don't need — the next interactive session reconciles.
       if (!isBareMode()) {
         startDeferredPrefetches();
         void import('./utils/backgroundHousekeeping.js').then(m => m.startBackgroundHousekeeping());
-        if ("external" === 'ant') {
-          void import('./utils/sdkHeapDumpMonitor.js').then(m => m.startSdkMemoryMonitor());
-        }
       }
       logSessionTelemetry();
       profileCheckpoint('before_print_import');
@@ -2301,7 +1950,6 @@ async function run(): Promise<CommanderCommand> {
       cli_flag: options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       env_var: process.env.ANTHROPIC_MODEL as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       settings_file: (getInitialSettings() || {}).model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      subscriptionType: null as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       agent: agentSetting as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
     });
 
@@ -2330,25 +1978,10 @@ async function run(): Promise<CommanderCommand> {
         priority: 'high'
       });
     }
-    if (overlyBroadBashPermissions.length > 0) {
-      const displayList = uniq(overlyBroadBashPermissions.map(p => p.ruleDisplay));
-      const displays = displayList.join(', ');
-      const sources = uniq(overlyBroadBashPermissions.map(p => p.sourceDisplay)).join(', ');
-      const n = displayList.length;
-      initialNotifications.push({
-        key: 'overly-broad-bash-notification',
-        text: `${displays} allow ${plural(n, 'rule')} from ${sources} ${plural(n, 'was', 'were')} ignored \u2014 not available for Ants, please use auto-mode instead`,
-        color: 'warning',
-        priority: 'high'
-      });
-    }
     const effectiveToolPermissionContext = {
       ...toolPermissionContext,
       mode: isAgentSwarmsEnabled() && getTeammateUtils().isPlanModeRequired() ? 'plan' as const : toolPermissionContext.mode
     };
-    // All startup opt-in paths (--tools, --brief, defaultView) have fired
-    // above; initialIsBriefOnly just reads the resulting state.
-    const initialIsBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? getUserMsgOptIn() : false;
     const initialState: AppState = {
       settings: getInitialSettings(),
       tasks: {},
@@ -2356,7 +1989,6 @@ async function run(): Promise<CommanderCommand> {
       verbose: verbose ?? getGlobalConfig().verbose ?? false,
       mainLoopModel: initialMainLoopModel,
       mainLoopModelForSession: null,
-      isBriefOnly: initialIsBriefOnly,
       expandedView: getGlobalConfig().showSpinnerTree ? 'teammates' : getGlobalConfig().showExpandedTodos ? 'tasks' : 'none',
       showTeammateMessagePreview: isAgentSwarmsEnabled() ? false : undefined,
       selectedIPAgentIndex: -1,
@@ -2415,16 +2047,12 @@ async function run(): Promise<CommanderCommand> {
       },
       speculation: IDLE_SPECULATION_STATE,
       speculationSessionTimeSavedMs: 0,
-      skillImprovement: {
-        suggestion: null
-      },
       workerSandboxPermissions: {
         queue: [],
         selectedIndex: 0
       },
       pendingWorkerRequest: null,
       pendingSandboxRequest: null,
-      authVersion: 0,
       initialMessage: inputPrompt ? {
         message: createUserMessage({
           content: String(inputPrompt)
@@ -2446,9 +2074,7 @@ async function run(): Promise<CommanderCommand> {
     }
     const initialTools = mcpTools;
 
-    // Increment numStartups synchronously — first-render readers like
-    // shouldShowEffortCallout (via useState initializer) need the updated
-    // value before setImmediate fires. Defer only telemetry.
+    // Increment numStartups synchronously before the first render.
     saveGlobalConfig(current => ({
       ...current,
       numStartups: (current.numStartups ?? 0) + 1
@@ -2458,21 +2084,6 @@ async function run(): Promise<CommanderCommand> {
       logSessionTelemetry();
     });
 
-    // Set up per-turn session environment data uploader (ant-only build).
-    // Default-enabled for all ant users when working in an Anthropic-owned
-    // repo. Captures git/filesystem state (NOT transcripts) at each turn so
-    // environments can be recreated at any user message index. Gating:
-    //   - Build-time: this import is stubbed in external builds.
-    //   - Runtime: uploader checks github.com/anthropics/* remote + gcloud auth.
-    //   - Safety: CLAUDE_CODE_DISABLE_SESSION_DATA_UPLOAD=1 bypasses (tests set this).
-    // Import is dynamic + async to avoid adding startup latency.
-    const sessionUploaderPromise = "external" === 'ant' ? import('./utils/sessionDataUploader.js') : null;
-
-    // Defer session uploader resolution to the onTurnComplete callback to avoid
-    // adding a new top-level await in main.tsx (performance-critical path).
-    // The per-turn auth logic in sessionDataUploader.ts handles unauthenticated
-    // state gracefully (re-checks each turn, so auth recovery mid-session works).
-    const uploaderReady = sessionUploaderPromise ? sessionUploaderPromise.then(mod => mod.createSessionTurnUploader()).catch(() => null) : null;
     const sessionConfig = {
       debug: debug || debugToStderr,
       commands: [...commands, ...mcpCommands],
@@ -2486,12 +2097,7 @@ async function run(): Promise<CommanderCommand> {
       systemPrompt,
       appendSystemPrompt,
       taskListId,
-      thinkingConfig,
-      ...(uploaderReady && {
-        onTurnComplete: (messages: MessageType[]) => {
-          void uploaderReady.then(uploader => uploader?.(messages));
-        }
-      })
+      thinkingConfig
     };
 
     // Shared context for processResumedConversation calls
@@ -2530,7 +2136,6 @@ async function run(): Promise<CommanderCommand> {
           mainThreadAgentDefinition = loaded.restoredAgentDef;
         }
         maybeActivateProactive(options);
-        maybeActivateBrief(options);
         logEvent('tengu_continue', {
           success: true,
           resume_duration_ms: Math.round(performance.now() - resumeStart)
@@ -2559,7 +2164,7 @@ async function run(): Promise<CommanderCommand> {
         process.exit(1);
       }
     } else if (options.resume || options.fromPr) {
-      // Handle resume flow - from file (ant-only), session ID, or interactive selector
+      // Handle resume flow - from transcript file, session ID, or interactive selector
 
       // Clear stale caches before resuming to ensure fresh file/skill discovery
       const {
@@ -2604,89 +2209,40 @@ async function run(): Promise<CommanderCommand> {
         }
       }
 
-      if ("external" === 'ant') {
-        if (options.resume && typeof options.resume === 'string' && !maybeSessionId) {
-          // Check for ccshare URL (e.g. https://go/ccshare/boris-20260311-211036)
-          const {
-            parseCcshareId,
-            loadCcshare
-          } = await import('./utils/ccshareResume.js');
-          const ccshareId = parseCcshareId(options.resume);
-          if (ccshareId) {
-            try {
-              const resumeStart = performance.now();
-              const logOption = await loadCcshare(ccshareId);
-              const result = await loadConversationForResume(logOption, undefined);
-              if (result) {
-                processedResume = await processResumedConversation(result, {
-                  forkSession: true,
-                  transcriptPath: result.fullPath
-                }, resumeContext);
-                if (processedResume.restoredAgentDef) {
-                  mainThreadAgentDefinition = processedResume.restoredAgentDef;
-                }
-                logEvent('tengu_session_resumed', {
-                  entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  success: true,
-                  resume_duration_ms: Math.round(performance.now() - resumeStart)
-                });
-              } else {
-                logEvent('tengu_session_resumed', {
-                  entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  success: false
-                });
+      if (options.resume && typeof options.resume === 'string' && !maybeSessionId) {
+        const resolvedPath = resolve(options.resume);
+        try {
+          const resumeStart = performance.now();
+          let logOption;
+          try {
+            logOption = await loadTranscriptFromFile(resolvedPath);
+          } catch (error) {
+            if (!isENOENT(error)) throw error;
+          }
+          if (logOption) {
+            const result = await loadConversationForResume(logOption, undefined);
+            if (result) {
+              processedResume = await processResumedConversation(result, {
+                forkSession: !!options.forkSession,
+                transcriptPath: result.fullPath
+              }, resumeContext);
+              if (processedResume.restoredAgentDef) {
+                mainThreadAgentDefinition = processedResume.restoredAgentDef;
               }
-            } catch (error) {
-              logEvent('tengu_session_resumed', {
-                entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                success: false
-              });
-              logError(error);
-              await exitWithError(root, `Unable to resume from ccshare: ${errorMessage(error)}`, () => gracefulShutdown(1));
-            }
-          } else {
-            const resolvedPath = resolve(options.resume);
-            try {
-              const resumeStart = performance.now();
-              let logOption;
-              try {
-                // Attempt to load as a transcript file; ENOENT falls through to session-ID handling
-                logOption = await loadTranscriptFromFile(resolvedPath);
-              } catch (error) {
-                if (!isENOENT(error)) throw error;
-                // ENOENT: not a file path — fall through to session-ID handling
-              }
-              if (logOption) {
-                const result = await loadConversationForResume(logOption, undefined /* sourceFile */);
-                if (result) {
-                  processedResume = await processResumedConversation(result, {
-                    forkSession: !!options.forkSession,
-                    transcriptPath: result.fullPath
-                  }, resumeContext);
-                  if (processedResume.restoredAgentDef) {
-                    mainThreadAgentDefinition = processedResume.restoredAgentDef;
-                  }
-                  logEvent('tengu_session_resumed', {
-                    entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                    success: true,
-                    resume_duration_ms: Math.round(performance.now() - resumeStart)
-                  });
-                } else {
-                  logEvent('tengu_session_resumed', {
-                    entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                    success: false
-                  });
-                }
-              }
-            } catch (error) {
               logEvent('tengu_session_resumed', {
                 entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                success: false
+                success: true,
+                resume_duration_ms: Math.round(performance.now() - resumeStart)
               });
-              logError(error);
-              await exitWithError(root, `Unable to load transcript from file: ${options.resume}`, () => gracefulShutdown(1));
             }
           }
+        } catch (error) {
+          logEvent('tengu_session_resumed', {
+            entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+            success: false
+          });
+          logError(error);
+          await exitWithError(root, `Unable to load transcript from file: ${options.resume}`, () => gracefulShutdown(1));
         }
       }
 
@@ -2741,7 +2297,6 @@ async function run(): Promise<CommanderCommand> {
       } : undefined);
       if (resumeData) {
         maybeActivateProactive(options);
-        maybeActivateBrief(options);
         await launchRepl(root, {
           getFpsMetrics,
           stats,
@@ -2777,7 +2332,6 @@ async function run(): Promise<CommanderCommand> {
       const pendingHookMessages = hooksPromise && hookMessages.length === 0 ? hooksPromise : undefined;
       profileCheckpoint('action_after_hooks');
       maybeActivateProactive(options);
-      maybeActivateBrief(options);
       // Persist the current mode for fresh sessions so future resumes know what mode was used
       if (feature('COORDINATOR_MODE')) {
         saveMode(coordinatorModeModule?.isCoordinatorMode() ? 'coordinator' : 'normal');
@@ -2789,24 +2343,7 @@ async function run(): Promise<CommanderCommand> {
       // confirmation, so this is the only signal the user gets that the
       // prompt — and the working directory / CLAUDE.md it implies — came
       // from an external source rather than something they typed.
-      let deepLinkBanner: ReturnType<typeof createSystemMessage> | null = null;
-      if (feature('LODESTONE')) {
-        if (options.deepLinkOrigin) {
-          logEvent('tengu_deep_link_opened', {
-            has_prefill: Boolean(options.prefill),
-            has_repo: Boolean(options.deepLinkRepo)
-          });
-          deepLinkBanner = createSystemMessage(buildDeepLinkBanner({
-            cwd: getCwd(),
-            prefillLength: options.prefill?.length,
-            repo: options.deepLinkRepo,
-            lastFetch: options.deepLinkLastFetch !== undefined ? new Date(options.deepLinkLastFetch) : undefined
-          }), 'warning');
-        } else if (options.prefill) {
-          deepLinkBanner = createSystemMessage('Launched with a pre-filled prompt — review it before pressing Enter.', 'warning');
-        }
-      }
-      const initialMessages = deepLinkBanner ? [deepLinkBanner, ...hookMessages] : hookMessages.length > 0 ? hookMessages : undefined;
+      const initialMessages = hookMessages.length > 0 ? hookMessages : undefined;
       await launchRepl(root, {
         getFpsMetrics,
         stats,
@@ -2825,32 +2362,15 @@ async function run(): Promise<CommanderCommand> {
   if (canUserConfigureAdvisor()) {
     program.addOption(new Option('--advisor <model>', 'Enable the server-side advisor tool with the specified model (alias or full ID).').hideHelp());
   }
-  if ("external" === 'ant') {
-    program.addOption(new Option('--delegate-permissions', '[ANT-ONLY] Alias for --permission-mode auto.').implies({
-      permissionMode: 'auto'
-    }));
-    program.addOption(new Option('--dangerously-skip-permissions-with-classifiers', '[ANT-ONLY] Deprecated alias for --permission-mode auto.').hideHelp().implies({
-      permissionMode: 'auto'
-    }));
-    program.addOption(new Option('--afk', '[ANT-ONLY] Deprecated alias for --permission-mode auto.').hideHelp().implies({
-      permissionMode: 'auto'
-    }));
-    program.addOption(new Option('--tasks [id]', '[ANT-ONLY] Tasks mode: watch for tasks and auto-process them. Optional id is used as both the task list ID and agent ID (defaults to "tasklist").').argParser(String).hideHelp());
-    program.option('--agent-teams', '[ANT-ONLY] Force Claude to use multi-agent mode for solving problems', () => true);
-  }
+  program.addOption(new Option('--tasks [id]', 'Watch a task list and automatically process available tasks.').argParser(String));
+  program.option('--agent-teams', 'Enable multi-agent mode for this session', () => true);
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     program.addOption(new Option('--enable-auto-mode', 'Opt in to auto mode').hideHelp());
   }
-  if (feature('PROACTIVE') || feature('KAIROS')) {
+  if (feature('PROACTIVE')) {
     program.addOption(new Option('--proactive', 'Start in proactive autonomous mode'));
   }
-  if (feature('UDS_INBOX')) {
-    program.addOption(new Option('--messaging-socket-path <path>', 'Unix domain socket path for the UDS messaging server (defaults to a tmp path)'));
-  }
-  if (feature('KAIROS') || feature('KAIROS_BRIEF')) {
-    program.addOption(new Option('--brief', 'Enable SendUserMessage tool for agent-to-user communication'));
-  }
-  if (feature('KAIROS') || feature('KAIROS_CHANNELS')) {
+  if (feature('MCP_CHANNELS')) {
     program.addOption(new Option('--channels <servers...>', 'MCP servers whose channel notifications (inbound push) should register this session. Space-separated server names.').hideHelp());
     program.addOption(new Option('--dangerously-load-development-channels <servers...>', 'Load channel servers not on the approved allowlist. For local channel development only. Shows a confirmation dialog at startup.').hideHelp());
   }
@@ -3077,8 +2597,6 @@ async function run(): Promise<CommanderCommand> {
     } = await import('./cli/handlers/plugins.js');
     await pluginUpdateHandler(plugin, options);
   });
-  // END ANT-ONLY
-
   // Agents command - list configured agents
   program.command('agents').description('List configured agents').option('--setting-sources <sources>', 'Comma-separated list of setting sources to load (user, project, local).').action(async () => {
     const {
@@ -3139,31 +2657,6 @@ async function run(): Promise<CommanderCommand> {
     await update();
   });
 
-  // claude up — run the project's CLAUDE.md "# claude up" setup instructions.
-  if ("external" === 'ant') {
-    program.command('up').description('[ANT-ONLY] Initialize or upgrade the local dev environment using the "# claude up" section of the nearest CLAUDE.md').action(async () => {
-      const {
-        up
-      } = await import('src/cli/up.js');
-      await up();
-    });
-  }
-
-  // claude rollback (ant-only)
-  // Rolls back to previous releases
-  if ("external" === 'ant') {
-    program.command('rollback [target]').description('[ANT-ONLY] Roll back to a previous release\n\nExamples:\n  claude rollback                                    Go 1 version back from current\n  claude rollback 3                                  Go 3 versions back from current\n  claude rollback 2.0.73-dev.20251217.t190658        Roll back to a specific version').option('-l, --list', 'List recent published versions with ages').option('--dry-run', 'Show what would be installed without installing').option('--safe', 'Roll back to the server-pinned safe version (set by oncall during incidents)').action(async (target?: string, options?: {
-      list?: boolean;
-      dryRun?: boolean;
-      safe?: boolean;
-    }) => {
-      const {
-        rollback
-      } = await import('src/cli/rollback.js');
-      await rollback(target, options);
-    });
-  }
-
   // claude install
   program.command('install [target]').description('Install Claude Code native build. Use [target] to specify version (stable, latest, or specific version)').option('--force', 'Force installation even if already installed').action(async (target: string | undefined, options: {
     force?: boolean;
@@ -3174,105 +2667,6 @@ async function run(): Promise<CommanderCommand> {
     await installHandler(target, options);
   });
 
-  // ant-only commands
-  if ("external" === 'ant') {
-    const validateLogId = (value: string) => {
-      const maybeSessionId = validateUuid(value);
-      if (maybeSessionId) return maybeSessionId;
-      return Number(value);
-    };
-    // claude log
-    program.command('log').description('[ANT-ONLY] Manage conversation logs.').argument('[number|sessionId]', 'A number (0, 1, 2, etc.) to display a specific log, or the sesssion ID (uuid) of a log', validateLogId).action(async (logId: string | number | undefined) => {
-      const {
-        logHandler
-      } = await import('./cli/handlers/ant.js');
-      await logHandler(logId);
-    });
-
-    // claude error
-    program.command('error').description('[ANT-ONLY] View error logs. Optionally provide a number (0, -1, -2, etc.) to display a specific log.').argument('[number]', 'A number (0, 1, 2, etc.) to display a specific log', parseInt).action(async (number: number | undefined) => {
-      const {
-        errorHandler
-      } = await import('./cli/handlers/ant.js');
-      await errorHandler(number);
-    });
-
-    // claude export
-    program.command('export').description('[ANT-ONLY] Export a conversation to a text file.').usage('<source> <outputFile>').argument('<source>', 'Session ID, log index (0, 1, 2...), or path to a .json/.jsonl log file').argument('<outputFile>', 'Output file path for the exported text').addHelpText('after', `
-Examples:
-  $ claude export 0 conversation.txt                Export conversation at log index 0
-  $ claude export <uuid> conversation.txt           Export conversation by session ID
-  $ claude export input.json output.txt             Render JSON log file to text
-  $ claude export <uuid>.jsonl output.txt           Render JSONL session file to text`).action(async (source: string, outputFile: string) => {
-      const {
-        exportHandler
-      } = await import('./cli/handlers/ant.js');
-      await exportHandler(source, outputFile);
-    });
-    if ("external" === 'ant') {
-      const taskCmd = program.command('task').description('[ANT-ONLY] Manage task list tasks');
-      taskCmd.command('create <subject>').description('Create a new task').option('-d, --description <text>', 'Task description').option('-l, --list <id>', 'Task list ID (defaults to "tasklist")').action(async (subject: string, opts: {
-        description?: string;
-        list?: string;
-      }) => {
-        const {
-          taskCreateHandler
-        } = await import('./cli/handlers/ant.js');
-        await taskCreateHandler(subject, opts);
-      });
-      taskCmd.command('list').description('List all tasks').option('-l, --list <id>', 'Task list ID (defaults to "tasklist")').option('--pending', 'Show only pending tasks').option('--json', 'Output as JSON').action(async (opts: {
-        list?: string;
-        pending?: boolean;
-        json?: boolean;
-      }) => {
-        const {
-          taskListHandler
-        } = await import('./cli/handlers/ant.js');
-        await taskListHandler(opts);
-      });
-      taskCmd.command('get <id>').description('Get details of a task').option('-l, --list <id>', 'Task list ID (defaults to "tasklist")').action(async (id: string, opts: {
-        list?: string;
-      }) => {
-        const {
-          taskGetHandler
-        } = await import('./cli/handlers/ant.js');
-        await taskGetHandler(id, opts);
-      });
-      taskCmd.command('update <id>').description('Update a task').option('-l, --list <id>', 'Task list ID (defaults to "tasklist")').option('-s, --status <status>', `Set status (${TASK_STATUSES.join(', ')})`).option('--subject <text>', 'Update subject').option('-d, --description <text>', 'Update description').option('--owner <agentId>', 'Set owner').option('--clear-owner', 'Clear owner').action(async (id: string, opts: {
-        list?: string;
-        status?: string;
-        subject?: string;
-        description?: string;
-        owner?: string;
-        clearOwner?: boolean;
-      }) => {
-        const {
-          taskUpdateHandler
-        } = await import('./cli/handlers/ant.js');
-        await taskUpdateHandler(id, opts);
-      });
-      taskCmd.command('dir').description('Show the tasks directory path').option('-l, --list <id>', 'Task list ID (defaults to "tasklist")').action(async (opts: {
-        list?: string;
-      }) => {
-        const {
-          taskDirHandler
-        } = await import('./cli/handlers/ant.js');
-        await taskDirHandler(opts);
-      });
-    }
-
-    // claude completion <shell>
-    program.command('completion <shell>', {
-      hidden: true
-    }).description('Generate shell completion script (bash, zsh, or fish)').option('--output <file>', 'Write completion script directly to a file instead of stdout').action(async (shell: string, opts: {
-      output?: string;
-    }) => {
-      const {
-        completionHandler
-      } = await import('./cli/handlers/ant.js');
-      await completionHandler(shell, opts, program);
-    });
-  }
   profileCheckpoint('run_before_parse');
   await program.parseAsync(process.argv);
   profileCheckpoint('run_after_parse');
@@ -3351,7 +2745,6 @@ async function logTenguInit({
       dangerouslySkipPermissionsPassed,
       permissionMode: permissionMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       modeIsBypass,
-      inProtectedNamespace: isInProtectedNamespace(),
       allowDangerouslySkipPermissionsPassed,
       thinkingType: thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       ...(systemPromptFlag && {
@@ -3362,22 +2755,14 @@ async function logTenguInit({
       }),
       is_simple: isBareMode() || undefined,
       is_coordinator: feature('COORDINATOR_MODE') && coordinatorModeModule?.isCoordinatorMode() ? true : undefined,
-      autoUpdatesChannel: (getInitialSettings().autoUpdatesChannel ?? 'latest') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...("external" === 'ant' ? (() => {
-        const cwd = getCwd();
-        const gitRoot = findGitRoot(cwd);
-        const rp = gitRoot ? relative(gitRoot, cwd) || '.' : undefined;
-        return rp ? {
-          relativeProjectPath: rp as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        } : {};
-      })() : {})
+      autoUpdatesChannel: (getInitialSettings().autoUpdatesChannel ?? 'latest') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
     });
   } catch (error) {
     logError(error);
   }
 }
 function maybeActivateProactive(options: unknown): void {
-  if ((feature('PROACTIVE') || feature('KAIROS')) && ((options as {
+  if ((feature('PROACTIVE')) && ((options as {
     proactive?: boolean;
   }).proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE))) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -3386,37 +2771,6 @@ function maybeActivateProactive(options: unknown): void {
       proactiveModule.activateProactive('command');
     }
   }
-}
-function maybeActivateBrief(options: unknown): void {
-  if (!(feature('KAIROS') || feature('KAIROS_BRIEF'))) return;
-  const briefFlag = (options as {
-    brief?: boolean;
-  }).brief;
-  const briefEnv = isEnvTruthy(process.env.CLAUDE_CODE_BRIEF);
-  if (!briefFlag && !briefEnv) return;
-  // --brief / CLAUDE_CODE_BRIEF are explicit opt-ins: check entitlement,
-  // then set userMsgOptIn to activate the tool + prompt section. The env
-  // var also grants entitlement (isBriefEntitled() reads it), so setting
-  // CLAUDE_CODE_BRIEF=1 alone force-enables for dev/testing — no GB gate
-  // needed. initialIsBriefOnly reads getUserMsgOptIn() directly.
-  // Conditional require: static import would leak the tool name string
-  // into external builds via BriefTool.ts → prompt.ts.
-  /* eslint-disable @typescript-eslint/no-require-imports */
-  const {
-    isBriefEntitled
-  } = require('./tools/BriefTool/BriefTool.js') as typeof import('./tools/BriefTool/BriefTool.js');
-  /* eslint-enable @typescript-eslint/no-require-imports */
-  const entitled = isBriefEntitled();
-  if (entitled) {
-    setUserMsgOptIn(true);
-  }
-  // Fire unconditionally once intent is seen: enabled=false captures the
-  // "user tried but was gated" failure mode in Datadog.
-  logEvent('tengu_brief_mode_enabled', {
-    enabled: entitled,
-    gated: !entitled,
-    source: (briefEnv ? 'env' : 'flag') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-  });
 }
 function resetCursor() {
   const terminal = process.stderr.isTTY ? process.stderr : process.stdout.isTTY ? process.stdout : undefined;

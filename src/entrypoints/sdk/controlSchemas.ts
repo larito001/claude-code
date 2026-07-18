@@ -10,7 +10,7 @@
 import { z } from 'zod/v4'
 import { lazySchema } from '../../utils/lazySchema.js'
 import {
-  AccountInfoSchema,
+  ApiBackendInfoSchema,
   AgentDefinitionSchema,
   AgentInfoSchema,
   FastModeStateSchema,
@@ -30,10 +30,11 @@ import {
 } from './coreSchemas.js'
 
 // ============================================================================
-// External Type Placeholders
+// Opaque External Payload Schemas
 // ============================================================================
 
-// JSONRPCMessage from @modelcontextprotocol/sdk - treat as unknown
+// JSONRPCMessage is versioned by @modelcontextprotocol/sdk and passes through
+// this protocol unchanged, so runtime validation intentionally stays open.
 export const JSONRPCMessagePlaceholder = lazySchema(() => z.unknown())
 
 // ============================================================================
@@ -82,7 +83,9 @@ export const SDKControlInitializeResponseSchema = lazySchema(() =>
       output_style: z.string(),
       available_output_styles: z.array(z.string()),
       models: z.array(ModelInfoSchema()),
-      account: AccountInfoSchema(),
+      // Field name retained for Claude Agent SDK wire compatibility. The
+      // payload contains API backend metadata, not a logged-in account.
+      account: ApiBackendInfoSchema(),
       pid: z
         .number()
         .optional()
@@ -90,7 +93,7 @@ export const SDKControlInitializeResponseSchema = lazySchema(() =>
       fast_mode_state: FastModeStateSchema().optional(),
     })
     .describe(
-      'Response from session initialization with available commands, models, and account info.',
+      'Response from session initialization with available commands, models, and API backend info.',
     ),
 )
 
@@ -501,8 +504,8 @@ export const SDKControlGetSettingsResponseSchema = lazySchema(() =>
       applied: z
         .object({
           model: z.string(),
-          // String levels only — numeric effort is ant-only and the
-          // Zod→proto generator can't emit enum∪number unions.
+          // The public SDK exposes string effort levels only; the
+          // Zod→proto generator also cannot emit enum∪number unions.
           effort: z.enum(['low', 'medium', 'high', 'max']).nullable(),
         })
         .optional()

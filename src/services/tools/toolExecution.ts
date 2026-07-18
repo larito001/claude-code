@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type {
   ContentBlockParam,
   ToolResultBlockParam,
@@ -81,10 +81,6 @@ import type {
   PermissionDecisionReason,
   PermissionResult,
 } from '../../utils/permissions/PermissionResult.js'
-import {
-  startSessionActivity,
-  stopSessionActivity,
-} from '../../utils/sessionActivity.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { Stream } from '../../utils/stream.js'
 import { logOTelEvent } from '../../utils/telemetry/events.js'
@@ -139,7 +135,7 @@ const SLOW_PHASE_LOG_THRESHOLD_MS = 2000
 /**
  * Classify a tool execution error into a telemetry-safe string.
  *
- * In minified/external builds, `error.constructor.name` is mangled into
+ * In minified builds, `error.constructor.name` may be mangled into
  * short identifiers like "nJT" or "Chq" — useless for diagnostics.
  * This function extracts structured, telemetry-safe information instead:
  * - TelemetrySafeError: use its telemetryMessage (already vetted)
@@ -277,7 +273,6 @@ export type McpServerType =
   | 'sdk'
   | 'sse-ide'
   | 'ws-ide'
-  | 'claudeai-proxy'
   | undefined
 
 function findMcpServerConnection(
@@ -294,7 +289,7 @@ function findMcpServerConnection(
   }
 
   // mcpInfo.serverName is normalized (e.g., "claude_ai_Slack"), but client.name
-  // is the original name (e.g., "claude.ai Slack"). Normalize both for comparison.
+  // may use a legacy hosted prefix. Normalize both for comparison.
   return mcpClients.find(
     client => normalizeNameForMCP(client.name) === mcpInfo.serverName,
   )
@@ -871,7 +866,7 @@ async function checkPermissionsAndCallTool(
 
   // Emit PreToolUse summary immediately so it's visible while the tool executes.
   // Use wall-clock time (not sum of individual durations) since hooks run in parallel.
-  if (process.env.USER_TYPE === 'ant' && preToolHookInfos.length > 0) {
+  if (preToolHookInfos.length > 0) {
     if (preToolHookDurationMs > HOOK_TIMING_DISPLAY_THRESHOLD_MS) {
       resultingMessages.push({
         message: createStopHookSummaryMessage(
@@ -1177,7 +1172,6 @@ async function checkPermissionsAndCallTool(
 
   const startTime = Date.now()
 
-  startSessionActivity('tool_exec')
   // If processedInput still points at the backfill clone, no hook/permission
   // replaced it — pass the pre-backfill callInput so call() sees the model's
   // original field values. Otherwise converge on the hook-supplied input.
@@ -1543,7 +1537,7 @@ async function checkPermissionsAndCallTool(
 
     // Show PostToolUse hook timing inline below tool result when > 500ms.
     // Use wall-clock time (not sum of individual durations) since hooks run in parallel.
-    if (process.env.USER_TYPE === 'ant' && postToolHookInfos.length > 0) {
+    if (postToolHookInfos.length > 0) {
       if (postToolHookDurationMs > HOOK_TIMING_DISPLAY_THRESHOLD_MS) {
         resultingMessages.push({
           message: createStopHookSummaryMessage(
@@ -1736,7 +1730,6 @@ async function checkPermissionsAndCallTool(
       ...hookMessages,
     ]
   } finally {
-    stopSessionActivity('tool_exec')
     // Clean up decision info after logging
     if (decisionInfo) {
       toolUseContext.toolDecisions?.delete(toolUseID)

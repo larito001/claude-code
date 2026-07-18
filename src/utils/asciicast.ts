@@ -17,16 +17,13 @@ const recordingState: { filePath: string | null; timestamp: number } = {
 
 /**
  * Get the asciicast recording file path.
- * For ants with CLAUDE_CODE_TERMINAL_RECORDING=1: returns a path.
+ * When CLAUDE_CODE_TERMINAL_RECORDING=1: returns a path.
  * Otherwise: returns null.
  * The path is computed once and cached in recordingState.
  */
 export function getRecordFilePath(): string | null {
   if (recordingState.filePath !== null) {
     return recordingState.filePath
-  }
-  if (process.env.USER_TYPE !== 'ant') {
-    return null
   }
   if (!isEnvTruthy(process.env.CLAUDE_CODE_TERMINAL_RECORDING)) {
     return null
@@ -57,7 +54,7 @@ export function getSessionRecordingPaths(): string[] {
   const projectsDir = join(getClaudeConfigHomeDir(), 'projects')
   const projectDir = join(projectsDir, sanitizePath(getOriginalCwd()))
   try {
-    // eslint-disable-next-line custom-rules/no-sync-fs -- called during /share before upload, not in hot path
+    // eslint-disable-next-line custom-rules/no-sync-fs -- diagnostic discovery is not a hot path
     const entries = getFsImplementation().readdirSync(projectDir)
     const names = (
       typeof entries[0] === 'string'
@@ -126,7 +123,7 @@ function getTerminalSize(): { cols: number; rows: number } {
 
 /**
  * Flush pending recording data to disk.
- * Call before reading the .cast file (e.g., during /share).
+ * Call before reading or exporting the .cast file.
  */
 export async function flushAsciicastRecorder(): Promise<void> {
   await recorder?.flush()

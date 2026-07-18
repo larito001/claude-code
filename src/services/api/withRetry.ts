@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import type Anthropic from '@anthropic-ai/sdk'
 import {
   APIConnectionError,
@@ -17,7 +17,6 @@ import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
 import {
   type CooldownReason,
-  handleFastModeOverageRejection,
   handleFastModeRejectedByAPI,
   isFastModeCooldown,
   isFastModeEnabled,
@@ -32,10 +31,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import {
-  checkMockRateLimitError,
-  isMockRateLimitError,
-} from '../rateLimitMocking.js'
 import { REPEATED_529_ERROR_MESSAGE } from './errors.js'
 import { extractConnectionErrorDetails } from './errorUtils.js'
 
@@ -67,8 +62,7 @@ const FOREGROUND_529_RETRY_SOURCES = new Set<QuerySource>([
   'side_question',
   // Security classifiers — must complete for auto-mode correctness.
   // yoloClassifier.ts uses 'auto_mode' (not 'yolo_classifier' — that's
-  // type-only). bash_classifier is ant-only; feature-gate so the string
-  // tree-shakes out of external builds (excluded-strings.txt).
+  // type-only). The Bash classifier remains independently feature-gated.
   'auto_mode',
   ...(feature('BASH_CLASSIFIER') ? (['bash_classifier'] as const) : []),
 ])
@@ -80,11 +74,11 @@ function shouldRetry529(querySource: QuerySource | undefined): boolean {
   )
 }
 
-// CLAUDE_CODE_UNATTENDED_RETRY: for unattended sessions (ant-only). Retries 429/529
+// CLAUDE_CODE_UNATTENDED_RETRY: opt-in behavior for unattended sessions. Retries 429/529
 // indefinitely with higher backoff and periodic keep-alive yields so the host
 // environment does not mark the session idle mid-wait.
-// TODO(ANT-344): the keep-alive via SystemAPIErrorMessage yields is a stopgap
-// until there's a dedicated keep-alive channel.
+// Keep-alive currently uses SystemAPIErrorMessage yields; a dedicated host
+// keep-alive channel can replace this without changing retry semantics.
 const PERSISTENT_MAX_BACKOFF_MS = 5 * 60 * 1000
 const PERSISTENT_RESET_CAP_MS = 6 * 60 * 60 * 1000
 const HEARTBEAT_INTERVAL_MS = 30_000
@@ -190,20 +184,8 @@ export async function* withRetry<T>(
       : false
 
     try {
-      // Check for mock rate limits (used by /mock-limits command for Ant employees)
-      if (process.env.USER_TYPE === 'ant') {
-        const mockError = checkMockRateLimitError(
-          retryContext.model,
-          wasFastModeActive,
-        )
-        if (mockError) {
-          throw mockError
-        }
-      }
-
       // Get a fresh client instance on first attempt or after authentication errors
-      // - 401 for first-party API authentication failures
-      // - 403 "OAuth token has been revoked" (another process refreshed the token)
+      // - 401 for first-party API-key authentication failures
       // - Bedrock-specific auth errors (403 or CredentialsProviderError)
       // - Vertex-specific auth errors (credential refresh failures, 401)
       // - ECONNRESET/EPIPE: stale keep-alive socket; disable pooling and reconnect
@@ -251,17 +233,6 @@ export async function* withRetry<T>(
         error instanceof APIError &&
         (error.status === 429 || is529Error(error))
       ) {
-        // If the 429 is specifically because extra usage (overage) is not
-        // available, permanently disable fast mode with a specific message.
-        const overageReason = error.headers?.get(
-          'anthropic-ratelimit-unified-overage-disabled-reason',
-        )
-        if (overageReason !== null && overageReason !== undefined) {
-          handleFastModeOverageRejection(overageReason)
-          retryContext.fastMode = false
-          continue
-        }
-
         const retryAfterMs = getRetryAfterMs(error)
         if (retryAfterMs !== null && retryAfterMs < SHORT_RETRY_THRESHOLD_MS) {
           // Short retry-after: wait and retry with fast mode still active
@@ -310,7 +281,7 @@ export async function* withRetry<T>(
         // If FALLBACK_FOR_ALL_PRIMARY_MODELS is not set, fall through only if the primary model is a non-custom Opus model.
         // TODO: Revisit if the isNonCustomOpusModel check should still exist, or if isNonCustomOpusModel is a stale artifact of when Claude Code was hardcoded on Opus.
         (process.env.FALLBACK_FOR_ALL_PRIMARY_MODELS ||
-          (!false && isNonCustomOpusModel(options.model)))
+          isNonCustomOpusModel(options.model))
       ) {
         consecutive529Errors++
         if (consecutive529Errors >= MAX_529_RETRIES) {
@@ -332,7 +303,6 @@ export async function* withRetry<T>(
           }
 
           if (
-            process.env.USER_TYPE === 'external' &&
             !process.env.IS_SANDBOX &&
             !isPersistentRetryEnabled()
           ) {
@@ -667,25 +637,8 @@ function handleGcpCredentialError(error: unknown): boolean {
 }
 
 function shouldRetry(error: APIError): boolean {
-  // Never retry mock errors - they're from /mock-limits command for testing
-  if (isMockRateLimitError(error)) {
-    return false
-  }
-
-  // Persistent mode: 429/529 always retryable, bypass subscriber gates and
-  // x-should-retry header.
+  // Persistent mode: 429/529 always retryable and bypass x-should-retry.
   if (isPersistentRetryEnabled() && isTransientCapacityError(error)) {
-    return true
-  }
-
-  // CCR mode: auth is via infrastructure-provided JWTs, so a 401/403 is a
-  // transient blip (auth service flap, network hiccup) rather than bad
-  // credentials. Bypass x-should-retry:false — the server assumes we'd retry
-  // the same bad key, but our key is fine.
-  if (
-    isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) &&
-    (error.status === 401 || error.status === 403)
-  ) {
     return true
   }
 
@@ -705,22 +658,12 @@ function shouldRetry(error: APIError): boolean {
   const shouldRetryHeader = error.headers?.get('x-should-retry')
 
   // If the server explicitly says whether or not to retry, obey.
-  // For Max and Pro users, should-retry is true, but in several hours, so we shouldn't.
-  // Enterprise users can retry because they typically use PAYG instead of rate limits.
-  if (
-    shouldRetryHeader === 'true' &&
-    (!false || false)
-  ) {
+  if (shouldRetryHeader === 'true') {
     return true
   }
 
-  // Ants can ignore x-should-retry: false for 5xx server errors only.
-  // For other status codes (401, 403, 400, 429, etc.), respect the header.
   if (shouldRetryHeader === 'false') {
-    const is5xxError = error.status !== undefined && error.status >= 500
-    if (!(process.env.USER_TYPE === 'ant' && is5xxError)) {
-      return false
-    }
+    return false
   }
 
   if (error instanceof APIConnectionError) {
@@ -735,10 +678,9 @@ function shouldRetry(error: APIError): boolean {
   // Retry on lock timeouts.
   if (error.status === 409) return true
 
-  // Retry on rate limits, but not for ClaudeAI Subscription users
-  // Enterprise users can retry because they typically use PAYG instead of rate limits
+  // API-key providers may use Retry-After for transient rate limits.
   if (error.status === 429) {
-    return !false || false
+    return true
   }
 
   // Clear API key cache on 401 and allow retry.

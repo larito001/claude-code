@@ -47,15 +47,9 @@ export function applySettingsChange(
       updatedRules,
     )
 
-    // Ant-only: re-strip overly broad Bash allow rules after settings sync
-    if (
-      process.env.USER_TYPE === 'ant' &&
-      process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent'
-    ) {
-      const overlyBroad = findOverlyBroadBashPermissions(updatedRules, [])
-      if (overlyBroad.length > 0) {
-        newContext = removeDangerousPermissions(newContext, overlyBroad)
-      }
+    const overlyBroad = findOverlyBroadBashPermissions(updatedRules, [])
+    if (overlyBroad.length > 0) {
+      newContext = removeDangerousPermissions(newContext, overlyBroad)
     }
 
     if (
@@ -80,7 +74,7 @@ export function applySettingsChange(
       settings: newSettings,
       toolPermissionContext: newContext,
       // Only propagate a defined new value — when the disk key is absent
-      // (e.g. /effort max for non-ants writes undefined; --effort CLI flag),
+      // (e.g. /effort max writes undefined; --effort CLI flag),
       // prev.settings.effortLevel can be stale (internal writes suppress the
       // watcher that would resync AppState.settings), so effortChanged would
       // be true and we'd wipe a session-scoped value held in effortValue.

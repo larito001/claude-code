@@ -1,4 +1,3 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import type {
   ToolResultBlockParam,
   ToolUseBlock,
@@ -7,18 +6,9 @@ import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import { FallbackTriggeredError } from './services/api/withRetry.js'
 import {
   calculateTokenWarningState,
-  isAutoCompactEnabled,
   type AutoCompactTrackingState,
 } from './services/compact/autoCompact.js'
 import { buildPostCompactMessages } from './services/compact/compact.js'
-/* eslint-disable @typescript-eslint/no-require-imports */
-const reactiveCompact = feature('REACTIVE_COMPACT')
-  ? (require('./services/compact/reactiveCompact.js') as typeof import('./services/compact/reactiveCompact.js'))
-  : null
-const contextCollapse = feature('CONTEXT_COLLAPSE')
-  ? (require('./services/contextCollapse/index.js') as typeof import('./services/contextCollapse/index.js'))
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
 import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -38,11 +28,8 @@ import type {
   TombstoneMessage,
 } from './types/message.js'
 import { logError } from './utils/log.js'
-import {
-  PROMPT_TOO_LONG_ERROR_MESSAGE,
-  isPromptTooLongMessage,
-} from './services/api/errors.js'
-import { logAntError, logForDebugging } from './utils/debug.js'
+import { PROMPT_TOO_LONG_ERROR_MESSAGE } from './services/api/errors.js'
+import { logDebugError, logForDebugging } from './utils/debug.js'
 import {
   createUserMessage,
   createUserInterruptionMessage,
@@ -51,7 +38,6 @@ import {
   createAssistantAPIErrorMessage,
   getMessagesAfterCompactBoundary,
   createToolUseSummaryMessage,
-  createMicrocompactBoundaryMessage,
   stripSignatureBlocks,
 } from './utils/messages.js'
 import { generateToolUseSummary } from './services/toolUseSummary/toolUseSummaryGenerator.js'
@@ -62,14 +48,6 @@ import {
   getAttachmentMessages,
   startRelevantMemoryPrefetch,
 } from './utils/attachments.js'
-/* eslint-disable @typescript-eslint/no-require-imports */
-const skillPrefetch = feature('EXPERIMENTAL_SKILL_SEARCH')
-  ? (require('./services/skillSearch/prefetch.js') as typeof import('./services/skillSearch/prefetch.js'))
-  : null
-const jobClassifier = feature('TEMPLATES')
-  ? (require('./jobs/classifier.js') as typeof import('./jobs/classifier.js'))
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
 import {
   remove as removeFromQueue,
   getCommandsByMaxPriority,
@@ -92,7 +70,6 @@ import { SLEEP_TOOL_NAME } from './tools/SleepTool/prompt.js'
 import { executePostSamplingHooks } from './utils/hooks/postSamplingHooks.js'
 import { executeStopFailureHooks } from './utils/hooks.js'
 import type { QuerySource } from './constants/querySource.js'
-import { createDumpPromptsFetch } from './services/api/dumpPrompts.js'
 import { StreamingToolExecutor } from './services/tools/StreamingToolExecutor.js'
 import { queryCheckpoint } from './utils/queryProfiler.js'
 import { runTools } from './services/tools/toolOrchestration.js'
@@ -102,7 +79,7 @@ import { handleStopHooks } from './query/stopHooks.js'
 import { buildQueryConfig } from './query/config.js'
 import { productionDeps, type QueryDeps } from './query/deps.js'
 import type { Terminal, Continue } from './query/transitions.js'
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import {
   getCurrentTurnTokenBudget,
   getTurnOutputTokens,
@@ -110,15 +87,6 @@ import {
 } from './bootstrap/state.js'
 import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
-
-/* eslint-disable @typescript-eslint/no-require-imports */
-const snipModule = feature('HISTORY_SNIP')
-  ? (require('./services/compact/snipCompact.js') as typeof import('./services/compact/snipCompact.js'))
-  : null
-const taskSummaryModule = feature('BG_SESSIONS')
-  ? (require('./utils/taskSummary.js') as typeof import('./utils/taskSummary.js'))
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
 
 function* yieldMissingToolResultBlocks(
   assistantMessages: AssistantMessage[],
@@ -170,7 +138,8 @@ const MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3
  * cowork/desktop）在任何“错误”字段上终止会话 -
  * 恢复循环继续运行，但没有人在听。
  *
- * 镜像reactiveCompact.isWithheldPromptTooLong。
+ * The message is withheld while the bounded recovery loop decides whether
+ * the response can continue.
  */
 function isWithheldMaxOutputTokens(
   msg: Message | StreamEvent | undefined,
@@ -206,7 +175,6 @@ type State = {
   toolUseContext: ToolUseContext
   autoCompactTracking: AutoCompactTrackingState | undefined
   maxOutputTokensRecoveryCount: number
-  hasAttemptedReactiveCompact: boolean
   maxOutputTokensOverride: number | undefined
   pendingToolUseSummary: Promise<ToolUseSummaryMessage | null> | undefined
   stopHookActive: boolean | undefined
@@ -272,7 +240,6 @@ async function* queryLoop(
     autoCompactTracking: undefined,
     stopHookActive: undefined,
     maxOutputTokensRecoveryCount: 0,
-    hasAttemptedReactiveCompact: false,
     turnCount: 1,
     pendingToolUseSummary: undefined,
     transition: undefined,
@@ -313,26 +280,11 @@ async function* queryLoop(
       messages,
       autoCompactTracking,
       maxOutputTokensRecoveryCount,
-      hasAttemptedReactiveCompact,
       maxOutputTokensOverride,
       pendingToolUseSummary,
       stopHookActive,
       turnCount,
     } = state
-
-    // 技能发现预取 - 每次迭代（使用 findWritePivot 防护
-    // 在非写迭代中尽早返回）。 Discovery 运行时
-    // 模型流和工具执行；期待后期工具
-    // 内存预取消耗。替换阻塞的 Assistant_turn 路径
-    // 在 getAttachmentMessages 中运行（97％的调用发现
-    // 产品中没有任何内容）。 Turn-0 用户输入发现仍然受阻
-    // userInputAttachments — 这是一个没有先验信号的信号
-    // 工作躲在下面。
-    const pendingSkillPrefetch = skillPrefetch?.startSkillDiscoveryPrefetch(
-      null,
-      messages,
-      toolUseContext,
-    )
 
     yield { type: 'stream_request_start' }
 
@@ -393,22 +345,6 @@ async function* queryLoop(
       ),
     )
 
-    // 在 microcompact 之前应用 snip（两者都可以运行 - 它们并不相互排斥）。
-    // snipTokensFreed 已检测到自动压缩，因此其阈值检查反映了
-    // 删除了什么剪裁；单独tokenCountWithEstimation看不到（读取用法
-    // 来自受保护的尾巴助手，它在剪断后仍然保持不变）。
-    let snipTokensFreed = 0
-    if (feature('HISTORY_SNIP')) {
-      queryCheckpoint('query_snip_start')
-      const snipResult = snipModule!.snipCompactIfNeeded(messagesForQuery)
-      messagesForQuery = snipResult.messages
-      snipTokensFreed = snipResult.tokensFreed
-      if (snipResult.boundaryMessage) {
-        yield snipResult.boundaryMessage
-      }
-      queryCheckpoint('query_snip_end')
-    }
-
     // 在 autocompact 之前应用 microcompact
     queryCheckpoint('query_microcompact_start')
     const microcompactResult = await deps.microcompact(
@@ -417,34 +353,7 @@ async function* queryLoop(
       querySource,
     )
     messagesForQuery = microcompactResult.messages
-    // For cached microcompact (cache editing), defer boundary message until after
-    // API 响应，以便我们可以使用实际的cache_deleted_input_tokens。
-    // 在 feature() 后面进行门控，以便从外部构建中消除该字符串。
-    const pendingCacheEdits = feature('CACHED_MICROCOMPACT')
-      ? microcompactResult.compactionInfo?.pendingCacheEdits
-      : undefined
     queryCheckpoint('query_microcompact_end')
-
-    // 投影折叠的上下文视图并可能提交更多折叠。
-    // 在 autocompact 之前运行，这样如果崩溃使我们处于
-    // autocompact 阈值，autocompact 是一个无操作，我们保持粒度
-    // 上下文而不是单个摘要。
-    //
-    // 没有产生任何结果——折叠的视图是读取时的投影
-    // 回顾 REPL 的完整历史。摘要消息存在于崩溃中
-    // 存储，而不是 REPL 数组。这就是崩溃持续存在的原因
-    // 跨轮：projectView() 重播每个条目的提交日志。
-    // 在一个回合内，视图通过 state.messages 向前流动
-    // 继续站点（query.ts：1192），以及下一个projectView（）无操作
-    // 因为存档的消息已经从其输入中消失了。
-    if (feature('CONTEXT_COLLAPSE') && contextCollapse) {
-      const collapseResult = await contextCollapse.applyCollapsesIfNeeded(
-        messagesForQuery,
-        toolUseContext,
-        querySource,
-      )
-      messagesForQuery = collapseResult.messages
-    }
 
     const fullSystemPrompt = asSystemPrompt(
       appendSystemContext(systemPrompt, systemContext),
@@ -463,7 +372,6 @@ async function* queryLoop(
       },
       querySource,
       tracking,
-      snipTokensFreed,
     )
     queryCheckpoint('query_autocompact_end')
 
@@ -579,63 +487,21 @@ async function* queryLoop(
 
     queryCheckpoint('query_setup_end')
 
-    // 每个查询会话创建一次获取包装器以避免内存保留。
-    // 每次调用 createDumpPromptsFetch 都会创建一个捕获请求正文的闭包。
-    // 创建一次意味着只保留最新的请求体（~700KB），
-    // 而不是会话中的所有请求正文（长会话约为 500MB）。
-    // 注意：agentId 在 query() 调用期间实际上是恒定的 - 它只会改变
-    // 查询之间（例如，/clear 命令或会话恢复）。
-    const dumpPromptsFetch = config.gates.isAnt
-      ? createDumpPromptsFetch(toolUseContext.agentId ?? config.sessionId)
-      : undefined
-
     // 如果达到硬阻止限制则阻止（仅适用于自动压缩关闭时）
     // 这会保留空间，以便用户仍然可以手动运行 /compact
     // 如果压缩刚刚发生，则跳过此检查 - 压缩结果已经是
     // 验证低于阈值，并且 tokenCountWithEstimation 将使用
     // 来自保留消息的陈旧 input_tokens 反映了预压缩上下文大小。
-    // 同样的过时性也适用于 snip：减去 snipTokensFreed （否则我们会
-    // 错误地阻止了剪裁使我们处于自动压缩阈值之下的窗口
-    // 但过时的使用量仍然高于阻塞限制——在此 PR 之前
-    // 窗口从未存在过，因为 autocompact 总是在过时的计数上触发）。
     // 还要跳过紧凑/会话内存查询——这些是分叉代理，
     // 继承完整的对话，如果在这里阻塞就会死锁（紧凑的
     // 代理需要运行以减少令牌计数）。
-    // 当启用反应式压缩并且自动压缩时也跳过
-    // allowed — 抢占的合成错误在 API 调用之前返回，
-    // 因此，反应式紧凑型永远不会看到提示太长而无法做出反应。
-    // 扩展到海象，因此 RC 可以在主动失败时充当后备。
-    //
-    // 上下文崩溃的相同跳过：它的recoverFromOverflow耗尽
-    // 在 REAL API 413 上分阶段崩溃，然后下降到
-    // 反应紧凑。这里的合成抢占将在
-    // API 调用和饥饿两条恢复路径。 isAutoCompactEnabled()
-    // conjunct 保留用户明确的“不自动执行任何操作”
-    // config — 如果他们设置了 DISABLE_AUTO_COMPACT，他们就会获得抢占权。
-    let collapseOwnsIt = false
-    if (feature('CONTEXT_COLLAPSE')) {
-      collapseOwnsIt =
-        (contextCollapse?.isContextCollapseEnabled() ?? false) &&
-        isAutoCompactEnabled()
-    }
-    // 每回合提升一次媒体回收门。预扣税（内
-    // 流循环）和恢复（之后）必须一致； CACHED_MAY_BE_STALE 可以
-    // 在 5-30 秒的流中翻转，并且保留而不恢复会吃掉
-    // 消息。 PTL 没有提升，因为其预扣未设门控 —
-    // 它早于实验并且已经是控制臂基线。
-    const mediaRecoveryEnabled =
-      reactiveCompact?.isReactiveCompactEnabled() ?? false
     if (
       !compactionResult &&
       querySource !== 'compact' &&
-      querySource !== 'session_memory' &&
-      !(
-        reactiveCompact?.isReactiveCompactEnabled() && isAutoCompactEnabled()
-      ) &&
-      !collapseOwnsIt
+      querySource !== 'session_memory'
     ) {
       const { isAtBlockingLimit } = calculateTokenWarningState(
-        tokenCountWithEstimation(messagesForQuery) - snipTokensFreed,
+        tokenCountWithEstimation(messagesForQuery),
         toolUseContext.options.mainLoopModel,
       )
       if (isAtBlockingLimit) {
@@ -685,7 +551,6 @@ async function* queryLoop(
               hasAppendSystemPrompt:
                 !!toolUseContext.options.appendSystemPrompt,
               maxOutputTokensOverride,
-              fetchOverride: dumpPromptsFetch,
               mcpTools: appState.mcp.tools,
               hasPendingMcpServers: appState.mcp.clients.some(
                 c => c.type === 'pending',
@@ -793,33 +658,10 @@ async function* queryLoop(
             // 独立，因此关闭一个不会破坏另一个
             // 恢复路径。
             //
-            // feature() 仅适用于 if/三元条件 (bun:bundle
+            // Keep the experimental classifier isolated behind the runtime feature gate.
             // 树摇动约束），因此折叠检查是嵌套的
             // 而不是组成。
-            let withheld = false
-            if (feature('CONTEXT_COLLAPSE')) {
-              if (
-                contextCollapse?.isWithheldPromptTooLong(
-                  message,
-                  isPromptTooLongMessage,
-                  querySource,
-                )
-              ) {
-                withheld = true
-              }
-            }
-            if (reactiveCompact?.isWithheldPromptTooLong(message)) {
-              withheld = true
-            }
-            if (
-              mediaRecoveryEnabled &&
-              reactiveCompact?.isWithheldMediaSizeError(message)
-            ) {
-              withheld = true
-            }
-            if (isWithheldMaxOutputTokens(message)) {
-              withheld = true
-            }
+            const withheld = isWithheldMaxOutputTokens(message)
             if (!withheld) {
               yield yieldMessage
             }
@@ -863,33 +705,6 @@ async function* queryLoop(
           }
           queryCheckpoint('query_api_streaming_end')
 
-          // 使用实际 API 报告的屈服延迟微紧凑边界消息
-          // 令牌删除计数而不是客户端估计。
-          // 整个块在 feature() 之后进行门控，因此排除的字符串
-          // 从外部构建中消除。
-          if (feature('CACHED_MICROCOMPACT') && pendingCacheEdits) {
-            const lastAssistant = assistantMessages.at(-1)
-            // API 字段在请求之间是累积/粘性的，所以我们
-            // 减去此请求之前捕获的基线以获得增量。
-            const usage = lastAssistant?.message.usage
-            const cumulativeDeleted = usage
-              ? ((usage as unknown as Record<string, number>)
-                  .cache_deleted_input_tokens ?? 0)
-              : 0
-            const deletedTokens = Math.max(
-              0,
-              cumulativeDeleted - pendingCacheEdits.baselineCacheDeletedTokens,
-            )
-            if (deletedTokens > 0) {
-              yield createMicrocompactBoundaryMessage(
-                pendingCacheEdits.trigger,
-                0,
-                deletedTokens,
-                pendingCacheEdits.deletedToolIds,
-                [],
-              )
-            }
-          }
         } catch (innerError) {
           if (innerError instanceof FallbackTriggeredError && fallbackModel) {
             // 回退已触发 - 切换模型并重试
@@ -924,9 +739,7 @@ async function* queryLoop(
             // 思维签名是模型绑定的：重放受保护的思维
             // 阻止（例如水豚）到不受保护的后备（例如 opus）400 秒。
             // 在重试之前剥离，以便后备模型获得干净的历史记录。
-            if (process.env.USER_TYPE === 'ant') {
-              messagesForQuery = stripSignatureBlocks(messagesForQuery)
-            }
+            messagesForQuery = stripSignatureBlocks(messagesForQuery)
 
             // 记录后备事件
             logEvent('tengu_model_fallback_triggered', {
@@ -992,7 +805,7 @@ async function* queryLoop(
       })
 
       // To help track down bugs, log loudly for ants
-      logAntError('Query error', error)
+      logDebugError('Query error', error)
       return { reason: 'model_error', error }
     }
 
@@ -1048,126 +861,6 @@ async function* queryLoop(
     if (!needsFollowUp) {
       const lastMessage = assistantMessages.at(-1)
 
-      // Prompt-too-long recovery: the streaming loop withheld the error
-      // (see withheldByCollapse / withheldByReactive above). Try collapse
-      // drain first (cheap, keeps granular context), then reactive compact
-      // (full summary). Single-shot on each — if a retry still 413's,
-      // the next stage handles it or the error surfaces.
-      const isWithheld413 =
-        lastMessage?.type === 'assistant' &&
-        lastMessage.isApiErrorMessage &&
-        isPromptTooLongMessage(lastMessage)
-      // Media-size rejections (image/PDF/many-image) are recoverable via
-      // reactive compact's strip-retry. Unlike PTL, media errors skip the
-      // collapse drain — collapse doesn't strip images. mediaRecoveryEnabled
-      // is the hoisted gate from before the stream loop (same value as the
-      // withholding check — these two must agree or a withheld message is
-      // lost). If the oversized media is in the preserved tail, the
-      // post-compact turn will media-error again; hasAttemptedReactiveCompact
-      // prevents a spiral and the error surfaces.
-      const isWithheldMedia =
-        mediaRecoveryEnabled &&
-        reactiveCompact?.isWithheldMediaSizeError(lastMessage)
-      if (isWithheld413) {
-        // First: drain all staged context-collapses. Gated on the PREVIOUS
-        // transition not being collapse_drain_retry — if we already drained
-        // and the retry still 413'd, fall through to reactive compact.
-        if (
-          feature('CONTEXT_COLLAPSE') &&
-          contextCollapse &&
-          state.transition?.reason !== 'collapse_drain_retry'
-        ) {
-          const drained = contextCollapse.recoverFromOverflow(
-            messagesForQuery,
-            querySource,
-          )
-          if (drained.committed > 0) {
-            const next: State = {
-              messages: drained.messages,
-              toolUseContext,
-              autoCompactTracking: tracking,
-              maxOutputTokensRecoveryCount,
-              hasAttemptedReactiveCompact,
-              maxOutputTokensOverride: undefined,
-              pendingToolUseSummary: undefined,
-              stopHookActive: undefined,
-              turnCount,
-              transition: {
-                reason: 'collapse_drain_retry',
-                committed: drained.committed,
-              },
-            }
-            state = next
-            continue
-          }
-        }
-      }
-      if ((isWithheld413 || isWithheldMedia) && reactiveCompact) {
-        const compacted = await reactiveCompact.tryReactiveCompact({
-          hasAttempted: hasAttemptedReactiveCompact,
-          querySource,
-          aborted: toolUseContext.abortController.signal.aborted,
-          messages: messagesForQuery,
-          cacheSafeParams: {
-            systemPrompt,
-            userContext,
-            systemContext,
-            toolUseContext,
-            forkContextMessages: messagesForQuery,
-          },
-        })
-
-        if (compacted) {
-          // task_budget: same carryover as the proactive path above.
-          // messagesForQuery still holds the pre-compact array here (the
-          // 413-failed attempt's input).
-          if (params.taskBudget) {
-            const preCompactContext =
-              finalContextTokensFromLastResponse(messagesForQuery)
-            taskBudgetRemaining = Math.max(
-              0,
-              (taskBudgetRemaining ?? params.taskBudget.total) -
-                preCompactContext,
-            )
-          }
-
-          const postCompactMessages = buildPostCompactMessages(compacted)
-          for (const msg of postCompactMessages) {
-            yield msg
-          }
-          const next: State = {
-            messages: postCompactMessages,
-            toolUseContext,
-            autoCompactTracking: undefined,
-            maxOutputTokensRecoveryCount,
-            hasAttemptedReactiveCompact: true,
-            maxOutputTokensOverride: undefined,
-            pendingToolUseSummary: undefined,
-            stopHookActive: undefined,
-            turnCount,
-            transition: { reason: 'reactive_compact_retry' },
-          }
-          state = next
-          continue
-        }
-
-        // No recovery — surface the withheld error and exit. Do NOT fall
-        // through to stop hooks: the model never produced a valid response,
-        // so hooks have nothing meaningful to evaluate. Running stop hooks
-        // on prompt-too-long creates a death spiral: error → hook blocking
-        // → retry → error → … (the hook injects more tokens each cycle).
-        yield lastMessage
-        void executeStopFailureHooks(lastMessage, toolUseContext)
-        return { reason: isWithheldMedia ? 'image_error' : 'prompt_too_long' }
-      } else if (feature('CONTEXT_COLLAPSE') && isWithheld413) {
-        // reactiveCompact compiled out but contextCollapse withheld and
-        // couldn't recover (staged queue empty/stale). Surface. Same
-        // early-return rationale — don't fall through to stop hooks.
-        yield lastMessage
-        void executeStopFailureHooks(lastMessage, toolUseContext)
-        return { reason: 'prompt_too_long' }
-      }
-
       // Check for max_output_tokens and inject recovery message. The error
       // was withheld from the stream above; only surface it if recovery
       // exhausts.
@@ -1195,7 +888,6 @@ async function* queryLoop(
             toolUseContext,
             autoCompactTracking: tracking,
             maxOutputTokensRecoveryCount,
-            hasAttemptedReactiveCompact,
             maxOutputTokensOverride: ESCALATED_MAX_TOKENS,
             pendingToolUseSummary: undefined,
             stopHookActive: undefined,
@@ -1223,7 +915,6 @@ async function* queryLoop(
             toolUseContext,
             autoCompactTracking: tracking,
             maxOutputTokensRecoveryCount: maxOutputTokensRecoveryCount + 1,
-            hasAttemptedReactiveCompact,
             maxOutputTokensOverride: undefined,
             pendingToolUseSummary: undefined,
             stopHookActive: undefined,
@@ -1275,12 +966,6 @@ async function* queryLoop(
           toolUseContext,
           autoCompactTracking: tracking,
           maxOutputTokensRecoveryCount: 0,
-          // Preserve the reactive compact guard — if compact already ran and
-          // couldn't recover from prompt-too-long, retrying after a stop-hook
-          // blocking error will produce the same result. Resetting to false
-          // here caused an infinite loop: compact → still too long → error →
-          // stop hook blocking → compact → … burning thousands of API calls.
-          hasAttemptedReactiveCompact,
           maxOutputTokensOverride: undefined,
           pendingToolUseSummary: undefined,
           stopHookActive: true,
@@ -1316,7 +1001,6 @@ async function* queryLoop(
             toolUseContext,
             autoCompactTracking: tracking,
             maxOutputTokensRecoveryCount: 0,
-            hasAttemptedReactiveCompact: false,
             maxOutputTokensOverride: undefined,
             pendingToolUseSummary: undefined,
             stopHookActive: undefined,
@@ -1520,10 +1204,8 @@ async function* queryLoop(
     // Get queued commands snapshot before processing attachments.
     // These will be sent as attachments so Claude can respond to them in the current turn.
     //
-    // Drain pending notifications. LocalShellTask completions are 'next'
-    // (when MONITOR_TOOL is on) and drain without Sleep. Other task types
-    // (agent/workflow/framework) still default to 'later' — the Sleep flush
-    // covers those. If all task types move to 'next', this branch could go.
+    // Drain pending notifications. Shell completions can be delivered in the
+    // current turn; other task types are delivered by the normal queue flow.
     //
     // Slash commands are excluded from mid-turn drain — they must go through
     // processSlashCommand after the turn ends (via useQueueProcessor), not be
@@ -1587,19 +1269,6 @@ async function* queryLoop(
     }
 
 
-    // Inject prefetched skill discovery. collectSkillDiscoveryPrefetch emits
-    // hidden_by_main_turn — true when the prefetch resolved before this point
-    // (should be >98% at AKI@250ms / Haiku@573ms vs turn durations of 2-30s).
-    if (skillPrefetch && pendingSkillPrefetch) {
-      const skillAttachments =
-        await skillPrefetch.collectSkillDiscoveryPrefetch(pendingSkillPrefetch)
-      for (const att of skillAttachments) {
-        const msg = createAttachmentMessage(att)
-        yield msg
-        toolResults.push(msg)
-      }
-    }
-
     // Remove only commands that were actually consumed as attachments.
     // Prompt and task-notification commands are converted to attachments above.
     const consumedCommands = queuedCommandsSnapshot.filter(
@@ -1651,29 +1320,6 @@ async function* queryLoop(
     // Each time we have tool results and are about to recurse, that's a turn
     const nextTurnCount = turnCount + 1
 
-    // Periodic task summary for `claude ps` — fires mid-turn so a
-    // long-running agent still refreshes what it's working on. Gated
-    // only on !agentId so every top-level conversation (REPL, SDK, HFI,
-    // remote) generates summaries; subagents/forks don't.
-    if (feature('BG_SESSIONS')) {
-      if (
-        !toolUseContext.agentId &&
-        taskSummaryModule!.shouldGenerateTaskSummary()
-      ) {
-        taskSummaryModule!.maybeGenerateTaskSummary({
-          systemPrompt,
-          userContext,
-          systemContext,
-          toolUseContext,
-          forkContextMessages: [
-            ...messagesForQuery,
-            ...assistantMessages,
-            ...toolResults,
-          ],
-        })
-      }
-    }
-
     // Check if we've reached the max turns limit
     if (maxTurns && nextTurnCount > maxTurns) {
       yield createAttachmentMessage({
@@ -1691,7 +1337,6 @@ async function* queryLoop(
       autoCompactTracking: tracking,
       turnCount: nextTurnCount,
       maxOutputTokensRecoveryCount: 0,
-      hasAttemptedReactiveCompact: false,
       pendingToolUseSummary: nextPendingToolUseSummary,
       maxOutputTokensOverride: undefined,
       stopHookActive,

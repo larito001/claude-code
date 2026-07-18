@@ -1,5 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
-import { feature } from 'bun:bundle';
+import { feature } from 'src/utils/features.js';
 import { APIUserAbortError } from '@anthropic-ai/sdk';
 import * as React from 'react';
 import { useCallback } from 'react';
@@ -162,7 +162,7 @@ function useCanUseTool(setToolUseConfirmQueue, setToolPermissionContext) {
                 description,
                 result,
                 awaitAutomatedChecksBeforeDialog: appState.toolPermissionContext.awaitAutomatedChecksBeforeDialog,
-                channelCallbacks: feature("KAIROS") || feature("KAIROS_CHANNELS") ? appState.channelPermissionCallbacks : undefined
+                channelCallbacks: feature("MCP_CHANNELS") ? appState.channelPermissionCallbacks : undefined
               }, resolve);
               return;
             }

@@ -233,7 +233,7 @@ const T = {
     dash:'Dashboard',dashD:'Configuration overview',
     featEnabled:'Features Enabled',extensions:'Extensions',memories:'Memories',
     curModel:'Current Model',
-    featTitle:'Feature Flags',featD:'Toggle hidden capabilities. Restart to apply.',save:'Save',reset:'Reset',
+    featTitle:'Framework Capabilities',featD:'Enable supported local capabilities. Restart to apply.',save:'Save',reset:'Reset',
     modelTitle:'Model',modelD:'Configure the model and response behavior. API credentials are loaded from .env.',modelSel:'Model',effort:'Effort',auto:'Auto',default_:'Default',low:'Low',medium:'Medium',high:'High',langL:'Language',langH:'e.g. Chinese, Japanese',
     agentTitle:'Agents',agentD:'Custom personas with specialized tools and prompts.',createAgent:'Create Agent',agentName:'Name',agentDef:'Definition',edit:'Edit',delete:'Delete',noAgents:'No agents configured',noAgentsH:'Create one below to get started',
     skillTitle:'Skills',skillD:'Reusable workflows invoked via /skill-name.',createSkill:'Create Skill',skillName:'Name',skillDef:'SKILL.md Content',noSkills:'No skills configured',noSkillsH:'Create a workflow template below',
@@ -251,7 +251,7 @@ const T = {
     dash:'控制面板',dashD:'Claude Code 配置概览',
     featEnabled:'已启用功能',extensions:'扩展数量',memories:'记忆条数',
     curModel:'当前模型',
-    featTitle:'功能开关',featD:'开启或关闭隐藏功能，重启后生效。',save:'保存',reset:'重置',
+    featTitle:'框架能力',featD:'启用或关闭已支持的本地能力，重启后生效。',save:'保存',reset:'重置',
     modelTitle:'模型',modelD:'配置模型和响应行为，API 凭据从 .env 加载。',modelSel:'模型',effort:'推理深度',auto:'自动',default_:'默认',low:'低',medium:'中',high:'高',langL:'语言',langH:'例如 Chinese, Japanese',
     agentTitle:'自定义智能体',agentD:'定义拥有专属工具和提示词的 Agent 角色。',createAgent:'创建智能体',agentName:'名称',agentDef:'定义内容',edit:'编辑',delete:'删除',noAgents:'暂无智能体',noAgentsH:'在下方创建你的第一个智能体',
     skillTitle:'自定义技能',skillD:'可复用的工作流模板，通过 /skill-name 调用。',createSkill:'创建技能',skillName:'名称',skillDef:'SKILL.md 内容',noSkills:'暂无技能',noSkillsH:'在下方创建工作流模板',
@@ -269,13 +269,14 @@ const t = k => T[lang][k] || k
 function toggleLang() { lang = lang === 'en' ? 'zh' : 'en'; localStorage.setItem('cc-lang', lang); render(); loadAll(); }
 
 // ===== Feature Descriptions =====
-const FD_EN = {KAIROS:'Assistant & daily log',PROACTIVE:'Proactive autonomous mode',COORDINATOR_MODE:'Multi-agent swarms',TRANSCRIPT_CLASSIFIER:'Auto-mode classifier',BASH_CLASSIFIER:'Bash safety classifier',BUDDY:'Companion sprite',WEB_BROWSER_TOOL:'Web browser tool',AGENT_TRIGGERS:'Scheduled agents',MONITOR_TOOL:'MCP monitoring',TEAMMEM:'Team memory',EXTRACT_MEMORIES:'Memory extraction',MCP_SKILLS:'MCP skills',REVIEW_ARTIFACT:'Review artifacts',CONNECTOR_TEXT:'Connector text',DOWNLOAD_USER_SETTINGS:'Remote settings',MESSAGE_ACTIONS:'Message actions',KAIROS_CHANNELS:'Channels',KAIROS_GITHUB_WEBHOOKS:'GitHub webhooks'}
-const FD_ZH = {KAIROS:'助手和日志模式',PROACTIVE:'自主运行模式',COORDINATOR_MODE:'多 Agent 协调',TRANSCRIPT_CLASSIFIER:'自动权限分类',BASH_CLASSIFIER:'Bash 安全分类',BUDDY:'伙伴精灵',WEB_BROWSER_TOOL:'网页浏览器',AGENT_TRIGGERS:'定时 Agent',MONITOR_TOOL:'MCP 监控',TEAMMEM:'团队记忆',EXTRACT_MEMORIES:'记忆提取',MCP_SKILLS:'MCP 技能',REVIEW_ARTIFACT:'审核工件',CONNECTOR_TEXT:'连接文本',DOWNLOAD_USER_SETTINGS:'远程设置',MESSAGE_ACTIONS:'消息操作',KAIROS_CHANNELS:'频道通知',KAIROS_GITHUB_WEBHOOKS:'GitHub Webhooks'}
+const FD_EN = {AUTO_THEME:'Match the terminal color scheme',COMPACTION_REMINDERS:'Preserve critical context before compaction',HISTORY_PICKER:'Search previous prompts',HOOK_PROMPTS:'Allow hooks to request user input',MCP_RICH_OUTPUT:'Render structured MCP results',MCP_SKILLS:'Expose MCP prompts as skills',MESSAGE_ACTIONS:'Navigate and act on transcript messages',QUICK_SEARCH:'Quick file and transcript search',PROACTIVE:'Local autonomous tick loop',COORDINATOR_MODE:'Multi-agent worker coordinator'}
+const FD_ZH = {AUTO_THEME:'跟随终端配色',COMPACTION_REMINDERS:'压缩前保留关键上下文',HISTORY_PICKER:'搜索历史输入',HOOK_PROMPTS:'允许 Hook 请求用户输入',MCP_RICH_OUTPUT:'渲染结构化 MCP 结果',MCP_SKILLS:'将 MCP Prompt 暴露为 Skill',MESSAGE_ACTIONS:'浏览并操作对话消息',QUICK_SEARCH:'快速搜索文件和会话',PROACTIVE:'本地主动执行循环',COORDINATOR_MODE:'多 Agent Worker 协调'}
 const fd = k => (lang === 'zh' ? FD_ZH : FD_EN)[k] || k
 
 // ===== State =====
 let F={}, S={user:{},project:{},local:{}}, MC={}, CM={files:{}}, INFO={}
 const $ = id => document.getElementById(id)
+const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))
 const api = async(p,m,b)=>{const o={method:m||'GET'};if(b){o.headers={'Content-Type':'application/json'};o.body=JSON.stringify(b)}const r=await fetch('/api/'+p,o),d=await r.json();if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d}
 function toast(m){const el=$('toast');el.textContent=m;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
 
@@ -427,25 +428,25 @@ async function saveM(){const s={...S.user};for(const[k,id]of[['model','f-mod'],[
 async function saveP(){try{const s={...S.user};s.permissions={...(s.permissions||{}),allow:JSON.parse($('f-pa')?.value||'[]'),deny:JSON.parse($('f-pd')?.value||'[]')};await api('settings','POST',{scope:'user',settings:s});toast(t('saved'));loadS()}catch{toast(t('invalidJson'))}}
 async function saveH(){try{const s={...S.user};s.hooks=JSON.parse($('f-hk')?.value||'{}');await api('settings','POST',{scope:'user',settings:s});toast(t('saved'));loadS()}catch{toast(t('invalidJson'))}}
 
-async function loadA(){const a=await api('agents');if($('h-ag'))$('h-ag').textContent=a.length;if($('s-e')){const sk=await api('skills');$('s-e').textContent=a.length+sk.length}const el=$('a-list');if(!el)return;if(!a.length){el.innerHTML=`<div class="empty"><p>${t('noAgents')}</p><small>${t('noAgentsH')}</small></div>`;return}el.innerHTML=a.map(x=>`<div class="it"><div class="it-head"><div class="it-dot"></div><div class="it-name">${x.name.replace('.md','')} · ${x.scope}</div></div><div class="it-path">${x.path}</div><div class="it-acts"><button class="it-btn" onclick="edA('${x.name}','${x.scope}')">${t('edit')}</button><button class="it-btn del" onclick="dlA('${x.name}','${x.scope}')">${t('delete')}</button></div></div>`).join('')}
+async function loadA(){const a=await api('agents');if($('h-ag'))$('h-ag').textContent=a.length;if($('s-e')){const sk=await api('skills');$('s-e').textContent=a.length+sk.length}const el=$('a-list');if(!el)return;if(!a.length){el.innerHTML=`<div class="empty"><p>${t('noAgents')}</p><small>${t('noAgentsH')}</small></div>`;return}el.innerHTML=a.map(x=>`<div class="it"><div class="it-head"><div class="it-dot"></div><div class="it-name">${esc(x.name.replace('.md',''))} · ${esc(x.scope)}</div></div><div class="it-path">${esc(x.path)}</div><div class="it-acts"><button class="it-btn" onclick="edA('${x.name}','${x.scope}')">${t('edit')}</button><button class="it-btn del" onclick="dlA('${x.name}','${x.scope}')">${t('delete')}</button></div></div>`).join('')}
 async function mkA(){const n=$('f-an')?.value.trim();if(!n)return toast(t('enterName'));await api('agents','POST',{name:n,scope:$('f-as').value,content:$('f-ac').value});toast(t('created'));$('f-an').value='';loadA()}
 async function dlA(n,s){if(!confirm(t('delete')+'?'))return;await api('agents','DELETE',{name:n,scope:s});toast(t('deleted'));loadA()}
 async function edA(n,s){const a=await api('agents');const x=a.find(i=>i.name===n&&i.scope===s);if(x&&$('f-an')){$('f-an').value=n.replace('.md','');$('f-as').value=s;$('f-ac').value=x.content}}
 
-async function loadSk(){const s=await api('skills');const el=$('s-list');if(!el)return;if(!s.length){el.innerHTML=`<div class="empty"><p>${t('noSkills')}</p><small>${t('noSkillsH')}</small></div>`;return}el.innerHTML=s.map(x=>`<div class="it"><div class="it-head"><div class="it-dot"></div><div class="it-name">${x.name} · ${x.scope}</div></div><div class="it-path">${x.path}</div><div class="it-acts"><button class="it-btn" onclick="edS('${x.name}','${x.scope}')">${t('edit')}</button><button class="it-btn del" onclick="dlS('${x.name}','${x.scope}')">${t('delete')}</button></div></div>`).join('')}
+async function loadSk(){const s=await api('skills');const el=$('s-list');if(!el)return;if(!s.length){el.innerHTML=`<div class="empty"><p>${t('noSkills')}</p><small>${t('noSkillsH')}</small></div>`;return}el.innerHTML=s.map(x=>`<div class="it"><div class="it-head"><div class="it-dot"></div><div class="it-name">${esc(x.name)} · ${esc(x.scope)}</div></div><div class="it-path">${esc(x.path)}</div><div class="it-acts"><button class="it-btn" onclick="edS('${x.name}','${x.scope}')">${t('edit')}</button><button class="it-btn del" onclick="dlS('${x.name}','${x.scope}')">${t('delete')}</button></div></div>`).join('')}
 async function mkS(){const n=$('f-sn')?.value.trim();if(!n)return toast(t('enterName'));await api('skills','POST',{name:n,scope:$('f-ss').value,content:$('f-sc').value});toast(t('created'));$('f-sn').value='';loadSk()}
 async function dlS(n,s){if(!confirm(t('delete')+'?'))return;await api('skills','DELETE',{name:n,scope:s});toast(t('deleted'));loadSk()}
 async function edS(n,s){const sk=await api('skills');const x=sk.find(i=>i.name===n&&i.scope===s);if(x&&$('f-sn')){$('f-sn').value=n;$('f-ss').value=s;$('f-sc').value=x.content}}
 
-async function loadMc(){MC=await api('mcp');const sv=Object.entries(MC.mcpServers||{});if($('h-mcp'))$('h-mcp').textContent=sv.length;const el=$('m-list');if(!el)return;if(!sv.length){el.innerHTML=`<div class="empty"><p>${t('noMcp')}</p><small>${t('noMcpH')}</small></div>`;return}el.innerHTML=sv.map(([n,c])=>`<div class="it"><div class="it-head"><div class="it-dot"></div><div class="it-name">${n}</div></div><div class="it-path">${c.type||'stdio'} · ${c.command||c.url||''}</div><div class="it-acts"><button class="it-btn del" onclick="dlMcp('${n}')">${t('remove')}</button></div></div>`).join('')}
+async function loadMc(){MC=await api('mcp');const sv=Object.entries(MC.mcpServers||{});if($('h-mcp'))$('h-mcp').textContent=sv.length;const el=$('m-list');if(!el)return;if(!sv.length){el.innerHTML=`<div class="empty"><p>${t('noMcp')}</p><small>${t('noMcpH')}</small></div>`;return}el.innerHTML=sv.map(([n,c])=>`<div class="it"><div class="it-head"><div class="it-dot"></div><div class="it-name">${esc(n)}</div></div><div class="it-path">${esc(c.type||'stdio')} · ${esc(c.command||c.url||'')}</div><div class="it-acts"><button class="it-btn del" onclick="dlMcp('${encodeURIComponent(n)}')">${t('remove')}</button></div></div>`).join('')}
 async function mkMcp(){const n=$('f-mn')?.value.trim(),tp=$('f-mt')?.value;if(!n)return toast(t('enterName'));const c={...MC};if(!c.mcpServers)c.mcpServers={};if(tp==='stdio'){const p=$('f-mc').value.trim().split(/\s+/);c.mcpServers[n]={type:'stdio',command:p[0],args:p.slice(1)}}else c.mcpServers[n]={type:tp,url:$('f-mu').value.trim()};await api('mcp','POST',c);toast(t('added'));$('f-mn').value='';loadMc()}
-async function dlMcp(n){if(!confirm(t('remove')+'?'))return;const c={...MC};delete c.mcpServers[n];await api('mcp','POST',c);toast(t('removed'));loadMc()}
+async function dlMcp(n){if(!confirm(t('remove')+'?'))return;n=decodeURIComponent(n);const c={...MC};delete c.mcpServers[n];await api('mcp','POST',c);toast(t('removed'));loadMc()}
 
 function switchCm(){const x=CM.files?.[$('f-cmt')?.value];if(x){$('f-cm').value=x.content;$('cm-path').textContent=x.path}}
 async function loadCm(){CM=await api('claudemd');if(!$('f-cmt'))return;const selected=Object.entries(CM.files||{}).find(([,x])=>x.path===CM.path)?.[0]||'project';$('f-cmt').value=selected;switchCm()}
 async function saveCm(){const target=$('f-cmt').value;await api('claudemd','POST',{target,content:$('f-cm').value});toast(t('saved'));await loadCm()}
 
-async function loadMem(){const m=await api('memory');if($('s-m'))$('s-m').textContent=m.length;const el=$('mem-g');if(!el)return;if(!m.length){el.innerHTML=`<div class="empty" style="grid-column:1/-1"><p>${t('noMem')}</p><small>${t('noMemH')}</small></div>`;return}el.innerHTML=m.map(x=>`<div class="mem-c"><h4>${x.name}</h4><pre>${x.content.replace(/</g,'&lt;')}</pre></div>`).join('')}
+async function loadMem(){const m=await api('memory');if($('s-m'))$('s-m').textContent=m.length;const el=$('mem-g');if(!el)return;if(!m.length){el.innerHTML=`<div class="empty" style="grid-column:1/-1"><p>${t('noMem')}</p><small>${t('noMemH')}</small></div>`;return}el.innerHTML=m.map(x=>`<div class="mem-c"><h4>${esc(x.name)}</h4><pre>${esc(x.content)}</pre></div>`).join('')}
 
 async function loadAll(){await Promise.all([loadF(),loadS(),loadInfo(),loadA(),loadSk(),loadMc(),loadCm(),loadMem()])}
 

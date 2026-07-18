@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/utils/features.js'
 import { useMemo } from 'react'
 import { useCommandQueue } from 'src/hooks/useCommandQueue.js'
 import { useAppState } from 'src/state/AppState.js'
@@ -9,7 +9,7 @@ import { isQueuedCommandEditable } from 'src/utils/messageQueueManager.js'
 // Dead code elimination: conditional import for proactive mode
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule =
-  feature('PROACTIVE') || feature('KAIROS')
+  feature('PROACTIVE')
     ? require('../../proactive/index.js')
     : null
 

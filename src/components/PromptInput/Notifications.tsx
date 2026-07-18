@@ -1,5 +1,4 @@
 import { c as _c } from "react/compiler-runtime";
-import { feature } from 'bun:bundle';
 import * as React from 'react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { type Notification, useNotifications } from 'src/context/notifications.js';
@@ -10,14 +9,12 @@ import { useIdeConnectionStatus } from '../../hooks/useIdeConnectionStatus.js';
 import type { IDESelection } from '../../hooks/useIdeSelection.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
 import { Box, Text } from '../../ink.js';
-import { useClaudeAiLimits } from '../../services/claudeAiLimitsHook.js';
 import { calculateTokenWarningState } from '../../services/compact/autoCompact.js';
 import type { MCPServerConnection } from '../../services/mcp/types.js';
 import type { Message } from '../../types/message.js';
 import { getApiKeyHelperElapsedMs, getConfiguredApiKeyHelper } from '../../utils/auth.js';
 import type { AutoUpdaterResult } from '../../utils/autoUpdater.js';
 import { getExternalEditor } from '../../utils/editor.js';
-import { isEnvTruthy } from '../../utils/envUtils.js';
 import { formatDuration } from '../../utils/format.js';
 import { setEnvHookNotifier } from '../../utils/hooks/fileChangedWatcher.js';
 import { toIDEDisplayName } from '../../utils/ide.js';
@@ -93,7 +90,6 @@ export function Notifications(t0) {
     addNotification,
     removeNotification
   } = useNotifications();
-  const claudeAiLimits = useClaudeAiLimits();
   let t5;
   let t6;
   if ($[5] !== addNotification) {
@@ -120,16 +116,6 @@ export function Notifications(t0) {
   useEffect(t5, t6);
   const shouldShowIdeSelection = ideStatus === "connected" && (ideSelection?.filePath || ideSelection?.text && ideSelection.lineCount > 0);
   const shouldShowAutoUpdater = !shouldShowIdeSelection || isAutoUpdating || autoUpdaterResult?.status !== "success";
-  const isInOverageMode = claudeAiLimits.isUsingOverage;
-  let t7;
-  if ($[8] === Symbol.for("react.memo_cache_sentinel")) {
-    t7 = null;
-    $[8] = t7;
-  } else {
-    t7 = $[8];
-  }
-  const subscriptionType = t7;
-  const isTeamOrEnterprise = subscriptionType === "team" || subscriptionType === "enterprise";
   let t8;
   if ($[9] === Symbol.for("react.memo_cache_sentinel")) {
     t8 = getExternalEditor();
@@ -167,10 +153,9 @@ export function Notifications(t0) {
   }
   useEffect(t9, t10);
   const t11 = isNarrow ? "flex-start" : "flex-end";
-  const t12 = isInOverageMode ?? false;
   let t13;
-  if ($[15] !== apiKeyStatus || $[16] !== autoUpdaterResult || $[17] !== debug || $[18] !== ideSelection || $[19] !== isAutoUpdating || $[20] !== isShowingCompactMessage || $[21] !== mainLoopModel || $[22] !== mcpClients || $[23] !== notifications || $[24] !== onAutoUpdaterResult || $[25] !== onChangeIsUpdating || $[26] !== shouldShowAutoUpdater || $[27] !== t12 || $[28] !== tokenUsage || $[29] !== verbose) {
-    t13 = <NotificationContent ideSelection={ideSelection} mcpClients={mcpClients} notifications={notifications} isInOverageMode={t12} isTeamOrEnterprise={isTeamOrEnterprise} apiKeyStatus={apiKeyStatus} debug={debug} verbose={verbose} tokenUsage={tokenUsage} mainLoopModel={mainLoopModel} shouldShowAutoUpdater={shouldShowAutoUpdater} autoUpdaterResult={autoUpdaterResult} isAutoUpdating={isAutoUpdating} isShowingCompactMessage={isShowingCompactMessage} onAutoUpdaterResult={onAutoUpdaterResult} onChangeIsUpdating={onChangeIsUpdating} />;
+  if ($[15] !== apiKeyStatus || $[16] !== autoUpdaterResult || $[17] !== debug || $[18] !== ideSelection || $[19] !== isAutoUpdating || $[20] !== isShowingCompactMessage || $[21] !== mainLoopModel || $[22] !== mcpClients || $[23] !== notifications || $[24] !== onAutoUpdaterResult || $[25] !== onChangeIsUpdating || $[26] !== shouldShowAutoUpdater || $[28] !== tokenUsage || $[29] !== verbose) {
+    t13 = <NotificationContent ideSelection={ideSelection} mcpClients={mcpClients} notifications={notifications} apiKeyStatus={apiKeyStatus} debug={debug} verbose={verbose} tokenUsage={tokenUsage} mainLoopModel={mainLoopModel} shouldShowAutoUpdater={shouldShowAutoUpdater} autoUpdaterResult={autoUpdaterResult} isAutoUpdating={isAutoUpdating} isShowingCompactMessage={isShowingCompactMessage} onAutoUpdaterResult={onAutoUpdaterResult} onChangeIsUpdating={onChangeIsUpdating} />;
     $[15] = apiKeyStatus;
     $[16] = autoUpdaterResult;
     $[17] = debug;
@@ -183,7 +168,6 @@ export function Notifications(t0) {
     $[24] = onAutoUpdaterResult;
     $[25] = onChangeIsUpdating;
     $[26] = shouldShowAutoUpdater;
-    $[27] = t12;
     $[28] = tokenUsage;
     $[29] = verbose;
     $[30] = t13;
@@ -211,8 +195,6 @@ function NotificationContent({
   ideSelection,
   mcpClients,
   notifications,
-  isInOverageMode,
-  isTeamOrEnterprise,
   apiKeyStatus,
   debug,
   verbose,
@@ -231,8 +213,6 @@ function NotificationContent({
     current: Notification | null;
     queue: Notification[];
   };
-  isInOverageMode: boolean;
-  isTeamOrEnterprise: boolean;
   apiKeyStatus: VerificationStatus;
   debug: boolean;
   verbose: boolean;
@@ -259,10 +239,6 @@ function NotificationContent({
     return () => clearInterval(interval);
   }, []);
 
-  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useAppState(s_1 => s_1.isBriefOnly) : false;
-
   return <>
       <IdeStatusIndicator ideSelection={ideSelection} mcpClients={mcpClients} />
       {notifications.current && ('jsx' in notifications.current ? <Text wrap="truncate" key={notifications.current.key}>
@@ -270,11 +246,6 @@ function NotificationContent({
           </Text> : <Text color={notifications.current.color} dimColor={!notifications.current.color} wrap="truncate">
             {notifications.current.text}
           </Text>)}
-      {isInOverageMode && !isTeamOrEnterprise && <Box>
-          <Text dimColor wrap="truncate">
-            Now using extra usage
-          </Text>
-        </Box>}
       {apiKeyHelperSlow && <Box>
           <Text color="warning" wrap="truncate">
             apiKeyHelper is taking a while{' '}
@@ -285,9 +256,7 @@ function NotificationContent({
         </Box>}
       {(apiKeyStatus === 'invalid' || apiKeyStatus === 'missing') && <Box>
           <Text color="error" wrap="truncate">
-            {isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)
-              ? 'Authentication error · Try again'
-              : 'Missing API key · Set ANTHROPIC_API_KEY and restart'}
+            Missing API key · Set DEEPSEEK_API_KEY in .env and restart
           </Text>
         </Box>}
       {debug && <Box>
@@ -300,7 +269,7 @@ function NotificationContent({
             {tokenUsage} tokens
           </Text>
         </Box>}
-      {!isBriefOnly && <TokenWarning tokenUsage={tokenUsage} model={mainLoopModel} />}
+      <TokenWarning tokenUsage={tokenUsage} model={mainLoopModel} />
       {shouldShowAutoUpdater && <AutoUpdaterWrapper verbose={verbose} onAutoUpdaterResult={onAutoUpdaterResult} autoUpdaterResult={autoUpdaterResult} isUpdating={isAutoUpdating} onChangeIsUpdating={onChangeIsUpdating} showSuccessMessage={!isShowingCompactMessage} />}
       <MemoryUsageIndicator />
       <SandboxPromptFooterHint />

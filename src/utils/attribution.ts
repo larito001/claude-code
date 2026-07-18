@@ -1,4 +1,3 @@
-import { feature } from 'bun:bundle'
 import { stat } from 'fs/promises'
 import { PRODUCT_URL } from '../constants/product.js'
 import { TERMINAL_OUTPUT_TAGS } from '../constants/xml.js'
@@ -12,8 +11,6 @@ import type { Entry } from '../types/logs.js'
 import {
   type AttributionData,
   calculateCommitAttribution,
-  isInternalModelRepo,
-  isInternalModelRepoCached,
   sanitizeModelName,
 } from './commitAttribution.js'
 import { logForDebugging } from './debug.js'
@@ -22,14 +19,12 @@ import { logError } from './log.js'
 import {
   getCanonicalName,
   getMainLoopModel,
-  getPublicModelDisplayName,
   getPublicModelName,
 } from './model/model.js'
 import { isMemoryFileAccess } from './sessionFileAccessHooks.js'
 import { getTranscriptPath } from './sessionStorage.js'
 import { readTranscriptForLoad } from './sessionStoragePortable.js'
 import { getInitialSettings } from './settings/settings.js'
-import { isUndercover } from './undercover.js'
 
 export type AttributionTexts = {
   commit: string
@@ -45,19 +40,8 @@ export type AttributionTexts = {
  * - Remote mode: returns session URL for attribution
  */
 export function getAttributionTexts(): AttributionTexts {
-  if (process.env.USER_TYPE === 'ant' && isUndercover()) {
-    return { commit: '', pr: '' }
-  }
-
-  // @[MODEL LAUNCH]: Update the hardcoded fallback model name below (guards against codename leaks).
-  // For internal repos, use the real model name. For external repos,
-  // fall back to "Claude Opus 4.6" for unrecognized models to avoid leaking codenames.
   const model = getMainLoopModel()
-  const isKnownPublicModel = getPublicModelDisplayName(model) !== null
-  const modelName =
-    isInternalModelRepoCached() || isKnownPublicModel
-      ? getPublicModelName(model)
-      : 'Claude Opus 4.6'
+  const modelName = getPublicModelName(model)
   const defaultAttribution = `🤖 Generated with [Claude Code](${PRODUCT_URL})`
   const defaultCommit = `Co-Authored-By: ${modelName} <noreply@anthropic.com>`
 
@@ -279,10 +263,6 @@ async function getTranscriptStats(): Promise<{
 export async function getEnhancedPRAttribution(
   getAppState: () => AppState,
 ): Promise<string> {
-  if (process.env.USER_TYPE === 'ant' && isUndercover()) {
-    return ''
-  }
-
   const settings = getInitialSettings()
 
   // If user has custom PR attribution, use that
@@ -311,12 +291,8 @@ export async function getEnhancedPRAttribution(
   }
 
   // Get attribution stats (transcript is read once for both prompt count and memory access)
-  const [attributionData, { promptCount, memoryAccessCount }, isInternal] =
-    await Promise.all([
-      getPRAttributionData(appState),
-      getTranscriptStats(),
-      isInternalModelRepo(),
-    ])
+  const [attributionData, { promptCount, memoryAccessCount }] =
+    await Promise.all([getPRAttributionData(appState), getTranscriptStats()])
 
   const claudePercent = attributionData?.summary.claudePercent ?? 0
 
@@ -324,11 +300,9 @@ export async function getEnhancedPRAttribution(
     `PR Attribution: claudePercent: ${claudePercent}, promptCount: ${promptCount}, memoryAccessCount: ${memoryAccessCount}`,
   )
 
-  // Get short model name, sanitized for non-internal repos
+  // Attribution always uses a public model family name.
   const rawModelName = getCanonicalName(getMainLoopModel())
-  const shortModelName = isInternal
-    ? rawModelName
-    : sanitizeModelName(rawModelName)
+  const shortModelName = sanitizeModelName(rawModelName)
 
   // If no attribution data, return default
   if (claudePercent === 0 && promptCount === 0 && memoryAccessCount === 0) {
@@ -342,21 +316,6 @@ export async function getEnhancedPRAttribution(
       ? `, ${memoryAccessCount} ${memoryAccessCount === 1 ? 'memory' : 'memories'} recalled`
       : ''
   const summary = `🤖 Generated with [Claude Code](${PRODUCT_URL}) (${claudePercent}% ${promptCount}-shotted by ${shortModelName}${memSuffix})`
-
-  // Append trailer lines for squash-merge survival. Only for allowlisted repos
-  // (INTERNAL_MODEL_REPOS) and only in builds with COMMIT_ATTRIBUTION enabled —
-  // attributionTrailer.ts contains excluded strings, so reach it via dynamic
-  // import behind feature(). When the repo is configured with
-  // squash_merge_commit_message=PR_BODY (cli, apps), the PR body becomes the
-  // squash commit body verbatim — trailer lines at the end become proper git
-  // trailers on the squash commit.
-  if (feature('COMMIT_ATTRIBUTION') && isInternal && attributionData) {
-    const { buildPRTrailers } = await import('./attributionTrailer.js')
-    const trailers = buildPRTrailers(attributionData, appState.attribution)
-    const result = `${summary}\n\n${trailers.join('\n')}`
-    logForDebugging(`PR Attribution: returning with trailers: ${result}`)
-    return result
-  }
 
   logForDebugging(`PR Attribution: returning summary: ${summary}`)
   return summary

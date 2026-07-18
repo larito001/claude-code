@@ -1,11 +1,10 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { isUltrathinkEnabled } from './thinking.js'
 import { getInitialSettings } from './settings/settings.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { getAPIProvider } from './model/providers.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
 import { isEnvTruthy } from './envUtils.js'
-import type { EffortLevel } from 'src/entrypoints/sdk/runtimeTypes.js'
+import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk'
 
 export type { EffortLevel }
 
@@ -16,7 +15,7 @@ export const EFFORT_LEVELS = [
   'max',
 ] as const satisfies readonly EffortLevel[]
 
-export type EffortValue = EffortLevel | number
+export type EffortValue = EffortLevel
 
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports the effort parameter.
 export function modelSupportsEffort(model: string): boolean {
@@ -57,9 +56,6 @@ export function modelSupportsMaxEffort(model: string): boolean {
   if (model.toLowerCase().includes('opus-4-6')) {
     return true
   }
-  if (process.env.USER_TYPE === 'ant' && resolveAntModel(model)) {
-    return true
-  }
   return false
 }
 
@@ -71,23 +67,15 @@ export function parseEffortValue(value: unknown): EffortValue | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined
   }
-  if (typeof value === 'number' && isValidNumericEffort(value)) {
-    return value
-  }
   const str = String(value).toLowerCase()
   if (isEffortLevel(str)) {
     return str
-  }
-  const numericValue = parseInt(str, 10)
-  if (!isNaN(numericValue) && isValidNumericEffort(numericValue)) {
-    return numericValue
   }
   return undefined
 }
 
 /**
- * Numeric values are model-default only and not persisted.
- * 'max' is session-scoped for external users (ants can persist it).
+ * 'max' is session-scoped and is not persisted.
  * Write sites call this before saving to settings so the Zod schema
  * (which only accepts string levels) never rejects a write.
  */
@@ -97,14 +85,11 @@ export function toPersistableEffort(
   if (value === 'low' || value === 'medium' || value === 'high') {
     return value
   }
-  if (value === 'max' && process.env.USER_TYPE === 'ant') {
-    return value
-  }
   return undefined
 }
 
 export function getInitialEffortSetting(): EffortLevel | undefined {
-  // toPersistableEffort filters 'max' for non-ants on read, so a manually
+  // toPersistableEffort filters 'max' on read, so a manually
   // edited settings.json doesn't leak session-scoped max into a fresh session.
   return toPersistableEffort(getInitialSettings().effortLevel)
 }
@@ -194,24 +179,8 @@ export function getEffortSuffix(
   return ` with ${convertEffortValueToLevel(resolved)} effort`
 }
 
-export function isValidNumericEffort(value: number): boolean {
-  return Number.isInteger(value)
-}
-
 export function convertEffortValueToLevel(value: EffortValue): EffortLevel {
-  if (typeof value === 'string') {
-    // Runtime guard: value may come from remote config (GrowthBook) where
-    // TypeScript types can't help us. Coerce unknown strings to 'high'
-    // rather than passing them through unchecked.
-    return isEffortLevel(value) ? value : 'high'
-  }
-  if (process.env.USER_TYPE === 'ant' && typeof value === 'number') {
-    if (value <= 50) return 'low'
-    if (value <= 85) return 'medium'
-    if (value <= 100) return 'high'
-    return 'max'
-  }
-  return 'high'
+  return isEffortLevel(value) ? value : 'high'
 }
 
 /**
@@ -234,20 +203,13 @@ export function getEffortLevelDescription(level: EffortLevel): string {
 }
 
 /**
- * Get user-facing description for effort values (both string and numeric)
+ * Get user-facing description for effort values.
  *
  * @param value The effort value to describe
  * @returns Human-readable description
  */
 export function getEffortValueDescription(value: EffortValue): string {
-  if (process.env.USER_TYPE === 'ant' && typeof value === 'number') {
-    return `[ANT-ONLY] Numeric effort value of ${value}`
-  }
-
-  if (typeof value === 'string') {
-    return getEffortLevelDescription(value)
-  }
-  return 'Balanced approach with standard implementation and testing'
+  return getEffortLevelDescription(value)
 }
 
 export type OpusDefaultEffortConfig = {
@@ -278,43 +240,16 @@ export function getOpusDefaultEffortConfig(): OpusDefaultEffortConfig {
 export function getDefaultEffortForModel(
   model: string,
 ): EffortValue | undefined {
-  if (process.env.USER_TYPE === 'ant') {
-    const config = getAntModelOverrideConfig()
-    const isDefaultModel =
-      config?.defaultModel !== undefined &&
-      model.toLowerCase() === config.defaultModel.toLowerCase()
-    if (isDefaultModel && config?.defaultModelEffortLevel) {
-      return config.defaultModelEffortLevel
-    }
-    const antModel = resolveAntModel(model)
-    if (antModel) {
-      if (antModel.defaultEffortLevel) {
-        return antModel.defaultEffortLevel
-      }
-      if (antModel.defaultEffortValue !== undefined) {
-        return antModel.defaultEffortValue
-      }
-    }
-    // Always default ants to undefined/high
-    return undefined
-  }
-
   // IMPORTANT: Do not change the default effort level without notifying
   // the model launch DRI and research. Default effort is a sensitive setting
   // that can greatly affect model quality and bashing.
 
-  // Default effort on Opus 4.6 to medium for Pro.
-  // Max/Team also get medium when the tengu_grey_step2 config is enabled.
-  if (model.toLowerCase().includes('opus-4-6')) {
-    if (false) {
-      return 'medium'
-    }
-    if (
-      getOpusDefaultEffortConfig().enabled &&
-      (false || false)
-    ) {
-      return 'medium'
-    }
+  // Opus 4.6 defaults to medium when enabled in local feature configuration.
+  if (
+    model.toLowerCase().includes('opus-4-6') &&
+    getOpusDefaultEffortConfig().enabled
+  ) {
+    return 'medium'
   }
 
   // When ultrathink feature is on, default effort to medium (ultrathink bumps to high)

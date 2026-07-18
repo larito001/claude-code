@@ -1,14 +1,10 @@
 import { execa } from 'execa'
 import memoize from 'lodash-es/memoize.js'
 import { getSessionId } from '../bootstrap/state.js'
-import { getGlobalConfig, getOrCreateUserID } from './config.js'
+import { getOrCreateUserID } from './config.js'
 import { getCwd } from './cwd.js'
 import { type env, getHostPlatformForAnalytics } from './env.js'
 import { isEnvTruthy } from './envUtils.js'
-
-// Cache for email fetched asynchronously at startup
-let cachedEmail: string | undefined | null = null // null means not fetched yet
-let emailFetchPromise: Promise<string | undefined> | null = null
 
 /**
  * GitHub Actions metadata when running in CI
@@ -29,41 +25,9 @@ export type GitHubActionsMetadata = {
 export type CoreUserData = {
   deviceId: string
   sessionId: string
-  email?: string
   appVersion: string
   platform: typeof env.platform
-  organizationUuid?: string
-  accountUuid?: string
-  userType?: string
-  subscriptionType?: string
-  rateLimitTier?: string
-  firstTokenTime?: number
   githubActionsMetadata?: GitHubActionsMetadata
-}
-
-/**
- * Initialize user data asynchronously. Should be called early in startup.
- * This pre-fetches the email so getUser() can remain synchronous.
- */
-export async function initUser(): Promise<void> {
-  if (cachedEmail === null && !emailFetchPromise) {
-    emailFetchPromise = getEmailAsync()
-    cachedEmail = await emailFetchPromise
-    emailFetchPromise = null
-    // Clear memoization cache so next call picks up the email
-    getCoreUserData.cache.clear?.()
-  }
-}
-
-/**
- * Reset all user data caches. Call on auth changes (login/logout/account switch)
- * so the next getCoreUserData() call picks up fresh credentials and email.
- */
-export function resetUserCache(): void {
-  cachedEmail = null
-  emailFetchPromise = null
-  getCoreUserData.cache.clear?.()
-  getGitEmail.cache.clear?.()
 }
 
 /**
@@ -71,36 +35,14 @@ export function resetUserCache(): void {
  * This is the base representation that gets transformed for different analytics providers.
  */
 export const getCoreUserData = memoize(
-  (includeAnalyticsMetadata?: boolean): CoreUserData => {
+  (_includeAnalyticsMetadata?: boolean): CoreUserData => {
     const deviceId = getOrCreateUserID()
-    const config = getGlobalConfig()
-
-    let subscriptionType: string | undefined
-    let rateLimitTier: string | undefined
-    let firstTokenTime: number | undefined
-    if (includeAnalyticsMetadata) {
-      subscriptionType = null ?? undefined
-      rateLimitTier = null ?? undefined
-      if (subscriptionType && config.claudeCodeFirstTokenDate) {
-        const configFirstTokenTime = new Date(
-          config.claudeCodeFirstTokenDate,
-        ).getTime()
-        if (!isNaN(configFirstTokenTime)) {
-          firstTokenTime = configFirstTokenTime
-        }
-      }
-    }
 
     return {
       deviceId,
       sessionId: getSessionId(),
-      email: getEmail(),
       appVersion: MACRO.VERSION,
       platform: getHostPlatformForAnalytics(),
-      userType: process.env.USER_TYPE,
-      subscriptionType,
-      rateLimitTier,
-      firstTokenTime,
       ...(isEnvTruthy(process.env.GITHUB_ACTIONS) && {
         githubActionsMetadata: {
           actor: process.env.GITHUB_ACTOR,
@@ -120,38 +62,6 @@ export const getCoreUserData = memoize(
  */
 export function getUserForGrowthBook(): CoreUserData {
   return getCoreUserData(true)
-}
-
-function getEmail(): string | undefined {
-  // Return cached email if available (from async initialization)
-  if (cachedEmail !== null) {
-    return cachedEmail
-  }
-
-  // Ant-only fallbacks below (no execSync)
-  if (process.env.USER_TYPE !== 'ant') {
-    return undefined
-  }
-
-  if (process.env.COO_CREATOR) {
-    return `${process.env.COO_CREATOR}@anthropic.com`
-  }
-
-  // If initUser() wasn't called, we return undefined instead of blocking
-  return undefined
-}
-
-async function getEmailAsync(): Promise<string | undefined> {
-  // Ant-only fallbacks below
-  if (process.env.USER_TYPE !== 'ant') {
-    return undefined
-  }
-
-  if (process.env.COO_CREATOR) {
-    return `${process.env.COO_CREATOR}@anthropic.com`
-  }
-
-  return getGitEmail()
 }
 
 /**

@@ -1,0 +1,11 @@
+export type ToolProgressData = Record<string, any>
+export type AgentToolProgress = ToolProgressData
+export type BashProgress = ToolProgressData
+export type MCPProgress = ToolProgressData
+export type PowerShellProgress = ToolProgressData
+export type REPLToolProgress = ToolProgressData
+export type SdkWorkflowProgress = ToolProgressData
+export type ShellProgress = ToolProgressData
+export type SkillToolProgress = ToolProgressData
+export type TaskOutputProgress = ToolProgressData
+export type WebSearchProgress = ToolProgressData

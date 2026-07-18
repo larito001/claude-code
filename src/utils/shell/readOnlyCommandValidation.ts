@@ -3,7 +3,7 @@
  *
  * Exports complete command configuration maps that any shell tool can import:
  * - GIT_READ_ONLY_COMMANDS: all git subcommands with safe flags and callbacks
- * - GH_READ_ONLY_COMMANDS: ant-only gh CLI commands (network-dependent)
+ * - GH_READ_ONLY_COMMANDS: read-only GitHub CLI commands (network-dependent)
  * - EXTERNAL_READONLY_COMMANDS: cross-shell commands that work in both bash and PowerShell
  * - containsVulnerableUncPath: UNC path detection for credential leak prevention
  * - outputLimits are in outputLimits.ts
@@ -923,7 +923,7 @@ export const GIT_READ_ONLY_COMMANDS: Record<string, ExternalCommandConfig> = {
 }
 
 // ---------------------------------------------------------------------------
-// GH_READ_ONLY_COMMANDS — ant-only gh CLI commands (network-dependent)
+// GH_READ_ONLY_COMMANDS — read-only GitHub CLI commands (network-dependent)
 // ---------------------------------------------------------------------------
 
 // SECURITY: Shared callback for all gh commands to prevent network exfil.

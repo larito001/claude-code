@@ -8,6 +8,7 @@
 
 import memoize from 'lodash-es/memoize.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import { feature } from './features.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -409,8 +410,6 @@ export async function isToolSearchEnabled(
       checkedModel:
         model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       mcpToolCount,
-      userType: (process.env.USER_TYPE ??
-        'external') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       ...extraProps,
     })
   }
@@ -607,7 +606,6 @@ export type DeferredToolsDelta = {
  *     (fresh conversation, initialMessages has no DTD)
  *   - compact_full: compact.ts passes [] → prior=0 is EXPECTED
  *   - compact_partial: compact.ts passes messagesToKeep → depends on what survived
- *   - reactive_compact: reactiveCompact.ts passes preservedMessages → same
  * Without this the 96%-prior=0 stat is dominated by EXPECTED buckets and
  * the real main-thread cross-turn bug (if any) is invisible in BQ.
  */
@@ -627,10 +625,7 @@ export type DeferredToolsDeltaScanContext = {
  * header prepend (the attachment does not fire).
  */
 export function isDeferredToolsDeltaEnabled(): boolean {
-  return (
-    process.env.USER_TYPE === 'ant' ||
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_glacier_2xr', false)
-  )
+  return feature('DEFERRED_TOOLS_DELTA')
 }
 
 /**

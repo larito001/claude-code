@@ -8,7 +8,6 @@ import { basename, dirname } from 'path'
 import { setUseCoworkPlugins } from '../../bootstrap/state.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
   logEvent,
 } from '../../services/analytics/index.js'
 import {
@@ -43,6 +42,7 @@ import {
   saveMarketplaceToSettings,
 } from '../../utils/plugins/marketplaceManager.js'
 import { loadPluginMcpServers } from '../../utils/plugins/mcpPluginIntegration.js'
+import { buildPluginTelemetryFields } from '../../utils/telemetry/pluginTelemetry.js'
 import { parseMarketplaceInput } from '../../utils/plugins/parseMarketplaceInput.js'
 import {
   parsePluginIdentifier,
@@ -683,17 +683,9 @@ export async function pluginInstallHandler(
       `Invalid scope: ${scope}. Must be one of: ${VALID_INSTALLABLE_SCOPES.join(', ')}.`,
     )
   }
-  // _PROTO_* routes to PII-tagged plugin_name/marketplace_name BQ columns.
-  // Unredacted plugin arg was previously logged to general-access
-  // additional_metadata for all users — dropped in favor of the privileged
-  // column route. marketplace may be undefined (fires before resolution).
   const { name, marketplace } = parsePluginIdentifier(plugin)
   logEvent('tengu_plugin_install_command', {
-    _PROTO_plugin_name: name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    ...(marketplace && {
-      _PROTO_marketplace_name:
-        marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    }),
+    ...buildPluginTelemetryFields(name, marketplace),
     scope: scope as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   })
 
@@ -721,11 +713,7 @@ export async function pluginUninstallHandler(
   }
   const { name, marketplace } = parsePluginIdentifier(plugin)
   logEvent('tengu_plugin_uninstall_command', {
-    _PROTO_plugin_name: name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    ...(marketplace && {
-      _PROTO_marketplace_name:
-        marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    }),
+    ...buildPluginTelemetryFields(name, marketplace),
     scope: scope as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   })
 
@@ -766,11 +754,7 @@ export async function pluginEnableHandler(
 
   const { name, marketplace } = parsePluginIdentifier(plugin)
   logEvent('tengu_plugin_enable_command', {
-    _PROTO_plugin_name: name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    ...(marketplace && {
-      _PROTO_marketplace_name:
-        marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    }),
+    ...buildPluginTelemetryFields(name, marketplace),
     scope: (scope ??
       'auto') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   })
@@ -798,8 +782,6 @@ export async function pluginDisableHandler(
       cliError('Cannot use --scope with --all')
     }
 
-    // No _PROTO_plugin_name here — --all disables all plugins.
-    // Distinguishable from the specific-plugin branch by plugin_name IS NULL.
     logEvent('tengu_plugin_disable_command', {})
 
     await disableAllPlugins()
@@ -830,11 +812,7 @@ export async function pluginDisableHandler(
 
   const { name, marketplace } = parsePluginIdentifier(plugin!)
   logEvent('tengu_plugin_disable_command', {
-    _PROTO_plugin_name: name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    ...(marketplace && {
-      _PROTO_marketplace_name:
-        marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    }),
+    ...buildPluginTelemetryFields(name, marketplace),
     scope: (scope ??
       'auto') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   })
@@ -850,11 +828,7 @@ export async function pluginUpdateHandler(
   if (options.cowork) setUseCoworkPlugins(true)
   const { name, marketplace } = parsePluginIdentifier(plugin)
   logEvent('tengu_plugin_update_command', {
-    _PROTO_plugin_name: name as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    ...(marketplace && {
-      _PROTO_marketplace_name:
-        marketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
-    }),
+    ...buildPluginTelemetryFields(name, marketplace),
   })
 
   let scope: (typeof VALID_UPDATE_SCOPES)[number] = 'user'

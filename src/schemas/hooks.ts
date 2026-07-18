@@ -8,7 +8,8 @@
  * Both files now import from this shared location instead of each other.
  */
 
-import { HOOK_EVENTS, type HookEvent } from 'src/entrypoints/agentSdkTypes.js'
+import type { HookEvent } from 'src/entrypoints/agentSdkTypes.js'
+import { HOOK_EVENTS } from 'src/entrypoints/sdk/coreTypes.js'
 import { z } from 'zod/v4'
 import { lazySchema } from '../utils/lazySchema.js'
 import { SHELL_TYPES } from '../utils/shell/shellProvider.js'
@@ -132,9 +133,8 @@ function buildHookSchemas() {
     // JSON.stringify — a transformed function value is silently dropped,
     // deleting the user's prompt from settings.json (gh-24920, CC-79). The
     // transform (from #10594) wrapped the string in `(_msgs) => prompt`
-    // for a programmatic-construction use case in ExitPlanModeV2Tool that
-    // has since been refactored into VerifyPlanExecutionTool, which no
-    // longer constructs AgentHook objects at all.
+    // for an old programmatic-construction path. Agent hooks now remain
+    // declarative settings objects throughout parsing and persistence.
     prompt: z
       .string()
       .describe(
