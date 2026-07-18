@@ -45,6 +45,7 @@ import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js';
 import { count } from './utils/array.js';
 import { installAsciicastRecorder } from './utils/asciicast.js';
 import { prefetchAwsCredentialsAndBedRockInfoIfSafe, prefetchGcpCredentialsIfSafe } from './utils/auth.js';
+import { getCurrentApiCredentialConfigurationError } from './utils/apiCredentialValidation.js';
 import { checkHasTrustDialogAccepted, getGlobalConfig, isAutoUpdaterDisabled, saveGlobalConfig } from './utils/config.js';
 import { seedEarlyInput, stopCapturingEarlyInput } from './utils/earlyInput.js';
 import { getInitialEffortSetting, parseEffortValue } from './utils/effort.js';
@@ -848,6 +849,14 @@ async function run(): Promise<CommanderCommand> {
 
     // Get isNonInteractiveSession from state (was set before init())
     const isNonInteractiveSession = getIsNonInteractiveSession();
+
+    if (!initOnly) {
+      const credentialError = getCurrentApiCredentialConfigurationError();
+      if (credentialError) {
+        process.stderr.write(chalk.red(`Error: ${credentialError}\n`));
+        process.exit(1);
+      }
+    }
 
     // Validate that fallback model is different from main model
     if (fallbackModel && options.model && fallbackModel === options.model) {

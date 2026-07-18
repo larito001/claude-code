@@ -16,6 +16,7 @@ import { getAllBaseTools } from '../src/tools.js'
 import { getBuiltInAgents } from '../src/tools/AgentTool/builtInAgents.js'
 import { getClaudeDesktopConfigPath } from '../src/utils/claudeDesktop.js'
 import { initBackgroundHousekeepingServices } from '../src/utils/backgroundHousekeeping.js'
+import { getApiCredentialConfigurationError } from '../src/utils/apiCredentialValidation.js'
 import { getFastModeUnavailableReason } from '../src/utils/fastMode.js'
 import { feature } from '../src/utils/features.js'
 import {
@@ -43,6 +44,39 @@ function assert(condition: unknown, message: string): asserts condition {
 assert(feature('MCP_SKILLS'), 'MCP skills must be enabled in the core profile')
 assert(feature('HOOK_PROMPTS'), 'Hook prompts must be enabled in the core profile')
 assert(!feature('KAIROS'), 'Unsupported product features must remain disabled')
+
+assert(
+  getApiCredentialConfigurationError({
+    provider: 'firstParty',
+    hasApiKey: false,
+    hasApiKeyHelper: false,
+  })?.includes('ANTHROPIC_API_KEY'),
+  'Missing API key configuration must fail with actionable guidance',
+)
+assert(
+  getApiCredentialConfigurationError({
+    provider: 'firstParty',
+    hasApiKey: true,
+    hasApiKeyHelper: false,
+  }) === null,
+  'Direct API key configuration was rejected',
+)
+assert(
+  getApiCredentialConfigurationError({
+    provider: 'firstParty',
+    hasApiKey: false,
+    hasApiKeyHelper: true,
+  }) === null,
+  'apiKeyHelper configuration was rejected',
+)
+assert(
+  getApiCredentialConfigurationError({
+    provider: 'bedrock',
+    hasApiKey: false,
+    hasApiKeyHelper: false,
+  }) === null,
+  'Bedrock must use its provider-specific credentials',
+)
 
 initBackgroundHousekeepingServices()
 

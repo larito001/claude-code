@@ -17,6 +17,7 @@
     "typecheck": "bun x tsc -p tsconfig.framework.json --noEmit",
     "typecheck:legacy": "bun x tsc --noEmit",
     "smoke": "bun run scripts/smoke.ts",
+    "smoke:api": "bun --env-file=.env run scripts/smoke-api.ts",
     "check": "bun run typecheck && bun run build && bun run smoke",
     "config": "bun run config-ui/server.ts"
   },
