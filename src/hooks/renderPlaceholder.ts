@@ -26,7 +26,7 @@ export function renderPlaceholder({
 
   if (placeholder) {
     if (hidePlaceholderText) {
-      // Voice recording: show only the cursor, no placeholder text
+      // Show only the cursor when placeholder text is hidden.
       renderedPlaceholder =
         showCursor && focus && terminalFocus ? invert(' ') : ''
     } else {

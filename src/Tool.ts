@@ -395,7 +395,6 @@ export type Tool<
   // Type for MCP tools that can specify their input schema directly in JSON Schema format
   // 而不是从 Zod 模式转换
   readonly inputJSONSchema?: ToolInputJSONSchema
-  // 可选，因为 TungstenTool 没有定义它。 TODO：将其设为必需。
   // 当我们这样做时，我们还可以检查并使其更加类型安全。
   outputSchema?: z.ZodType<unknown>
   inputsEquivalent?(a: z.infer<Input>, b: z.infer<Input>): boolean

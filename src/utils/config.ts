@@ -35,10 +35,6 @@ import type { ThemeSetting } from './theme.js'
 const teamMemPaths = feature('TEAMMEM')
   ? (require('../memdir/teamMemPaths.js') as typeof import('../memdir/teamMemPaths.js'))
   : null
-const ccrAutoConnect = feature('CCR_AUTO_CONNECT')
-  ? (require('../bridge/bridgeEnabled.js') as typeof import('../bridge/bridgeEnabled.js'))
-  : null
-
 /* eslint-enable @typescript-eslint/no-require-imports */
 import type { ImageDimensions } from './imageResizer.js'
 import type { ModelOption } from './model/modelOptions.js'
@@ -208,7 +204,6 @@ export type GlobalConfig = {
   primaryApiKey?: string // 未设置环境变量时用户的主 API 密钥，通过 oauth 设置（TODO：重命名）
   hasAcknowledgedCostThreshold?: boolean
   hasSeenUndercoverAutoNotice?: boolean // ant-only：是否显示一次性自动卧底解释器
-  hasSeenUltraplanTerms?: boolean // ant-only：一次性 CCR 条款通知是否已显示在 ultraplan 启动对话框中
   hasResetAutoModeOptInForDefaultOffer?: boolean // ant-only：一次性迁移防护，重新提示流失的自动模式用户
   iterm2KeyBindingInstalled?: boolean // 遗留 - 保留向后兼容性
   editorMode?: EditorMode
@@ -293,35 +288,7 @@ export type GlobalConfig = {
     { grove_enabled: boolean; timestamp: number }
   >
 
-  // 访客通行证追加销售跟踪
-  passesUpsellSeenCount?: number // 已显示客人通过追加销售的次数
-  hasVisitedPasses?: boolean // 用户是否访问过 /passes 命令
-  passesLastSeenRemaining?: number // 最后一次看到的剩余通行数 — 当增加时重置追加销售
-
-  // 超额信用赠款追加销售跟踪（由组织 UUID 键入 - 多组织用户）。
-  // 内联形状（不是 import()），因为 config.ts 位于 SDK 构建表面中
-  // 并且 SDK 捆绑程序无法解析 CLI 服务模块。
-  overageCreditGrantCache?: Record<
-    string,
-    {
-      info: {
-        available: boolean
-        eligible: boolean
-        granted: boolean
-        amount_minor_units: number | null
-        currency: string | null
-      }
-      timestamp: number
-    }
-  >
-  overageCreditUpsellSeenCount?: number // 超额信用追加销售已显示的次数
   hasVisitedExtraUsage?: boolean // 用户是否访问过 /extra-usage — 隐藏信用追加销售
-
-  // 语音模式通知跟踪
-  voiceNoticeSeenCount?: number // 语音模式可用通知已显示的次数
-  voiceLangHintShownCount?: number // 显示 /voice 听写语言提示的次数
-  voiceLangHintLastLanguage?: string // 解决了上次显示提示时的 STT 语言代码 — 当计数发生变化时重置计数
-  voiceFooterHintSeenCount?: number // 显示“按住 X 说话”页脚提示的会话数
 
   // Opus 1M 合并通知跟踪
   opus1mMergeNoticeSeenCount?: number // opus-1m-merge 通知已显示的次数
@@ -371,11 +338,6 @@ export type GlobalConfig = {
   // 来自标题（点使其变得多余）。
   showStatusInTerminalTab?: boolean
 
-  // 推送通知切换（通过 /config 设置）。默认关闭 — 需要明确选择加入。
-  taskCompleteNotifEnabled?: boolean
-  inputNeededNotifEnabled?: boolean
-  agentPushNotifEnabled?: boolean
-
   // 克劳德代码使用情况跟踪
   claudeCodeFirstTokenDate?: string // 用户第一个 Claude Code OAuth 令牌的 ISO 时间戳
 
@@ -387,18 +349,6 @@ export type GlobalConfig = {
   // 工作量标注跟踪 - 针对 Opus 4.6 用户显示一次
   effortCalloutDismissed?: boolean // v1 - 旧版本，为已经看过 v2 的 Pro 用户阅读以抑制 v2
   effortCalloutV2Dismissed?: boolean
-
-  // 远程标注跟踪 - 在第一个桥启用之前显示一次
-  remoteDialogSeen?: boolean
-
-  // initReplBridge 的 oauth_expired_unrefreshable 跳过的跨进程退避。
-  // `expiresAt` 是去重键 — 内容寻址，在 /login 时自动清除
-  // 替换令牌。 `failCount` 限制误报：瞬时刷新
-  // 失败（身份验证服务器 5xx、锁定错误）在退避开始之前重试 3 次
-  // 中，镜像useReplBridge的MAX_CONSECUTIVE_INIT_FAILURES。死令牌
-  // 帐户上限为 3 次配置写入；健康+短暂现象会在约 210 秒内自愈。
-  bridgeOauthDeadExpiresAt?: number
-  bridgeOauthDeadFailCount?: number
 
   // 桌面追加销售启动对话框跟踪
   desktopUpsellSeenCount?: number // 总放映次数（最多 3 次）
@@ -525,10 +475,6 @@ export type GlobalConfig = {
   // 与 tengu_cicada_nap_ms 一起使用来限制 API 调用
   startupPrefetchedAt?: number
 
-  // 启动时运行远程控制（需要 BRIDGE_MODE）
-  // undefined = 使用默认值（请参阅 getRemoteControlAtStartup() 了解优先顺序）
-  remoteControlAtStartup?: boolean
-
   // 缓存了上次 API 响应中的额外使用禁用原因
   // undefined = 无缓存，null = 启用额外使用，string = 禁用原因。
   cachedExtraUsageDisabledReason?: string | null
@@ -631,9 +577,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'fileCheckpointingEnabled',
   'terminalProgressBarEnabled',
   'showStatusInTerminalTab',
-  'taskCompleteNotifEnabled',
-  'inputNeededNotifEnabled',
-  'agentPushNotifEnabled',
   'respectGitignore',
   'claudeInChromeDefaultEnabled',
   'hasCompletedClaudeInChromeOnboarding',
@@ -644,8 +587,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'copyOnSelect',
   'permissionExplainerEnabled',
   'prStatusFooterEnabled',
-  'remoteControlAtStartup',
-  'remoteDialogSeen',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]
@@ -1063,21 +1004,6 @@ export function getGlobalConfig(): GlobalConfig {
       getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig),
     )
   }
-}
-
-/**
- * Returns the effective value of remoteControlAtStartup. Precedence:
- *   1. User's explicit config value (always wins — honors opt-out)
- *   2. CCR auto-connect default (ant-only build, GrowthBook-gated)
- *   3. false (Remote Control must be explicitly opted into)
- */
-export function getRemoteControlAtStartup(): boolean {
-  const explicit = getGlobalConfig().remoteControlAtStartup
-  if (explicit !== undefined) return explicit
-  if (feature('CCR_AUTO_CONNECT')) {
-    if (ccrAutoConnect?.getCcrAutoConnectDefault()) return true
-  }
-  return false
 }
 
 export function getCustomApiKeyStatus(

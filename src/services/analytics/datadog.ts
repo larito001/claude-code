@@ -55,8 +55,6 @@ const DATADOG_ALLOWED_EVENTS = new Set([
   'tengu_tool_use_success',
   'tengu_uncaught_exception',
   'tengu_unhandled_rejection',
-  'tengu_voice_recording_started',
-  'tengu_voice_toggled',
   'tengu_team_mem_sync_pull',
   'tengu_team_mem_sync_push',
   'tengu_team_mem_sync_started',

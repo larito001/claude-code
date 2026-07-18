@@ -45,7 +45,6 @@ type BaseExecutionParams = {
   commands: Command[]
   queryGuard: QueryGuard
   /**
-   * True when external loading (remote session, foregrounded background task)
    * is active. These don't route through queryGuard, so the queue check must
    * account for them separately. Omit (defaults to false) for the dequeue path
    * (executeQueuedInput) — dequeued items were already queued past this check.
@@ -111,7 +110,6 @@ export type HandlePromptSubmitParams = BaseExecutionParams & {
   uuid?: UUID
   /**
    * When true, input starting with `/` is treated as plain text.
-   * Used for remotely-received messages (bridge/CCR) that should not
    * trigger local slash commands or skills.
    */
   skipSlashCommands?: boolean
@@ -225,7 +223,6 @@ export async function handlePromptSubmit(
   logEvent('tengu_paste_text', { pastedTextCount, pastedTextBytes })
 
   // Handle local-jsx immediate commands (e.g., /config, /doctor)
-  // Skip for remote bridge messages — slash commands from CCR clients are plain text
   if (!skipSlashCommands && finalInput.trim().startsWith('/')) {
     const trimmedInput = finalInput.trim()
     const spaceIndex = trimmedInput.indexOf(' ')
@@ -490,7 +487,6 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
           uuid: cmd.uuid,
           ideSelection: isFirst ? ideSelection : undefined,
           skipSlashCommands: cmd.skipSlashCommands,
-          bridgeOrigin: cmd.bridgeOrigin,
           isMeta: cmd.isMeta,
           skipAttachments: !isFirst,
         })

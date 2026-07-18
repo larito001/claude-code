@@ -2,7 +2,6 @@ export type SessionState = 'idle' | 'running' | 'requires_action'
 
 /**
  * Context carried with requires_action transitions so downstream
- * surfaces (CCR sidebar, push notifications) can show what the
  * session is blocked on, not just that it's blocked.
  *
  * Two delivery paths:
@@ -27,11 +26,9 @@ import { isEnvTruthy } from './envUtils.js'
 import type { PermissionMode } from './permissions/PermissionMode.js'
 import { enqueueSdkEvent } from './sdkEventQueue.js'
 
-// CCR external_metadata keys — push in onChangeAppState, restore in
 // externalMetadataToAppState.
 export type SessionExternalMetadata = {
   permission_mode?: string | null
-  is_ultraplan_mode?: boolean | null
   model?: string | null
   pending_action?: RequiresActionDetails | null
   // Opaque — typed at the emit site. Importing PostTurnSummaryOutput here
@@ -71,7 +68,6 @@ export function setSessionMetadataChangedListener(
 
 /**
  * Register a listener for permission-mode changes from onChangeAppState.
- * Wired by print.ts to emit an SDK system:status message so CCR/IDE clients
  * see mode transitions in real time — regardless of which code path mutated
  * toolPermissionContext.mode (Shift+Tab, ExitPlanMode dialog, slash command,
  * bridge set_permission_mode, etc.).
@@ -115,12 +111,9 @@ export function notifySessionStateChanged(
     metadataListener?.({ task_summary: null })
   }
 
-  // Mirror to the SDK event stream so non-CCR consumers (scmuxd, VS Code)
-  // see the same authoritative idle/running signal the CCR bridge does.
   // 'idle' fires after heldBackResult flushes — lets scmuxd flip IDLE and
   // show the bg-task dot instead of a stuck generating spinner.
   //
-  // Opt-in until CCR web + mobile clients learn to ignore this subtype in
   // their isWorking() last-message heuristics — the trailing idle event
   // currently pins them at "Running...".
   // https://anthropic.slack.com/archives/C093BJBD1CP/p1774152406752229
@@ -141,7 +134,6 @@ export function notifySessionMetadataChanged(
 
 /**
  * Fired by onChangeAppState when toolPermissionContext.mode changes.
- * Downstream listeners (CCR external_metadata PUT, SDK status stream) are
  * both wired through this single choke point so no mode-mutation path can
  * silently bypass them.
  */

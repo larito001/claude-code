@@ -6,7 +6,6 @@ const ENABLED_FEATURES = new Set<string>([
   // 'KAIROS',              // Assistant mode
   // 'PROACTIVE',           // Proactive mode
   // 'BRIDGE_MODE',         // IDE bridge
-  // 'VOICE_MODE',          // Voice input
   // 'COORDINATOR_MODE',    // Multi-agent coordinator
   // 'TRANSCRIPT_CLASSIFIER', // Auto-mode classifier
   // 'BUDDY',               // Companion sprite

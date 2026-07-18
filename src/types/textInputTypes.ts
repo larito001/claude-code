@@ -307,25 +307,14 @@ export type QueuedCommand = {
   pastedContents?: Record<number, PastedContent>
   /**
    * The input string before [Pasted text #N] placeholders were expanded.
-   * Used for ultraplan keyword detection so pasted content containing the
-   * keyword does not trigger a CCR session. Falls back to `value` when
-   * unset (bridge/UDS/MCP sources have no paste expansion).
+   * Preserves the input before pasted-content placeholders are expanded.
    */
   preExpansionValue?: string
   /**
    * When true, the input is treated as plain text even if it starts with `/`.
-   * Used for remotely-received messages (e.g. bridge/CCR) that should not
-   * trigger local slash commands or skills.
+   * Used for injected messages that should not trigger local slash commands.
    */
   skipSlashCommands?: boolean
-  /**
-   * When true, slash commands are dispatched but filtered through
-   * isBridgeSafeCommand() — 'local-jsx' and terminal-only commands return
-   * a helpful error instead of executing. Set by the Remote Control bridge
-   * inbound path so mobile/web clients can run skills and benign commands
-   * without re-exposing the PR #19134 bug (/model popping the local picker).
-   */
-  bridgeOrigin?: boolean
   /**
    * When true, the resulting UserMessage gets `isMeta: true` — hidden in the
    * transcript UI but visible to the model. Used by system-generated prompts

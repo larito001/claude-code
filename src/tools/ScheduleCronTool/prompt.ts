@@ -13,13 +13,6 @@ export const DEFAULT_MAX_AGE_DAYS =
  * `feature('AGENT_TRIGGERS')` flag (dead code elimination) with the runtime
  * `tengu_kairos_cron` GrowthBook gate on a 5-minute refresh window.
  *
- * AGENT_TRIGGERS is independently shippable from KAIROS — the cron module
- * graph (cronScheduler/cronTasks/cronTasksLock/cron.ts + the three tools +
- * /loop skill) has zero imports into src/assistant/ and no feature('KAIROS')
- * calls. The REPL.tsx kairosEnabled read is safe:
- * kairosEnabled is unconditionally in AppStateStore with default false, so
- * when KAIROS is off the scheduler just gets assistantMode: false.
- *
  * Called from Tool.isEnabled() (lazy, post-init) and inside useEffect /
  * imperative setup, never at module scope — so the disk cache has had a
  * chance to populate.

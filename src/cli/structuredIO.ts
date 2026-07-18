@@ -48,7 +48,6 @@ import {
 import {
   notifySessionStateChanged,
   type RequiresActionDetails,
-  type SessionExternalMetadata,
 } from '../utils/sessionState.js'
 import { jsonParse } from '../utils/slowOperations.js'
 import { Stream } from '../utils/stream.js'
@@ -136,11 +135,6 @@ export class StructuredIO {
   readonly structuredInput: AsyncGenerator<StdinMessage | SDKMessage>
   private readonly pendingRequests = new Map<string, PendingRequest<unknown>>()
 
-  // CCR external_metadata read back on worker start; null when the
-  // transport doesn't restore. Assigned by RemoteIO.
-  restoredWorkerState: Promise<SessionExternalMetadata | null> =
-    Promise.resolve(null)
-
   private inputClosed = false
   private unexpectedResponseCallback?: (
     response: SDKControlResponse,
@@ -186,12 +180,12 @@ export class StructuredIO {
     }
   }
 
-  /** Flush pending internal events. No-op for non-remote IO. Overridden by RemoteIO. */
+  /** Flush pending internal events. */
   flushInternalEvents(): Promise<void> {
     return Promise.resolve()
   }
 
-  /** Internal-event queue depth. Overridden by RemoteIO; zero otherwise. */
+  /** Internal-event queue depth. */
   get internalEventsPending(): number {
     return 0
   }
@@ -725,7 +719,6 @@ export class StructuredIO {
    * requests to the SDK host as can_use_tool control_requests.
    *
    * This piggybacks on the existing can_use_tool protocol with a synthetic
-   * tool name so that SDK hosts (VS Code, CCR, etc.) can prompt the user
    * for network access without requiring a new protocol subtype.
    */
   createSandboxAskCallback(): (hostPattern: {

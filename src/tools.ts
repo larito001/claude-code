@@ -33,14 +33,8 @@ const cronTools = feature('AGENT_TRIGGERS')
       require('./tools/ScheduleCronTool/CronListTool.js').CronListTool,
     ]
   : []
-const RemoteTriggerTool = feature('AGENT_TRIGGERS_REMOTE')
-  ? require('./tools/RemoteTriggerTool/RemoteTriggerTool.js').RemoteTriggerTool
-  : null
 const MonitorTool = feature('MONITOR_TOOL')
   ? require('./tools/MonitorTool/MonitorTool.js').MonitorTool
-  : null
-const SendUserFileTool = feature('KAIROS')
-  ? require('./tools/SendUserFileTool/SendUserFileTool.js').SendUserFileTool
   : null
 const PushNotificationTool =
   feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION')
@@ -57,7 +51,6 @@ import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
 import { ExitPlanModeV2Tool } from './tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
 import { TestingPermissionTool } from './tools/testing/TestingPermissionTool.js'
 import { GrepTool } from './tools/GrepTool/GrepTool.js'
-import { TungstenTool } from './tools/TungstenTool/TungstenTool.js'
 // Lazy require to break circular dependency: tools.ts -> TeamCreateTool/TeamDeleteTool -> ... -> tools.ts
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getTeamCreateTool = () =>
@@ -212,7 +205,6 @@ export function getAllBaseTools(): Tools {
     SkillTool,
     EnterPlanModeTool,
     ...(process.env.USER_TYPE === 'ant' ? [ConfigTool] : []),
-    ...(process.env.USER_TYPE === 'ant' ? [TungstenTool] : []),
     ...(SuggestBackgroundPRTool ? [SuggestBackgroundPRTool] : []),
     ...(WebBrowserTool ? [WebBrowserTool] : []),
     ...(isTodoV2Enabled()
@@ -233,10 +225,8 @@ export function getAllBaseTools(): Tools {
     ...(WorkflowTool ? [WorkflowTool] : []),
     ...(SleepTool ? [SleepTool] : []),
     ...cronTools,
-    ...(RemoteTriggerTool ? [RemoteTriggerTool] : []),
     ...(MonitorTool ? [MonitorTool] : []),
     BriefTool,
-    ...(SendUserFileTool ? [SendUserFileTool] : []),
     ...(PushNotificationTool ? [PushNotificationTool] : []),
     ...(SubscribePRTool ? [SubscribePRTool] : []),
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),

@@ -28,7 +28,6 @@ import { logError } from '../../utils/log.js'
 import {
   getPlan,
   getPlanFilePath,
-  persistFileSnapshotIfRemote,
 } from '../../utils/plans.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
@@ -244,20 +243,14 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
     const isAgent = !!context.agentId
 
     const filePath = getPlanFilePath(context.agentId)
-    // CCR web UI may send an edited plan via permissionResult.updatedInput.
-    // queryHelpers.ts full-replaces finalInput, so when CCR sends {} (no edit)
-    // input.plan is undefined -> disk fallback. The internal inputSchema omits
-    // `plan` (normally injected by normalizeToolInput), hence the narrowing.
+    // Permission flows may supply an edited plan through updatedInput.
     const inputPlan =
       'plan' in input && typeof input.plan === 'string' ? input.plan : undefined
     const plan = inputPlan ?? getPlan(context.agentId)
 
-    // Sync disk so VerifyPlanExecution / Read see the edit. Re-snapshot
-    // after: the only other persistFileSnapshotIfRemote call (api.ts) runs
-    // in normalizeToolInput, pre-permission — it captured the old plan.
+    // Sync disk so VerifyPlanExecution and Read see the edit.
     if (inputPlan !== undefined && filePath) {
       await writeFile(filePath, inputPlan, 'utf-8').catch(e => logError(e))
-      void persistFileSnapshotIfRemote()
     }
 
     // Check if this is a teammate that requires leader approval
@@ -471,7 +464,6 @@ Request ID: ${requestId}`,
       ? `\n\nIf this plan can be broken down into multiple independent tasks, consider using the ${TEAM_CREATE_TOOL_NAME} tool to create a team and parallelize the work.`
       : ''
 
-    // Always include the plan — extractApprovedPlan() in the Ultraplan CCR
     // flow parses the tool_result to retrieve the plan text for the local CLI.
     // Label edited plans so the model knows the user changed something.
     const planLabel = planWasEdited

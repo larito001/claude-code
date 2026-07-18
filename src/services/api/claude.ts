@@ -795,7 +795,6 @@ function shouldDeferLspTool(tool: Tool): boolean {
  * Reads API_TIMEOUT_MS when set so slow backends and the streaming path
  * share the same ceiling.
  *
- * Remote sessions default to 120s to stay under CCR's container idle-kill
  * (~5min) so a hung fallback to a wedged backend surfaces a clean
  * APIConnectionTimeoutError instead of stalling past SIGKILL.
  *
@@ -805,7 +804,7 @@ function shouldDeferLspTool(tool: Tool): boolean {
 function getNonstreamingFallbackTimeoutMs(): number {
   const override = parseInt(process.env.API_TIMEOUT_MS || '', 10)
   if (override) return override
-  return isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ? 120_000 : 300_000
+  return 300_000
 }
 
 /**
@@ -1294,7 +1293,6 @@ async function* queryModel(
   }
 
   // Repair tool_use/tool_result pairing mismatches that can occur when resuming
-  // remote/teleport sessions. Inserts synthetic error tool_results for orphaned
   // tool_uses and strips orphaned tool_results referencing non-existent tool_uses.
   messagesForAPI = ensureToolResultPairing(messagesForAPI)
 
