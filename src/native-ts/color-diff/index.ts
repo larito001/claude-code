@@ -672,6 +672,7 @@ function charWidth(ch: string): number {
 function wrapText(h: Highlight, width: number, theme: Theme): void {
   const newLines: Block[][] = []
   for (const line of h.lines) {
+    const firstOutputLine = newLines.length
     const queue: Block[] = line.slice()
     let cur: Block[] = []
     let curW = 0
@@ -710,12 +711,17 @@ function wrapText(h: Highlight, width: number, theme: Theme): void {
         }
         cur.push([style, text.slice(0, bytePos)])
         newLines.push(cur)
-        queue.unshift([style, text.slice(bytePos)])
+        const remainder = text.slice(bytePos)
+        if (remainder.length > 0) {
+          queue.unshift([style, remainder])
+        }
         cur = []
         curW = 0
       }
     }
-    newLines.push(cur)
+    if (cur.length > 0 || newLines.length === firstOutputLine) {
+      newLines.push(cur)
+    }
   }
   h.lines = newLines
 
