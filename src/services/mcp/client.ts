@@ -795,7 +795,8 @@ export const connectToServer = memoize(
         {
           name: 'claude-code',
           title: 'Claude Code',
-          version: MACRO.VERSION ?? 'unknown',
+          version:
+            typeof MACRO !== 'undefined' ? MACRO.VERSION : 'unknown',
           description: "Anthropic's agentic coding tool",
           websiteUrl: PRODUCT_URL,
         },
@@ -3039,7 +3040,8 @@ export async function setupSdkMcpClients(
         {
           name: 'claude-code',
           title: 'Claude Code',
-          version: MACRO.VERSION ?? 'unknown',
+          version:
+            typeof MACRO !== 'undefined' ? MACRO.VERSION : 'unknown',
           description: "Anthropic's agentic coding tool",
           websiteUrl: PRODUCT_URL,
         },

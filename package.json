@@ -19,6 +19,7 @@
     "smoke": "bun run scripts/smoke.ts",
     "smoke:api": "bun --env-file=.env run scripts/smoke-api.ts",
     "smoke:core": "bun run scripts/smoke-core.ts",
+    "smoke:extensions": "bun run scripts/smoke-extensions.ts",
     "smoke:session": "bun --env-file=.env run scripts/smoke-session.ts",
     "smoke:ui": "bun run scripts/smoke-ui.ts",
     "check": "bun run typecheck && bun run build && bun run smoke",
