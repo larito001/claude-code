@@ -13,10 +13,15 @@ import { getAutoMemPath } from '../src/memdir/paths.js'
 import { getOriginalCwd } from '../src/bootstrap/state.js'
 import { getDefaultFeatures, getOptionalFeatures } from '../src/utils/features.js'
 
-const PORT = Number(process.env.CONFIG_PORT) || 3456
 const CWD = getOriginalCwd()
 const APP_ROOT = resolve(import.meta.dir, '..')
 const CLAUDE_DIR = getClaudeConfigHomeDir()
+const CONFIGURED_PORT = process.env.CONFIG_PORT
+const PORT = CONFIGURED_PORT === undefined ? 3456 : Number(CONFIGURED_PORT)
+
+if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) {
+  throw new Error('CONFIG_PORT must be an integer between 0 and 65535')
+}
 
 type ConfigScope = 'user' | 'project'
 type ClaudeMdTarget = 'user' | 'project' | 'projectDotClaude' | 'local'
@@ -52,7 +57,8 @@ function getMemoryDir() {
 }
 
 function getEnvPath() {
-  return join(APP_ROOT, '.env')
+  const configuredPath = process.env.CONFIG_UI_ENV_PATH
+  return configuredPath ? resolve(CWD, configuredPath) : join(APP_ROOT, '.env')
 }
 
 function getClaudeMdPaths(): Record<ClaudeMdTarget, string> {

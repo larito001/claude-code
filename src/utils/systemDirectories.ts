@@ -1,5 +1,5 @@
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, posix, win32 } from 'path'
 import { logForDebugging } from './debug.js'
 import { getPlatform, type Platform } from './platform.js'
 
@@ -30,13 +30,21 @@ export function getSystemDirectories(
   const platform = options?.platform ?? getPlatform()
   const homeDir = options?.homedir ?? homedir()
   const env = options?.env ?? process.env
+  const platformJoin =
+    platform === 'windows'
+      ? win32.join
+      : platform === 'macos' ||
+          platform === 'linux' ||
+          platform === 'wsl'
+        ? posix.join
+        : join
 
   // Default paths used by most platforms
   const defaults: SystemDirectories = {
     HOME: homeDir,
-    DESKTOP: join(homeDir, 'Desktop'),
-    DOCUMENTS: join(homeDir, 'Documents'),
-    DOWNLOADS: join(homeDir, 'Downloads'),
+    DESKTOP: platformJoin(homeDir, 'Desktop'),
+    DOCUMENTS: platformJoin(homeDir, 'Documents'),
+    DOWNLOADS: platformJoin(homeDir, 'Downloads'),
   }
 
   switch (platform) {
@@ -44,10 +52,10 @@ export function getSystemDirectories(
       // Windows: Use USERPROFILE if available (handles localized folder names)
       const userProfile = env.USERPROFILE || homeDir
       return {
-        HOME: homeDir,
-        DESKTOP: join(userProfile, 'Desktop'),
-        DOCUMENTS: join(userProfile, 'Documents'),
-        DOWNLOADS: join(userProfile, 'Downloads'),
+        HOME: userProfile,
+        DESKTOP: win32.join(userProfile, 'Desktop'),
+        DOCUMENTS: win32.join(userProfile, 'Documents'),
+        DOWNLOADS: win32.join(userProfile, 'Downloads'),
       }
     }
 

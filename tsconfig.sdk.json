@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.framework.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist/sdk",
+    "rootDir": "src/entrypoints"
+  },
+  "include": [
+    "src/entrypoints/agentSdkTypes.ts",
+    "src/entrypoints/sdk/coreTypes.ts"
+  ]
+}
