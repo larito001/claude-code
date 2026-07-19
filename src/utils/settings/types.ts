@@ -1,7 +1,6 @@
 import { feature } from 'src/utils/features.js'
 import { z } from 'zod/v4'
 import { SandboxSettingsSchema } from '../../entrypoints/sandboxTypes.js'
-import { isEnvTruthy } from '../envUtils.js'
 import { lazySchema } from '../lazySchema.js'
 import {
   EXTERNAL_PERMISSION_MODES,
@@ -227,37 +226,6 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe('Path to a script that outputs authentication values'),
-      // 受保护，使得 SDK 生成器（未设置 CLAUDE_CODE_ENABLE_XAA 时运行）
-      // 不会在 GlobalClaudeSettings 中暴露此项。通过 getXaaIdpSettings() 读取。
-      // 外部对象上的 .passthrough() 在环境变量关闭的会话中保持已有的 settings.json 键
-      // 存活——只是此时不进行模式验证。
-      ...(isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_XAA)
-        ? {
-            xaaIdp: z
-              .object({
-                issuer: z
-                  .string()
-                  .url()
-                  .describe('IdP issuer URL for OIDC discovery'),
-                clientId: z
-                  .string()
-                  .describe("Claude Code's client_id registered at the IdP"),
-                callbackPort: z
-                  .number()
-                  .int()
-                  .positive()
-                  .optional()
-                  .describe(
-                    'Fixed loopback callback port for the IdP OIDC login. ' +
-                      'Only needed if the IdP does not honor RFC 8252 port-any matching.',
-                  ),
-              })
-              .optional()
-              .describe(
-                'XAA (SEP-990) IdP connection. Configure once; all XAA-enabled MCP servers reuse this.',
-              ),
-          }
-        : {}),
       fileSuggestion: z
         .object({
           type: z.literal('command'),
@@ -283,36 +251,6 @@ export const SettingsSchema = lazySchema(() =>
       env: EnvironmentVariablesSchema()
         .optional()
         .describe('Environment variables to set for Claude Code sessions'),
-      // 提交和拉取请求的归属信息
-      attribution: z
-        .object({
-          commit: z
-            .string()
-            .optional()
-            .describe(
-              'Attribution text for git commits, including any trailers. ' +
-                'Empty string hides attribution.',
-            ),
-          pr: z
-            .string()
-            .optional()
-            .describe(
-              'Attribution text for pull request descriptions. ' +
-                'Empty string hides attribution.',
-            ),
-        })
-        .optional()
-        .describe(
-          'Customize attribution text for commits and PRs. ' +
-            'Each field defaults to the standard Claude Code attribution if not set.',
-        ),
-      includeCoAuthoredBy: z
-        .boolean()
-        .optional()
-        .describe(
-          'Deprecated: Use attribution instead. ' +
-            "Whether to include Claude's co-authored by attribution in commits and PRs (defaults to true)",
-        ),
       includeGitInstructions: z
         .boolean()
         .optional()
@@ -547,10 +485,6 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .catch(undefined)
         .describe('Persisted effort level for supported models.'),
-      advisorModel: z
-        .string()
-        .optional()
-        .describe('Advisor model for the server-side advisor tool.'),
       fastMode: z
         .boolean()
         .optional()
@@ -625,16 +559,6 @@ export const SettingsSchema = lazySchema(() =>
               ),
           }
         : {}),
-      // Teams/Enterprise 选择加入渠道通知。默认关闭。声明了claude/channel能力的MCP服务器可以将入站消息推送到对话中；对于托管组织，仅在显式启用时有效。哪些服务器可以连接仍然由allowedMcpServers/deniedMcpServers控制。未进行特性传播：MCP_CHANNELS是external:true，传播破坏了allowedChannelPlugins的类型推断（.passthrough()的catch-all给出{}而不是数组类型）。
-      channelsEnabled: z
-        .boolean()
-        .optional()
-        .describe(
-          'Teams/Enterprise opt-in for channel notifications (MCP servers with the ' +
-            'claude/channel capability pushing inbound messages). Default off. ' +
-            'Set true to allow; users then select servers via --channels.',
-        ),
-      // 组织级渠道插件允许列表。设置后，替换Anthropic ledger——管理员拥有信任决策。未定义则回退到ledger。仅插件条目形状（与ledger相同）；服务器类条目仍需要开发标志。
       prefersReducedMotion: z
         .boolean()
         .optional()

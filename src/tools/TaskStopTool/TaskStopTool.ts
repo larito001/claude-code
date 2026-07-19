@@ -33,7 +33,6 @@ export type Output = z.infer<OutputSchema>
 
 export const TaskStopTool = buildTool({
   name: TASK_STOP_TOOL_NAME,
-  searchHint: 'kill a running background task',
   maxResultSizeChars: 100_000,
   userFacingName: () => 'Stop Task',
   get inputSchema(): InputSchema {
@@ -42,7 +41,6 @@ export const TaskStopTool = buildTool({
   get outputSchema(): OutputSchema {
     return outputSchema()
   },
-  shouldDefer: true,
   isConcurrencySafe() {
     return true
   },

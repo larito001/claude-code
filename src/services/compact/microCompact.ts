@@ -8,7 +8,6 @@ import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
 import { GLOB_TOOL_NAME } from '../../tools/GlobTool/prompt.js'
 import { GREP_TOOL_NAME } from '../../tools/GrepTool/prompt.js'
 import { WEB_FETCH_TOOL_NAME } from '../../tools/WebFetchTool/prompt.js'
-import { WEB_SEARCH_TOOL_NAME } from '../../tools/WebSearchTool/prompt.js'
 import type { Message } from '../../types/message.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { SHELL_TOOL_NAMES } from '../../utils/shell/shellToolUtils.js'
@@ -38,7 +37,6 @@ const COMPACTABLE_TOOLS = new Set<string>([
   ...SHELL_TOOL_NAMES,
   GREP_TOOL_NAME,
   GLOB_TOOL_NAME,
-  WEB_SEARCH_TOOL_NAME,
   WEB_FETCH_TOOL_NAME,
   FILE_EDIT_TOOL_NAME,
   FILE_WRITE_TOOL_NAME,

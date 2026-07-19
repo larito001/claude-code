@@ -117,10 +117,6 @@ export function modelSupportsAdaptiveThinking(model: string): boolean {
 }
 
 export function shouldEnableThinkingByDefault(): boolean {
-  if (process.env.MAX_THINKING_TOKENS) {
-    return parseInt(process.env.MAX_THINKING_TOKENS, 10) > 0
-  }
-
   const { settings } = getSettingsWithErrors()
   if (settings.alwaysThinkingEnabled === false) {
     return false

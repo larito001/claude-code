@@ -13,7 +13,6 @@ import {
 import { FILE_WRITE_TOOL_NAME } from '../tools/FileWriteTool/prompt.js'
 import { FILE_READ_TOOL_NAME } from '../tools/FileReadTool/prompt.js'
 import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
-import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
 import type { Tools } from '../Tool.js'
 import type { Command } from '../types/command.js'
@@ -43,7 +42,6 @@ import {
   getScratchpadDir,
 } from '../utils/permissions/filesystem.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
-import { isReplModeEnabled } from '../tools/REPLTool/constants.js'
 import { feature } from 'src/utils/features.js'
 import { shouldUseGlobalCacheScope } from '../utils/betas.js'
 import { isForkSubagentEnabled } from '../tools/AgentTool/forkSubagent.js'
@@ -221,21 +219,9 @@ When you encounter an obstacle, do not use destructive actions as a shortcut to 
 /** 获取 get Using Your Tools Section 对应的数据或状态。 */
 function getUsingYourToolsSection(enabledTools: Set<string>): string {
   /** 执行 task Tool Name 对应的业务处理。 */
-  const taskToolName = [TASK_CREATE_TOOL_NAME, TODO_WRITE_TOOL_NAME].find(n =>
-    enabledTools.has(n),
-  )
-
-  // 在REPL模式下，Read/Write/Edit/Glob/Grep/Bash/Agent 被隐藏，不能直接使用（REPL_ONLY_TOOLS）。"优先使用专用工具而非Bash"的指导无关紧要——REPL自身的提示说明了如何从脚本中调用它们。
-  if (isReplModeEnabled()) {
-    /** 执行 items 对应的业务处理。 */
-    const items = [
-      taskToolName
-        ? `Break down and manage your work with the ${taskToolName} tool. These tools are helpful for planning your work and helping the user track your progress. Mark each task as completed as soon as you are done with the task. Do not batch up multiple tasks before marking them as completed.`
-        : null,
-    ].filter(item => item !== null)
-    if (items.length === 0) return ''
-    return [`# Using your tools`, ...prependBullets(items)].join(`\n`)
-  }
+  const taskToolName = enabledTools.has(TASK_CREATE_TOOL_NAME)
+    ? TASK_CREATE_TOOL_NAME
+    : null
 
   // 嵌入式搜索构建别名find/grep指向捆绑的bfs/ugrep，并移除专用的Glob/Grep工具，因此跳过指向它们的指南。
   const embedded = hasEmbeddedSearchTools()

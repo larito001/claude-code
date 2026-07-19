@@ -7,7 +7,6 @@ import { SKILL_TOOL_NAME } from '../../../tools/SkillTool/constants.js';
 import { SkillTool } from '../../../tools/SkillTool/SkillTool.js';
 import { env } from '../../../utils/env.js';
 import { shouldShowAlwaysAllowOptions } from '../../../utils/permissions/permissionsLoader.js';
-import { usePermissionPromptTracking } from '../hooks.js';
 import { PermissionDialog } from '../PermissionDialog.js';
 import { PermissionPrompt, type PermissionPromptOption } from '../PermissionPrompt.js';
 import type { PermissionRequestProps } from '../PermissionRequest.js';
@@ -32,7 +31,6 @@ export function SkillPermissionRequest(props) {
   }
   const skill = t0;
   const commandObj = toolUseConfirm.permissionResult.behavior === "ask" && toolUseConfirm.permissionResult.metadata && "command" in toolUseConfirm.permissionResult.metadata ? toolUseConfirm.permissionResult.metadata.command : undefined;
-  usePermissionPromptTracking(toolUseConfirm);
   let t2;
   if ($[3] === Symbol.for("react.memo_cache_sentinel")) {
     t2 = getOriginalCwd();

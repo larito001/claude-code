@@ -94,15 +94,6 @@ const TIP_MATCHERS: TipMatcher[] = [
   },
   {
     /** 判断是否满足 matches 对应的数据或状态。 */
-    matches: (ctx): boolean =>
-      ctx.code === 'invalid_type' && ctx.expected === 'boolean',
-    tip: {
-      suggestion:
-        'Use true or false without quotes. Example: "includeCoAuthoredBy": true',
-    },
-  },
-  {
-    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean => ctx.code === 'unrecognized_keys',
     tip: {
       suggestion:

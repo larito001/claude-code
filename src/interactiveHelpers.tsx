@@ -2,7 +2,7 @@ import { feature } from 'src/utils/features.js';
 import { appendFileSync } from 'fs';
 import React from 'react';
 import { gracefulShutdown, gracefulShutdownSync } from 'src/utils/gracefulShutdown.js';
-import { type ChannelEntry, getAllowedChannels, setAllowedChannels, setHasDevChannels, setSessionTrustAccepted, setStatsStore } from './bootstrap/state.js';
+import { setSessionTrustAccepted, setStatsStore } from './bootstrap/state.js';
 import { createStatsStore, type StatsStore } from './context/stats.js';
 import { getSystemContext } from './context.js';
 import { initializeTelemetryAfterTrust } from './entrypoints/init.js';
@@ -10,7 +10,7 @@ import { isSynchronizedOutputSupported } from './ink/terminal.js';
 import type { RenderOptions, Root, TextProps } from './ink.js';
 import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js';
 import { startDeferredPrefetches } from './main.js';
-import { isFeatureEnabled, initializeFeatureConfig, resetFeatureConfig } from './services/featureConfig.js';
+import { initializeFeatureConfig, resetFeatureConfig } from './services/featureConfig.js';
 import { handleMcpjsonServerApprovals } from './services/mcpServerApproval.js';
 import { AppStateProvider } from './state/AppState.js';
 import { onChangeAppState } from './state/onChangeAppState.js';
@@ -99,7 +99,7 @@ export async function renderAndRun(root: Root, element: React.ReactNode): Promis
   await gracefulShutdown(0);
 }
 /** 执行 show Setup Screens 对应的业务处理。 */
-export async function showSetupScreens(root: Root, permissionMode: PermissionMode, allowDangerouslySkipPermissions: boolean, devChannels?: ChannelEntry[]): Promise<void> {
+export async function showSetupScreens(root: Root, permissionMode: PermissionMode, allowDangerouslySkipPermissions: boolean): Promise<void> {
   if (
     process.env.NODE_ENV === 'test' ||
     isEnvTruthy(process.env.CLAUDE_CODE_SKIP_ONBOARDING)
@@ -195,34 +195,6 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
         AutoModeOptInDialog
       } = await import('./components/AutoModeOptInDialog.js');
       await showSetupDialog(root, done => <AutoModeOptInDialog onAccept={done} onDecline={() => gracefulShutdownSync(1)} declineExits />);
-    }
-  }
-
-  // --dangerously-load-development-channels 确认。接受后，将开发频道追加到
-  // main.tsx 中已设置的 --channels 列表中。组织策略
-  // 不会被绕过——gateChannelServer() 仍然运行；此标志仅存在
-  // 用于绕过 --channels 批准的服务器白名单。
-  if (feature('MCP_CHANNELS')) {
-    // 频道门控在此函数返回后读取 tengu_harbor。
-    // 冷磁盘缓存（新安装，或首次在服务端添加标志后运行）默认值为 false，并静默丢弃
-    // 整个会话的频道通知——gh#37026。
-    // isFeatureEnabled 如果磁盘已为 true 则立即返回；仅在冷/过时-false 缓存上阻塞（等待之前触发的相同记忆化的
-    // initializeFeatureConfig promise）。同时预热下面开发频道对话框中的 isChannelsEnabled() 检查。
-    if (getAllowedChannels().length > 0 || (devChannels?.length ?? 0) > 0) {
-      await isFeatureEnabled('tengu_harbor');
-    }
-    if (devChannels && devChannels.length > 0) {
-      const {
-        DevChannelsDialog
-      } = await import('./components/DevChannelsDialog.js');
-      await showSetupDialog(root, done => <DevChannelsDialog channels={devChannels} onAccept={() => {
-        setAllowedChannels([...getAllowedChannels(), ...devChannels.map(c => ({
-          ...c,
-          dev: true
-        }))]);
-        setHasDevChannels(true);
-        void done();
-      }} />);
     }
   }
 

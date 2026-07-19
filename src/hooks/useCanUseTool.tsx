@@ -138,8 +138,7 @@ function useCanUseTool(setToolUseConfirmQueue, setToolPermissionContext) {
                 ctx,
                 description,
                 result,
-                awaitAutomatedChecksBeforeDialog: appState.toolPermissionContext.awaitAutomatedChecksBeforeDialog,
-                channelCallbacks: feature("MCP_CHANNELS") ? appState.channelPermissionCallbacks : undefined
+                awaitAutomatedChecksBeforeDialog: appState.toolPermissionContext.awaitAutomatedChecksBeforeDialog
               }, resolve);
               return;
             }

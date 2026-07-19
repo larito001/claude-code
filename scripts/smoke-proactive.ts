@@ -106,7 +106,6 @@ try {
     setInProgressToolUseIDs: () => {},
     setResponseLength: () => {},
     updateFileHistoryState: () => {},
-    updateAttributionState: () => {},
   } as unknown as ToolUseContext
 
   let backgroundTaskId: string | undefined

@@ -5,7 +5,6 @@ import {
   formatModelPricing,
 } from '../modelCost.js'
 import { getInitialSettings } from '../settings/settings.js'
-import { checkOpus1mAccess, checkSonnet1mAccess } from './check1mAccess.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import {
   getCanonicalName,
@@ -15,7 +14,6 @@ import {
   getDefaultMainLoopModelSetting,
   getMarketingNameForModel,
   getUserSpecifiedModelSetting,
-  isOpus1mMergeEnabled,
   getOpus46PricingSuffix,
   renderDefaultModelSetting,
   type ModelSetting,
@@ -61,28 +59,6 @@ function getOpus46Option(fastMode = false): ModelOption {
   }
 }
 
-/** 获取 get Sonnet46 1 M Option 对应的数据或状态。 */
-export function getSonnet46_1MOption(): ModelOption {
-  return {
-    value: 'sonnet[1m]',
-    label: 'Sonnet (1M context)',
-    description: `Sonnet 4.6 for long sessions · ${formatModelPricing(COST_TIER_3_15)}`,
-    descriptionForModel:
-      'Sonnet 4.6 with 1M context window - for long sessions with large codebases',
-  }
-}
-
-/** 获取 get Opus46 1 M Option 对应的数据或状态。 */
-export function getOpus46_1MOption(fastMode = false): ModelOption {
-  return {
-    value: 'opus[1m]',
-    label: 'Opus (1M context)',
-    description: `Opus 4.6 for long sessions${getOpus46PricingSuffix(fastMode)}`,
-    descriptionForModel:
-      'Opus 4.6 with 1M context window - for long sessions with large codebases',
-  }
-}
-
 /** 获取 get Haiku45 Option 对应的数据或状态。 */
 function getHaiku45Option(): ModelOption {
   return {
@@ -91,17 +67,6 @@ function getHaiku45Option(): ModelOption {
     description: `Haiku 4.5 · Fastest for quick answers · ${formatModelPricing(COST_HAIKU_45)}`,
     descriptionForModel:
       'Haiku 4.5 - fastest for quick answers. Lower cost but less capable than Sonnet 4.6.',
-  }
-}
-
-/** 获取 get Merged Opus1 M Option 对应的数据或状态。 */
-function getMergedOpus1MOption(fastMode = false): ModelOption {
-  return {
-    value: 'opus[1m]',
-    label: 'Opus (1M context)',
-    description: `Opus 4.6 with 1M context · Most capable for complex work${fastMode ? getOpus46PricingSuffix(fastMode) : ''}`,
-    descriptionForModel:
-      'Opus 4.6 with 1M context - most capable for complex work',
   }
 }
 
@@ -117,17 +82,7 @@ function getOpusPlanOption(): ModelOption {
 // @[MODEL LAUNCH]: 更新下方的模型选择器列表，以包含或重新排序新模型。
 function getModelOptionsBase(fastMode = false): ModelOption[] {
   const options = [getDefaultOptionForUser(fastMode)]
-  if (checkSonnet1mAccess()) {
-    options.push(getSonnet46_1MOption())
-  }
-  if (isOpus1mMergeEnabled()) {
-    options.push(getMergedOpus1MOption(fastMode))
-  } else {
-    options.push(getOpus46Option(fastMode))
-    if (checkOpus1mAccess()) {
-      options.push(getOpus46_1MOption(fastMode))
-    }
-  }
+  options.push(getOpus46Option(fastMode))
   options.push(getHaiku45Option())
   return options
 }
@@ -242,11 +197,6 @@ export function getModelOptions(fastMode = false): ModelOption[] {
     return filterModelOptionsByAllowlist([
       ...options,
       getOpus46Option(fastMode),
-    ])
-  } else if (customModel === 'opus[1m]') {
-    return filterModelOptionsByAllowlist([
-      ...options,
-      getMergedOpus1MOption(fastMode),
     ])
   } else {
     // 尝试为已知的 Anthropic 模型显示可读标签，如果别名现在解析为更新的版本，则显示升级提示。

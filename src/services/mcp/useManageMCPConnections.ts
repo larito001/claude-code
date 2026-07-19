@@ -1,4 +1,3 @@
-import { feature } from 'src/utils/features.js'
 import { useCallback, useEffect, useRef } from 'react'
 import { getSessionId } from '../../bootstrap/state.js'
 import type { Command } from '../../commands.js'
@@ -32,7 +31,6 @@ import {
 import type { AppState } from 'src/state/AppState.js'
 import type { PluginError } from 'src/types/plugin.js'
 import { logForDebugging } from 'src/utils/debug.js'
-import { useNotifications } from '../../context/notifications.js'
 import {
   useAppState,
   useAppStateStore,
@@ -41,19 +39,6 @@ import {
 import { errorMessage } from '../../utils/errors.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { logMCPDebug, logMCPError } from '../../utils/log.js'
-import { enqueue } from '../../utils/messageQueueManager.js'
-import {
-  CHANNEL_PERMISSION_METHOD,
-  ChannelMessageNotificationSchema,
-  ChannelPermissionNotificationSchema,
-  gateChannelServer,
-  wrapChannelMessage,
-} from './channelNotification.js'
-import {
-  type ChannelPermissionCallbacks,
-  createChannelPermissionCallbacks,
-  isChannelPermissionRelayEnabled,
-} from './channelPermissions.js'
 import { registerElicitationHandler } from './elicitationHandler.js'
 import { getMcpPrefix } from './mcpStringUtils.js'
 import { commandBelongsToServer, excludeStalePluginClients } from './utils.js'
@@ -129,47 +114,6 @@ export function useManageMCPConnections(
   // Track active reconnection attempts to allow cancellation
   const reconnectTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
 
-  // Dedup the --channels blocked warning per skip kind so that a user who
-  // skips account-authenticated channels in API-key-only builds
-  // gets a second toast.
-  const channelWarnedKindsRef = useRef<Set<'disabled'>>(new Set())
-  // Channel permission callbacks — constructed once, stable ref. Stored in
-  // AppState so interactiveHandler can subscribe. The pending Map lives inside
-  // the closure (not module-level, not AppState — functions-in-state is brittle).
-  const channelPermCallbacksRef = useRef<ChannelPermissionCallbacks | null>(
-    null,
-  )
-  if (
-    (feature('MCP_CHANNELS')) &&
-    channelPermCallbacksRef.current === null
-  ) {
-    channelPermCallbacksRef.current = createChannelPermissionCallbacks()
-  }
-  // Store callbacks in AppState so interactiveHandler.ts can reach them via
-  // ctx.toolUseContext.getAppState(). One-time set — the ref is stable.
-  useEffect(() => {
-    if (feature('MCP_CHANNELS')) {
-      const callbacks = channelPermCallbacksRef.current
-      if (!callbacks) return
-      // local feature configuration runtime gate — separate from channels so channels can
-      // ship without this. Checked at mount; mid-session flips need restart.
-      // If off, callbacks never go into AppState → interactiveHandler sees
-      // undefined → never sends → intercept has nothing pending → "yes tbxkq"
-      // flows to Claude as normal chat. One gate, full disable.
-      if (!isChannelPermissionRelayEnabled()) return
-      setAppState(prev => {
-        if (prev.channelPermissionCallbacks === callbacks) return prev
-        return { ...prev, channelPermissionCallbacks: callbacks }
-      })
-      return () => {
-        setAppState(prev => {
-          if (prev.channelPermissionCallbacks === undefined) return prev
-          return { ...prev, channelPermissionCallbacks: undefined }
-        })
-      }
-    }
-  }, [setAppState])
-  const { addNotification } = useNotifications()
 
   // Batched MCP state updates: queue individual server updates and flush them
   // in a single setAppState call via setTimeout. Using a time-based window
@@ -435,102 +379,6 @@ export function useManageMCPConnections(
               void reconnectWithBackoff()
             } else {
               updateServer({ ...client, type: 'failed' })
-            }
-          }
-
-          // Channel push: notifications/claude/channel → enqueue().
-          // Gate decides whether to register the handler; connection stays
-          // up either way (allowedMcpServers controls that).
-          if (feature('MCP_CHANNELS')) {
-            const gate = gateChannelServer(
-              client.name,
-              client.capabilities,
-            )
-            switch (gate.action) {
-              case 'register':
-                logMCPDebug(client.name, 'Channel notifications registered')
-                client.client.setNotificationHandler(
-                  ChannelMessageNotificationSchema(),
-                  async notification => {
-                    const { content, meta } = notification.params
-                    logMCPDebug(
-                      client.name,
-                      `notifications/claude/channel: ${content.slice(0, 80)}`,
-                    )
-                    enqueue({
-                      mode: 'prompt',
-                      value: wrapChannelMessage(client.name, content, meta),
-                      priority: 'next',
-                      isMeta: true,
-                      origin: { kind: 'channel', server: client.name },
-                      skipSlashCommands: true,
-                    })
-                  },
-                )
-                // Permission-reply handler — separate event, separate
-                // capability. Only registers if the server declares
-                // claude/channel/permission (same opt-in check as the send
-                // path in interactiveHandler.ts). Server parses the user's
-                // reply and emits {request_id, behavior}; no regex on our
-                // side, text in the general channel can't accidentally match.
-                if (
-                  client.capabilities?.experimental?.[
-                    'claude/channel/permission'
-                  ] !== undefined
-                ) {
-                  client.client.setNotificationHandler(
-                    ChannelPermissionNotificationSchema(),
-                    async notification => {
-                      const { request_id, behavior } = notification.params
-                      const resolved =
-                        channelPermCallbacksRef.current?.resolve(
-                          request_id,
-                          behavior,
-                          client.name,
-                        ) ?? false
-                      logMCPDebug(
-                        client.name,
-                        `notifications/claude/channel/permission: ${request_id} → ${behavior} (${resolved ? 'matched pending' : 'no pending entry — stale or unknown ID'})`,
-                      )
-                    },
-                  )
-                }
-                break
-              case 'skip':
-                // Idempotent teardown so a register→skip re-gate actually removes the live
-                // handler. Without this, mid-session demotion is one-way:
-                // the gate says skip but the earlier handler keeps enqueuing.
-                // Map.delete — safe when never registered.
-                client.client.removeNotificationHandler(
-                  'notifications/claude/channel',
-                )
-                client.client.removeNotificationHandler(
-                  CHANNEL_PERMISSION_METHOD,
-                )
-                logMCPDebug(
-                  client.name,
-                  `Channel notifications skipped: ${gate.reason}`,
-                )
-                // Surface a once-per-kind toast when a channel server is
-                // blocked. This is the only
-                // user-visible signal (logMCPDebug above requires --debug).
-                // Capability/session skips are expected noise and stay
-                // we're here with those kinds, the user asked for it.
-                if (
-                  gate.kind === 'disabled' &&
-                  entry !== undefined &&
-                  !channelWarnedKindsRef.current.has(gate.kind)
-                ) {
-                  channelWarnedKindsRef.current.add(gate.kind)
-                  addNotification({
-                    key: `channels-blocked-${gate.kind}`,
-                    priority: 'high',
-                    text: 'Channels are not currently available',
-                    color: 'warning',
-                    timeoutMs: 12000,
-                  })
-                }
-                break
             }
           }
 

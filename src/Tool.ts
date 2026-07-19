@@ -50,11 +50,9 @@ import type {
   AgentToolProgress,
   BashProgress,
   MCPProgress,
-  REPLToolProgress,
   SkillToolProgress,
   TaskOutputProgress,
   ToolProgressData,
-  WebSearchProgress,
 } from './types/tools.js'
 import type { FileStateCache } from './utils/fileStateCache.js'
 import type { DenialTrackingState } from './utils/permissions/denialTracking.js'
@@ -66,10 +64,8 @@ export type {
   AgentToolProgress,
   BashProgress,
   MCPProgress,
-  REPLToolProgress,
   SkillToolProgress,
   TaskOutputProgress,
-  WebSearchProgress,
 }
 
 import type { SpinnerMode } from './components/Spinner.js'
@@ -83,7 +79,6 @@ import type {
 } from './types/hooks.js'
 import type { AgentId } from './types/ids.js'
 import type { DeepImmutable } from './types/utils.js'
-import type { AttributionState } from './utils/commitAttribution.js'
 import type { FileHistoryState } from './utils/fileHistory.js'
 import type { Theme, ThemeName } from './utils/theme.js'
 
@@ -248,10 +243,6 @@ export type ToolUseContext = {
   updateFileHistoryState: (
     updater: (prev: FileHistoryState) => FileHistoryState,
   ) => void
-  /** 更新 update Attribution State 对应的数据或状态。 */
-  updateAttributionState: (
-    updater: (prev: AttributionState) => AttributionState,
-  ) => void
   /** 设置并保存 set Conversation Id 对应的数据或状态。 */
   setConversationId?: (id: UUID) => void
   agentId?: AgentId // 仅为子代理设置；使用 getSessionId() 获取会话 ID。挂钩使用它来区分子代理调用。
@@ -365,13 +356,6 @@ export type Tool<
   Output = unknown,
   P extends ToolProgressData = ToolProgressData,
 > = {
-  /**
-   * ToolSearch 用于关键字匹配的单行功能短语。
-   * 延迟时帮助模型通过关键字搜索找到此工具。
-   * 3-10 个字，无句号。
-   * 首选工具名称中尚未包含的术语（例如 NotebookEdit 的“jupyter”）。
-   */
-  searchHint?: string
   /** 执行 call 对应的数据或状态。 */
   call(
     args: z.infer<Input>,
@@ -437,18 +421,6 @@ export type Tool<
   requiresUserInteraction?(): boolean
   isMcp?: boolean
   isLsp?: boolean
-  /**
-   * 当 true 时，该工具将被延迟（使用 defer_loading: true 发送）并且需要
-   * ToolSearch 在调用之前要使用。
-   */
-  readonly shouldDefer?: boolean
-  /**
-   * 如果为 true，则该工具永远不会延迟 - 其完整架构出现在
-   * 即使启用了 ToolSearch，也会出现初始提示。对于 MCP 工具，通过设置
-   * `_meta['anthropic/alwaysLoad']`。用于模型必须看到的工具
-   * 转 1，无需 ToolSearch 往返。
-   */
-  readonly alwaysLoad?: boolean
   /**
    * 对于 MCP 工具：从 MCP 服务器接收到的服务器和工具名称（未标准化）。
    * 存在于所有 MCP 工具上，无论“name”是否带有前缀 (mcp__server__tool)
@@ -567,8 +539,7 @@ export type Tool<
   ): ToolResultBlockParam
   /**
    * 选修的。当省略时，工具结果不会呈现任何内容（与返回相同）
-   * 无效的）。省略其结果在其他地方出现的工具（例如，TodoWrite
-   * 更新待办事项面板，而不是记录）。
+   * 无效的）。省略其结果已在其他位置呈现的工具。
    */
   renderToolResultMessage?(
     content: Output,

@@ -3,7 +3,6 @@ import { buildTool, type ToolDef } from '../../Tool.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import {
   getTaskListId,
-  isTodoV2Enabled,
   listTasks,
   TaskStatusSchema,
 } from '../../utils/tasks.js'
@@ -32,7 +31,6 @@ export type Output = z.infer<OutputSchema>
 
 export const TaskListTool = buildTool({
   name: TASK_LIST_TOOL_NAME,
-  searchHint: 'list all tasks',
   maxResultSizeChars: 100_000,
   async description() {
     return DESCRIPTION
@@ -49,9 +47,8 @@ export const TaskListTool = buildTool({
   userFacingName() {
     return 'TaskList'
   },
-  shouldDefer: true,
   isEnabled() {
-    return isTodoV2Enabled()
+    return true
   },
   isConcurrencySafe() {
     return true

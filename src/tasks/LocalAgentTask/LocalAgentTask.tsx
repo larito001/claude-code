@@ -13,7 +13,7 @@ import { asAgentId } from '../../types/ids.js';
 import type { Message } from '../../types/message.js';
 import { createAbortController, createChildAbortController } from '../../utils/abortController.js';
 import { registerCleanup } from '../../utils/cleanupRegistry.js';
-import { getToolSearchOrReadInfo } from '../../utils/collapseReadSearch.js';
+import { getSearchOrReadInfo } from '../../utils/collapseReadSearch.js';
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js';
 import { getAgentTranscriptPath } from '../../utils/sessionStorage.js';
 import { evictTaskOutput, getTaskOutputPath, initTaskOutputAsSymlink } from '../../utils/task/diskOutput.js';
@@ -79,7 +79,7 @@ export function updateProgressFromMessage(tracker: ProgressTracker, message: Mes
       // Omit StructuredOutput from preview - it's an internal tool
       if (content.name !== SYNTHETIC_OUTPUT_TOOL_NAME) {
         const input = content.input as Record<string, unknown>;
-        const classification = tools ? getToolSearchOrReadInfo(content.name, input, tools) : undefined;
+        const classification = tools ? getSearchOrReadInfo(content.name, input, tools) : undefined;
         tracker.recentActivities.push({
           toolName: content.name,
           input,

@@ -3,7 +3,6 @@ import type { UUID } from 'crypto'
 import { dirname } from 'path'
 import {
   getMainLoopModelOverride,
-  getSessionId,
   setMainLoopModelOverride,
   setMainThreadAgentType,
   setOriginalCwd,
@@ -19,20 +18,11 @@ import {
   getActiveAgentsFromList,
   getAgentDefinitionsWithOverrides,
 } from '../tools/AgentTool/loadAgentsDir.js'
-import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { asSessionId } from '../types/ids.js'
-import type {
-  AttributionSnapshotMessage,
-  PersistedWorktreeSession,
-} from '../types/logs.js'
+import type { PersistedWorktreeSession } from '../types/logs.js'
 import type { Message } from '../types/message.js'
 import { renameRecordingForSession } from './asciicast.js'
 import { clearMemoryFileCaches } from './claudemd.js'
-import {
-  type AttributionState,
-  attributionRestoreStateFromLog,
-  restoreAttributionStateFromSnapshots,
-} from './commitAttribution.js'
 import { updateSessionName } from './concurrentSessions.js'
 import { getCwd } from './cwd.js'
 import { logForDebugging } from './debug.js'
@@ -50,9 +40,6 @@ import {
   saveMode,
   saveWorktreeState,
 } from './sessionStorage.js'
-import { isTodoV2Enabled } from './tasks.js'
-import type { TodoList } from './todo/types.js'
-import { TodoListSchema } from './todo/types.js'
 import type { ContentReplacementRecord } from './toolResultStorage.js'
 import {
   getCurrentWorktreeSession,
@@ -62,34 +49,10 @@ import {
 type ResumeResult = {
   messages?: Message[]
   fileHistorySnapshots?: FileHistorySnapshot[]
-  attributionSnapshots?: AttributionSnapshotMessage[]
 }
 
 /**
- * Scan the transcript for the last TodoWrite tool_use block and return its todos.
- * Used to hydrate AppState.todos on SDK --resume so the model's todo list
- * survives session restarts without file persistence.
- */
-function extractTodosFromTranscript(messages: Message[]): TodoList {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i]
-    if (msg?.type !== 'assistant') continue
-    const toolUse = msg.message.content.find(
-      block => block.type === 'tool_use' && block.name === TODO_WRITE_TOOL_NAME,
-    )
-    if (!toolUse || toolUse.type !== 'tool_use') continue
-    const input = toolUse.input
-    if (input === null || typeof input !== 'object') return []
-    const parsed = TodoListSchema().safeParse(
-      (input as Record<string, unknown>).todos,
-    )
-    return parsed.success ? parsed.data : []
-  }
-  return []
-}
-
-/**
- * Restore session state (file history, attribution, todos) from log on resume.
+ * Restore session state from log on resume.
  * Used by both SDK (print.ts) and interactive (REPL.tsx, main.tsx) resume paths.
  */
 export function restoreSessionStateFromLog(
@@ -103,47 +66,6 @@ export function restoreSessionStateFromLog(
     })
   }
 
-  // Restore optional commit-attribution state.
-  if (
-    feature('COMMIT_ATTRIBUTION') &&
-    result.attributionSnapshots &&
-    result.attributionSnapshots.length > 0
-  ) {
-    attributionRestoreStateFromLog(result.attributionSnapshots, newState => {
-      setAppState(prev => ({ ...prev, attribution: newState }))
-    })
-  }
-
-  // Restore TodoWrite state from transcript (SDK/non-interactive only).
-  // Interactive mode uses file-backed v2 tasks, so AppState.todos is unused there.
-  if (!isTodoV2Enabled() && result.messages && result.messages.length > 0) {
-    const todos = extractTodosFromTranscript(result.messages)
-    if (todos.length > 0) {
-      const agentId = getSessionId()
-      setAppState(prev => ({
-        ...prev,
-        todos: { ...prev.todos, [agentId]: todos },
-      }))
-    }
-  }
-}
-
-/**
- * Compute restored attribution state from log snapshots.
- * Used for computing initial state before render (e.g., main.tsx --continue).
- * Returns undefined if attribution feature is disabled or no snapshots exist.
- */
-export function computeRestoredAttributionState(
-  result: ResumeResult,
-): AttributionState | undefined {
-  if (
-    feature('COMMIT_ATTRIBUTION') &&
-    result.attributionSnapshots &&
-    result.attributionSnapshots.length > 0
-  ) {
-    return restoreAttributionStateFromSnapshots(result.attributionSnapshots)
-  }
-  return undefined
 }
 
 /**
@@ -276,7 +198,6 @@ type CoordinatorModeApi = {
 type ResumeLoadResult = {
   messages: Message[]
   fileHistorySnapshots?: FileHistorySnapshot[]
-  attributionSnapshots?: AttributionSnapshotMessage[]
   contentReplacements?: ContentReplacementRecord[]
   sessionId: UUID | undefined
   agentName?: string
@@ -389,7 +310,6 @@ export async function processResumedConversation(
     forkSession: boolean
     sessionIdOverride?: string
     transcriptPath?: string
-    includeAttribution?: boolean
   },
   context: {
     modeApi: CoordinatorModeApi | null
@@ -478,9 +398,6 @@ export async function processResumedConversation(
   }
 
   // Compute initial state before render (per CLAUDE.md guidelines)
-  const restoredAttribution = opts.includeAttribution
-    ? computeRestoredAttributionState(result)
-    : undefined
   const standaloneAgentContext = computeStandaloneAgentContext(
     result.agentName,
     result.agentColor,
@@ -505,7 +422,6 @@ export async function processResumedConversation(
     initialState: {
       ...context.initialState,
       ...(resumedAgentType && { agent: resumedAgentType }),
-      ...(restoredAttribution && { attribution: restoredAttribution }),
       ...(standaloneAgentContext && { standaloneAgentContext }),
       agentDefinitions: refreshedAgentDefs,
     },

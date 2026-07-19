@@ -25,9 +25,6 @@ import type { SessionId } from 'src/types/ids.js'
 
 // 请勿在此处添加更多状态——谨慎使用全局状态
 
-// 通过--dangerously-load-development-channels传入的条目上设置dev: true。允许列表门控按条目检查此项（而不是会话级别的hasDevChannels位），因此同时传递两个标志不会让开发对话框的接受泄露允许列表绕过到--channels条目。
-export type ChannelEntry = { kind: 'server'; name: string; dev?: boolean }
-
 export type AttributedCounter = {
   /** 添加或注册 add 对应的数据或状态。 */
   add(value: number, additionalAttributes?: Attributes): void
@@ -138,11 +135,6 @@ type State = {
   lastEmittedDate: string | null
   // 来自--add-dir标志的额外目录（用于加载CLAUDE.md）
   additionalDirectoriesForClaudeMd: string[]
-  // 来自--channels标志的通道服务器白名单（其通道通知应注册此会话的服务器）。在main.tsx中解析一次——标签决定信任模型：'plugin' → 市场验证+白名单，'server' → 白名单始终失败（模式仅限插件）。任何类型都需要entry.dev绕过白名单。
-  allowedChannels: ChannelEntry[]
-  // 如果allowedChannels中有任何条目来自
-  // --dangerously-load-development-channels则为true（以便通道门控在被策略阻止的消息中能命名正确的标志）
-  hasDevChannels: boolean
   // 包含会话`.jsonl`的目录；null = 从originalCwd派生。
   sessionProjectDir: string | null
   // 来自本地功能配置的缓存提示缓存1小时TTL白名单（会话稳定）
@@ -274,9 +266,6 @@ function getInitialState(): State {
     lastEmittedDate: null,
     // 来自--add-dir标志的额外目录（用于CLAUDE.md加载）
     additionalDirectoriesForClaudeMd: [],
-    // 从 --channels 标志获取的频道服务器允许列表
-    allowedChannels: [],
-    hasDevChannels: false,
     // 会话项目目录（null 表示从 originalCwd 派生）
     sessionProjectDir: null,
     // 提示缓存 1 小时允许列表（null 表示尚未从本地功能配置中获取）
@@ -1323,26 +1312,6 @@ export function setAdditionalDirectoriesForClaudeMd(
   directories: string[],
 ): void {
   STATE.additionalDirectoriesForClaudeMd = directories
-}
-
-/** 获取 get Allowed Channels 对应的数据或状态。 */
-export function getAllowedChannels(): ChannelEntry[] {
-  return STATE.allowedChannels
-}
-
-/** 设置并保存 set Allowed Channels 对应的数据或状态。 */
-export function setAllowedChannels(entries: ChannelEntry[]): void {
-  STATE.allowedChannels = entries
-}
-
-/** 获取 get Has Dev Channels 对应的数据或状态。 */
-export function getHasDevChannels(): boolean {
-  return STATE.hasDevChannels
-}
-
-/** 设置并保存 set Has Dev Channels 对应的数据或状态。 */
-export function setHasDevChannels(value: boolean): void {
-  STATE.hasDevChannels = value
 }
 
 /** 获取 get Prompt Cache1h Allowlist 对应的数据或状态。 */

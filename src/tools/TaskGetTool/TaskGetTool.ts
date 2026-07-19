@@ -4,7 +4,6 @@ import { lazySchema } from '../../utils/lazySchema.js'
 import {
   getTask,
   getTaskListId,
-  isTodoV2Enabled,
   TaskStatusSchema,
 } from '../../utils/tasks.js'
 import { TASK_GET_TOOL_NAME } from './constants.js'
@@ -37,7 +36,6 @@ export type Output = z.infer<OutputSchema>
 
 export const TaskGetTool = buildTool({
   name: TASK_GET_TOOL_NAME,
-  searchHint: 'retrieve a task by ID',
   maxResultSizeChars: 100_000,
   async description() {
     return DESCRIPTION
@@ -54,9 +52,8 @@ export const TaskGetTool = buildTool({
   userFacingName() {
     return 'TaskGet'
   },
-  shouldDefer: true,
   isEnabled() {
-    return isTodoV2Enabled()
+    return true
   },
   isConcurrencySafe() {
     return true

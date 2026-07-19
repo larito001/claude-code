@@ -266,7 +266,6 @@ const ContextCategorySchema = lazySchema(() =>
     name: z.string(),
     tokens: z.number(),
     color: z.string(),
-    isDeferred: z.boolean().optional(),
   }),
 )
 
@@ -305,18 +304,8 @@ export const SDKControlGetContextUsageResponseSchema = lazySchema(() =>
           name: z.string(),
           serverName: z.string(),
           tokens: z.number(),
-          isLoaded: z.boolean().optional(),
         }),
       ),
-      deferredBuiltinTools: z
-        .array(
-          z.object({
-            name: z.string(),
-            tokens: z.number(),
-            isLoaded: z.boolean(),
-          }),
-        )
-        .optional(),
       systemTools: z
         .array(z.object({ name: z.string(), tokens: z.number() }))
         .optional(),
@@ -553,14 +542,6 @@ export const SDKControlEndSessionRequestSchema = lazySchema(() =>
   }),
 )
 
-/** 定义启用 MCP Channel 的控制请求。 */
-export const SDKControlChannelEnableRequestSchema = lazySchema(() =>
-  z.object({
-    subtype: z.literal('channel_enable'),
-    serverName: z.string(),
-  }),
-)
-
 /** 定义启动 MCP OAuth 认证的控制请求。 */
 export const SDKControlMcpAuthenticateRequestSchema = lazySchema(() =>
   z.object({
@@ -726,7 +707,6 @@ export const SDKControlRequestInnerSchema = lazySchema(() =>
     SDKControlMcpReconnectRequestSchema(),
     SDKControlMcpToggleRequestSchema(),
     SDKControlEndSessionRequestSchema(),
-    SDKControlChannelEnableRequestSchema(),
     SDKControlMcpAuthenticateRequestSchema(),
     SDKControlMcpOAuthCallbackUrlRequestSchema(),
     SDKControlMcpClearAuthRequestSchema(),

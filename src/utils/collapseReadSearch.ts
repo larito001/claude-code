@@ -5,15 +5,12 @@ import { extractBashCommentLabel } from '../tools/BashTool/commentLabel.js'
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
 import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
 import { FILE_WRITE_TOOL_NAME } from '../tools/FileWriteTool/prompt.js'
-import { REPL_TOOL_NAME } from '../tools/REPLTool/constants.js'
-import { getReplPrimitiveTools } from '../tools/REPLTool/primitiveTools.js'
 import {
   type BranchAction,
   type CommitKind,
   detectGitOperation,
   type PrAction,
 } from '../tools/shared/gitOperationDetection.js'
-import { TOOL_SEARCH_TOOL_NAME } from '../tools/ToolSearchTool/prompt.js'
 import type {
   CollapsedReadSearchGroup,
   CollapsibleMessage,
@@ -44,12 +41,11 @@ export type SearchOrReadResult = {
   isSearch: boolean
   isRead: boolean
   isList: boolean
-  isREPL: boolean
   /** True if this is a Write/Edit targeting a memory file */
   isMemoryWrite: boolean
   /**
    * True for meta-operations that should be absorbed into a collapse group
-   * without incrementing any count (Snip, ToolSearch). They remain visible
+   * without incrementing any count. They remain visible
    * in verbose mode via the groupMessages iteration.
    */
   isAbsorbedSilently: boolean
@@ -135,27 +131,11 @@ function commandAsHint(command: string): string {
  * Also treats Write/Edit of memory files as collapsible.
  * Returns detailed information about whether it's a search or read operation.
  */
-export function getToolSearchOrReadInfo(
+export function getSearchOrReadInfo(
   toolName: string,
   toolInput: unknown,
   tools: Tools,
 ): SearchOrReadResult {
-  // REPL is absorbed silently — its inner tool calls are emitted as virtual
-  // messages (isVirtual: true) via newMessages and flow through this function
-  // as regular Read/Grep/Bash messages. The REPL wrapper itself contributes
-  // no counts and doesn't break the group, so consecutive REPL calls merge.
-  if (toolName === REPL_TOOL_NAME) {
-    return {
-      isCollapsible: true,
-      isSearch: false,
-      isRead: false,
-      isList: false,
-      isREPL: true,
-      isMemoryWrite: false,
-      isAbsorbedSilently: true,
-    }
-  }
-
   // Memory file writes/edits are collapsible
   if (isMemoryWriteOrEdit(toolName, toolInput)) {
     return {
@@ -163,40 +143,18 @@ export function getToolSearchOrReadInfo(
       isSearch: false,
       isRead: false,
       isList: false,
-      isREPL: false,
       isMemoryWrite: true,
       isAbsorbedSilently: false,
     }
   }
 
-  // Lazy tool-schema loading should not break a collapse group or contribute
-  // to its count, but remains visible in verbose mode.
-  if (isFullscreenEnvEnabled() && toolName === TOOL_SEARCH_TOOL_NAME) {
-    return {
-      isCollapsible: true,
-      isSearch: false,
-      isRead: false,
-      isList: false,
-      isREPL: false,
-      isMemoryWrite: false,
-      isAbsorbedSilently: true,
-    }
-  }
-
-  // Fallback to REPL primitives: in REPL mode, Bash/Read/Grep/etc. are
-  // stripped from the execution tools list, but REPL emits them as virtual
-  // messages. Without the fallback they'd return isCollapsible: false and
-  // vanish from the summary line.
-  const tool =
-    findToolByName(tools, toolName) ??
-    findToolByName(getReplPrimitiveTools(), toolName)
+  const tool = findToolByName(tools, toolName)
   if (!tool?.isSearchOrReadCommand) {
     return {
       isCollapsible: false,
       isSearch: false,
       isRead: false,
       isList: false,
-      isREPL: false,
       isMemoryWrite: false,
       isAbsorbedSilently: false,
     }
@@ -218,7 +176,6 @@ export function getToolSearchOrReadInfo(
     isSearch: result.isSearch,
     isRead: result.isRead,
     isList,
-    isREPL: false,
     isMemoryWrite: false,
     isAbsorbedSilently: false,
     ...(tool.isMcp && { mcpServerName: tool.mcpInfo?.serverName }),
@@ -230,7 +187,7 @@ export function getToolSearchOrReadInfo(
 
 /**
  * Check if a tool_use content block is a search/read operation.
- * Returns { isSearch, isRead, isREPL } if it's a collapsible search/read, null otherwise.
+ * Returns search/read metadata for collapsible operations, or null otherwise.
  */
 export function getSearchOrReadFromContent(
   content: { type: string; name?: string; input?: unknown } | undefined,
@@ -239,20 +196,18 @@ export function getSearchOrReadFromContent(
   isSearch: boolean
   isRead: boolean
   isList: boolean
-  isREPL: boolean
   isMemoryWrite: boolean
   isAbsorbedSilently: boolean
   mcpServerName?: string
   isBash?: boolean
 } | null {
   if (content?.type === 'tool_use' && content.name) {
-    const info = getToolSearchOrReadInfo(content.name, content.input, tools)
-    if (info.isCollapsible || info.isREPL) {
+    const info = getSearchOrReadInfo(content.name, content.input, tools)
+    if (info.isCollapsible) {
       return {
         isSearch: info.isSearch,
         isRead: info.isRead,
         isList: info.isList,
-        isREPL: info.isREPL,
         isMemoryWrite: info.isMemoryWrite,
         isAbsorbedSilently: info.isAbsorbedSilently,
         mcpServerName: info.mcpServerName,
@@ -266,12 +221,12 @@ export function getSearchOrReadFromContent(
 /**
  * Checks if a tool is a search/read operation (for backwards compatibility).
  */
-function isToolSearchOrRead(
+function isSearchOrRead(
   toolName: string,
   toolInput: unknown,
   tools: Tools,
 ): boolean {
-  return getToolSearchOrReadInfo(toolName, toolInput, tools).isCollapsible
+  return getSearchOrReadInfo(toolName, toolInput, tools).isCollapsible
 }
 
 /**
@@ -287,7 +242,6 @@ function getCollapsibleToolInfo(
   isSearch: boolean
   isRead: boolean
   isList: boolean
-  isREPL: boolean
   isMemoryWrite: boolean
   isAbsorbedSilently: boolean
   mcpServerName?: string
@@ -341,7 +295,7 @@ function isNonCollapsibleToolUse(
     const content = msg.message.content[0]
     if (
       content?.type === 'tool_use' &&
-      !isToolSearchOrRead(content.name, content.input, tools)
+      !isSearchOrRead(content.name, content.input, tools)
     ) {
       return true
     }
@@ -350,7 +304,7 @@ function isNonCollapsibleToolUse(
     const firstContent = msg.messages[0]?.message.content[0]
     if (
       firstContent?.type === 'tool_use' &&
-      !isToolSearchOrRead(msg.toolName, firstContent.input, tools)
+      !isSearchOrRead(msg.toolName, firstContent.input, tools)
     ) {
       return true
     }
@@ -402,14 +356,14 @@ function isCollapsibleToolUse(
     const content = msg.message.content[0]
     return (
       content?.type === 'tool_use' &&
-      isToolSearchOrRead(content.name, content.input, tools)
+      isSearchOrRead(content.name, content.input, tools)
     )
   }
   if (msg.type === 'grouped_tool_use') {
     const firstContent = msg.messages[0]?.message.content[0]
     return (
       firstContent?.type === 'tool_use' &&
-      isToolSearchOrRead(msg.toolName, firstContent.input, tools)
+      isSearchOrRead(msg.toolName, firstContent.input, tools)
     )
   }
   return false
@@ -697,10 +651,6 @@ function createCollapsedGroup(
       totalReadCount - toolMemoryReadCount - teamMemReadCount,
     ),
     listCount: group.listCount,
-    // REPL operations are intentionally not collapsed (see isCollapsible: false at line 32),
-    // so replCount in collapsed groups is always 0. The replCount field is kept for
-    // sub-agent progress display in AgentTool/UI.tsx which has a separate code path.
-    replCount: 0,
     memorySearchCount: group.memorySearchCount,
     memoryReadCount,
     memoryWriteCount: group.memoryWriteCount,
@@ -788,7 +738,7 @@ export function collapseReadSearchGroups(
           currentGroup.memoryWriteCount += count
         }
       } else if (toolInfo.isAbsorbedSilently) {
-        // Snip/ToolSearch absorbed silently — no count, no summary text.
+        // Silently absorbed metadata does not add a count or summary text.
         // Hidden from the default view but still shown in verbose mode
         // (Ctrl+O) via the groupMessages iteration in CollapsedReadSearchContent.
       } else if (toolInfo.mcpServerName) {
@@ -941,19 +891,17 @@ export function collapseReadSearchGroups(
 }
 
 /**
- * Generate a summary text for search/read/REPL counts.
+ * Generate a summary text for search/read counts.
  * @param searchCount Number of search operations
  * @param readCount Number of read operations
  * @param isActive Whether the group is still in progress (use present tense) or completed (use past tense)
- * @param replCount Number of REPL executions (optional)
  * @param memoryCounts Optional memory file operation counts
- * @returns Summary text like "Searching for 3 patterns, reading 2 files, REPL'd 5 times…"
+ * @returns Summary text like "Searching for 3 patterns, reading 2 files…"
  */
 export function getSearchReadSummaryText(
   searchCount: number,
   readCount: number,
   isActive: boolean,
-  replCount: number = 0,
   memoryCounts?: {
     memorySearchCount: number
     memoryReadCount: number
@@ -1045,11 +993,6 @@ export function getSearchReadSummaryText(
     parts.push(
       `${listVerb} ${listCount} ${listCount === 1 ? 'directory' : 'directories'}`,
     )
-  }
-
-  if (replCount > 0) {
-    const replVerb = isActive ? "REPL'ing" : "REPL'd"
-    parts.push(`${replVerb} ${replCount} ${replCount === 1 ? 'time' : 'times'}`)
   }
 
   const text = parts.join(', ')

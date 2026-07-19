@@ -5,7 +5,7 @@ import { Box } from '../ink.js';
 import type { Screen } from '../screens/REPL.js';
 import type { Tools } from '../Tool.js';
 import type { RenderableMessage } from '../types/message.js';
-import { getDisplayMessageFromCollapsed, getToolSearchOrReadInfo, getToolUseIdsFromCollapsedGroup, hasAnyToolInProgress } from '../utils/collapseReadSearch.js';
+import { getDisplayMessageFromCollapsed, getSearchOrReadInfo, getToolUseIdsFromCollapsedGroup, hasAnyToolInProgress } from '../utils/collapseReadSearch.js';
 import { type buildMessageLookups, EMPTY_STRING_SET, getProgressMessagesFromLookup, getSiblingToolUseIDsFromLookup, getToolUseID } from '../utils/messages.js';
 import { hasThinkingContent, Message } from './Message.js';
 import { MessageModel } from './MessageModel.js';
@@ -55,7 +55,7 @@ export function hasContentAfterIndex(messages: RenderableMessage[], index: numbe
         continue;
       }
       if (content?.type === 'tool_use') {
-        if (getToolSearchOrReadInfo(content.name, content.input, tools).isCollapsible) {
+        if (getSearchOrReadInfo(content.name, content.input, tools).isCollapsible) {
           continue;
         }
         // Non-collapsible tool uses appear in syntheticStreamingToolUseMessages
@@ -81,7 +81,7 @@ export function hasContentAfterIndex(messages: RenderableMessage[], index: numbe
     // merged into the current collapsed group on the next render cycle
     if (msg?.type === 'grouped_tool_use') {
       const firstInput = msg.messages[0]?.message.content[0]?.input;
-      if (getToolSearchOrReadInfo(msg.toolName, firstInput, tools).isCollapsible) {
+      if (getSearchOrReadInfo(msg.toolName, firstInput, tools).isCollapsible) {
         continue;
       }
     }

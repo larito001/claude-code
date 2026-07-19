@@ -39,18 +39,6 @@ export const TOOL_VALIDATION_CONFIG: ToolValidationConfig = {
 
   // 自定义验证（仅在需要时）
   customValidation: {
-    // WebSearch 不支持通配符或复杂模式
-    WebSearch: content => {
-      if (content.includes('*') || content.includes('?')) {
-        return {
-          valid: false,
-          error: 'WebSearch does not support wildcards',
-          suggestion: 'Use exact search terms without * or ?',
-          examples: ['WebSearch(claude ai)', 'WebSearch(typescript tutorial)'],
-        }
-      }
-      return { valid: true }
-    },
 
     // WebFetch 使用 domain: 前缀进行基于主机名的权限控制
     WebFetch: content => {

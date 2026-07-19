@@ -12,7 +12,6 @@ import { getOriginalCwd } from '../bootstrap/state.js'
 import { getFeatureValue } from '../services/featureConfig.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { GREP_TOOL_NAME } from '../tools/GrepTool/prompt.js'
-import { isReplModeEnabled } from '../tools/REPLTool/constants.js'
 import { logForDebugging } from '../utils/debug.js'
 import { hasEmbeddedSearchTools } from '../utils/embeddedTools.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
@@ -278,10 +277,7 @@ export function buildSearchingPastContextSection(autoMemDir: string): string[] {
   const projectDir = getProjectDir(getOriginalCwd())
   // Embedded-search builds alias grep to bundled ugrep and remove the dedicated
   // Grep tool, so give the model a real shell invocation there.
-  // In REPL mode, both Grep and Bash are hidden from direct use — the model
-  // calls them from inside REPL scripts, so the grep shell form is what it
-  // will write in the script anyway.
-  const embedded = hasEmbeddedSearchTools() || isReplModeEnabled()
+  const embedded = hasEmbeddedSearchTools()
   const memSearch = embedded
     ? `grep -rn "<search term>" ${autoMemDir} --include="*.md"`
     : `${GREP_TOOL_NAME} with pattern="<search term>" path="${autoMemDir}" glob="*.md"`

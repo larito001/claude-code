@@ -220,8 +220,6 @@ export async function buildSideQuestionFallbackParams({
     setResponseLength: () => {},
     /** 更新 update File History State 对应的数据或状态。 */
     updateFileHistoryState: () => {},
-    /** 更新 update Attribution State 对应的数据或状态。 */
-    updateAttributionState: () => {},
   }
 
   return {

@@ -14,7 +14,6 @@ import {
   REDACT_THINKING_BETA_HEADER,
   STRUCTURED_OUTPUTS_BETA_HEADER,
   TOKEN_EFFICIENT_TOOLS_BETA_HEADER,
-  TOOL_SEARCH_BETA_HEADER_1P,
 } from '../constants/betas.js'
 import { has1mContext } from './context.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
@@ -120,10 +119,6 @@ export function modelSupportsAutoMode(model: string): boolean {
 /**
  * Get the tool search beta header used by the API-key backend.
  */
-export function getToolSearchBetaHeader(): string {
-  return TOOL_SEARCH_BETA_HEADER_1P
-}
-
 /**
  * Check if experimental betas should be included.
  * These are betas that are only available on firstParty provider

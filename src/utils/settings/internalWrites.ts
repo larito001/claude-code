@@ -1,7 +1,7 @@
 /**
  * 跟踪进程内设置文件写入的时间戳，以便 changeDetector.ts 中的 chokidar 监视器可以忽略自身的回显。
  *
- * 从 changeDetector.ts 中提取出来，以打破 settings.ts → changeDetector.ts → hooks.ts → … → settings.ts 的循环。settings.ts 需要在写入生效前标记“我即将写入”；changeDetector 需要在 chokidar 触发时读取该标记。该映射是唯一的共享状态——changeDetector 中的其他所有内容（chokidar、hooks、mdm 轮询）都与 settings.ts 无关。
+ * 从 changeDetector.ts 中提取出来，以打破 settings.ts → changeDetector.ts → hooks.ts → … → settings.ts 的循环。settings.ts 需要在写入生效前标记“我即将写入”；changeDetector 需要在 chokidar 触发时读取该标记。该映射是唯一的共享状态。
  *
  * 调用者传入解析后的路径。路径→源的解析（getSettingsFilePathForSource）位于 settings.ts 中，因此 settings.ts 会在调用此处之前执行该解析。无导入。
  */

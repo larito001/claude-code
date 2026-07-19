@@ -61,7 +61,6 @@ export type Output = z.infer<OutputSchema>
 
 export const ConfigTool = buildTool({
   name: CONFIG_TOOL_NAME,
-  searchHint: 'get or set Claude Code settings (theme, model)',
   maxResultSizeChars: 100_000,
   async description() {
     return DESCRIPTION
@@ -78,7 +77,6 @@ export const ConfigTool = buildTool({
   userFacingName() {
     return 'Config'
   },
-  shouldDefer: true,
   isConcurrencySafe() {
     return true
   },

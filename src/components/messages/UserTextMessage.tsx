@@ -1,5 +1,4 @@
 import { c as _c } from "react/compiler-runtime";
-import { feature } from 'src/utils/features.js';
 import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
 import * as React from 'react';
 import { NO_CONTENT_MESSAGE } from '../../constants/messages.js';
@@ -162,30 +161,6 @@ export function UserTextMessage(t0) {
       t1 = $[31];
     }
     return t1;
-  }
-  if (feature("MCP_CHANNELS")) {
-    if (param.text.includes("<channel source=\"")) {
-      let t1;
-      if ($[40] === Symbol.for("react.memo_cache_sentinel")) {
-        t1 = require("./UserChannelMessage.js");
-        $[40] = t1;
-      } else {
-        t1 = $[40];
-      }
-      const {
-        UserChannelMessage
-      } = t1 as typeof import('./UserChannelMessage.js');
-      let t2;
-      if ($[41] !== addMargin || $[42] !== param) {
-        t2 = <UserChannelMessage addMargin={addMargin} param={param} />;
-        $[41] = addMargin;
-        $[42] = param;
-        $[43] = t2;
-      } else {
-        t2 = $[43];
-      }
-      return t2;
-    }
   }
   let t1;
   if ($[44] !== addMargin || $[46] !== param) {

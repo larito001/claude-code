@@ -21,7 +21,6 @@ import type { PermissionMode } from './permissions.js'
 /** 标记用户消息的真实来源。缺省值表示键盘输入。 */
 export type MessageOrigin =
   | { kind: 'human' }
-  | { kind: 'channel'; server: string }
   | { kind: 'coordinator' }
   | { kind: 'task-notification' }
 
@@ -45,7 +44,6 @@ export type UserMessage = MessageBase & {
   }
   isMeta?: true
   isVisibleInTranscriptOnly?: true
-  isVirtual?: true
   isCompactSummary?: true
   summarizeMetadata?: {
     messagesSummarized: number
@@ -73,8 +71,6 @@ export type AssistantMessage = MessageBase & {
   errorDetails?: string
   isApiErrorMessage?: boolean
   isMeta?: boolean
-  isVirtual?: true
-  advisorModel?: string
 }
 
 type SystemMessageBase = MessageBase & {
@@ -184,7 +180,6 @@ export type CompactMetadata = {
   preTokens: number
   userContext?: string
   messagesSummarized?: number
-  preCompactDiscoveredTools?: string[]
   preservedSegment?: {
     headUuid: UUID
     anchorUuid: UUID
@@ -330,7 +325,6 @@ export type CollapsedReadSearchGroup = {
   searchCount: number
   readCount: number
   listCount: number
-  replCount: number
   memorySearchCount: number
   memoryReadCount: number
   memoryWriteCount: number

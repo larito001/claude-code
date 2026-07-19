@@ -12,7 +12,6 @@ import {
   deleteTask,
   getTask,
   getTaskListId,
-  isTodoV2Enabled,
   listTasks,
   type TaskStatus,
   TaskStatusSchema,
@@ -86,7 +85,6 @@ export type Output = z.infer<OutputSchema>
 
 export const TaskUpdateTool = buildTool({
   name: TASK_UPDATE_TOOL_NAME,
-  searchHint: 'update a task',
   maxResultSizeChars: 100_000,
   async description() {
     return DESCRIPTION
@@ -103,9 +101,8 @@ export const TaskUpdateTool = buildTool({
   userFacingName() {
     return 'TaskUpdate'
   },
-  shouldDefer: true,
   isEnabled() {
-    return isTodoV2Enabled()
+    return true
   },
   isConcurrencySafe() {
     return true
@@ -326,8 +323,7 @@ export const TaskUpdateTool = buildTool({
     // out a 3+ task list and none of those tasks was a verification step,
     // append a reminder to the tool result. Fires at the loop-exit moment
     // where skips happen ("when the last task closed, the loop exited").
-    // Mirrors the TodoWriteTool nudge for V1 sessions; this covers V2
-    // (interactive CLI). TaskUpdateToolOutput is @internal so this field
+    // TaskUpdateToolOutput is @internal, so this field
     // does not touch the public SDK surface.
     let verificationNudgeNeeded = false
     if (

@@ -3,23 +3,15 @@ import { stat } from 'fs/promises'
 import * as platformPath from 'path'
 import { registerCleanup } from '../cleanupRegistry.js'
 import { logForDebugging } from '../debug.js'
-import { errorMessage } from '../errors.js'
 import {
   type ConfigChangeSource,
   executeConfigChangeHooks,
   hasBlockingResult,
 } from '../hooks.js'
 import { createSignal } from '../signal.js'
-import { jsonStringify } from '../slowOperations.js'
 import { SETTING_SOURCES, type SettingSource } from './constants.js'
 import { clearInternalWrites, consumeInternalWrite } from './internalWrites.js'
 import { getManagedSettingsDropInDir } from './managedPath.js'
-import {
-  getHkcuSettings,
-  getMdmSettings,
-  refreshMdmSettings,
-  setMdmSettingsCache,
-} from './mdm/settings.js'
 import { getSettingsFilePathForSource } from './settings.js'
 import { resetSettingsCache } from './settingsCache.js'
 
@@ -32,9 +24,6 @@ const FILE_STABILITY_POLL_INTERVAL_MS = 500
 /** 将文件更改视为内部操作的时间窗口（毫秒）。如果在调用 markInternalWrite() 后的此窗口内发生文件更改，则假定来自 Claude Code 本身，不会触发通知。 */
 const INTERNAL_WRITE_WINDOW_MS = 5000
 
-/** MDM 设置（注册表/plist）更改的轮询间隔。这些无法通过文件系统事件监听，因此我们定期轮询。 */
-const MDM_POLL_INTERVAL_MS = 30 * 60 * 1000 // 30分钟
-
 /**
  * 处理设置文件删除前的宽限期（毫秒）。处理自动更新或另一会话启动时常见的删除-重建模式。如果在此窗口内触发了 `add` 或 `change` 事件（文件已重建），则取消删除并将其视为更改。
  *
@@ -44,8 +33,6 @@ const DELETION_GRACE_MS =
   FILE_STABILITY_THRESHOLD_MS + FILE_STABILITY_POLL_INTERVAL_MS + 200
 
 let watcher: FSWatcher | null = null
-let mdmPollTimer: ReturnType<typeof setInterval> | null = null
-let lastMdmSnapshot: string | null = null
 let initialized = false
 let disposed = false
 const pendingDeletions = new Map<string, ReturnType<typeof setTimeout>>()
@@ -55,7 +42,6 @@ const settingsChanged = createSignal<[source: SettingSource]>()
 let testOverrides: {
   stabilityThreshold?: number
   pollInterval?: number
-  mdmPollInterval?: number
   deletionGrace?: number
 } | null = null
 
@@ -63,9 +49,6 @@ let testOverrides: {
 export async function initialize(): Promise<void> {
   if (initialized || disposed) return
   initialized = true
-
-  // 启动 MDM 轮询，监测注册表/plist 更改（独立于文件系统监视）
-  startMdmPoll()
 
   // 注册清理，以便在优雅关闭期间正确释放资源
   registerCleanup(dispose)
@@ -125,13 +108,8 @@ export async function initialize(): Promise<void> {
  */
 export function dispose(): Promise<void> {
   disposed = true
-  if (mdmPollTimer) {
-    clearInterval(mdmPollTimer)
-    mdmPollTimer = null
-  }
   for (const timer of pendingDeletions.values()) clearTimeout(timer)
   pendingDeletions.clear()
-  lastMdmSnapshot = null
   clearInternalWrites()
   settingsChanged.clear()
   const w = watcher
@@ -330,50 +308,10 @@ function getSourceForPath(path: string): SettingSource | undefined {
   )
 }
 
-/** 开始轮询 MDM 设置更改（注册表/plist）。获取当前 MDM 设置的快照，并在每个周期进行比较 */
-function startMdmPoll(): void {
-  // 捕获初始快照（包括管理员 MDM 和用户可写的 HKCU）
-  const initial = getMdmSettings()
-  const initialHkcu = getHkcuSettings()
-  lastMdmSnapshot = jsonStringify({
-    mdm: initial.settings,
-    hkcu: initialHkcu.settings,
-  })
-
-  mdmPollTimer = setInterval(() => {
-    if (disposed) return
-
-    void (async () => {
-      try {
-        const { mdm: current, hkcu: currentHkcu } = await refreshMdmSettings()
-        if (disposed) return
-
-        const currentSnapshot = jsonStringify({
-          mdm: current.settings,
-          hkcu: currentHkcu.settings,
-        })
-
-        if (currentSnapshot !== lastMdmSnapshot) {
-          lastMdmSnapshot = currentSnapshot
-          // 更新缓存，以便同步读取器获取新值
-          setMdmSettingsCache(current, currentHkcu)
-          logForDebugging('Detected MDM settings change via poll')
-          fanOut('policySettings')
-        }
-      } catch (error) {
-        logForDebugging(`MDM poll error: ${errorMessage(error)}`)
-      }
-    })()
-  }, testOverrides?.mdmPollInterval ?? MDM_POLL_INTERVAL_MS)
-
-  // 不要让计时器使进程保持活动状态
-  mdmPollTimer.unref()
-}
-
 /**
  * 重置设置缓存，然后通知所有监听器。
  *
- * 缓存重置必须在此处进行（单一生产者），而不是在每个监听器（N个消费者）中进行。以前，像 useSettingsChange 和 applySettingsChange 这样的监听器会防御性地重置，因为某些通知路径（文件监视在 :289/340，MDM 轮询在 :385）在遍历监听器之前没有重置。这种防御性导致当订阅了N个监听器时会产生N-way颠簸：每个监听器清除缓存，从磁盘重新读取（填充缓存），然后下一个监听器再次清除它——每个通知进行N次完整的磁盘重载。性能分析显示，当远程托管设置在启动时解析时，在12ms内调用了5次 loadSettingsFromDisk。
+ * 缓存重置集中在这一处，确保每次配置变更通知只触发一次磁盘重载。
  *
  * 通过将重置集中在此处，一个通知 = 一次磁盘重载：第一个调用 getSettingsWithErrors() 的监听器承担缓存未命中并重新填充；所有后续监听器命中缓存。
  */
@@ -396,16 +334,10 @@ export function notifyChange(source: SettingSource): void {
 export function resetForTesting(overrides?: {
   stabilityThreshold?: number
   pollInterval?: number
-  mdmPollInterval?: number
   deletionGrace?: number
 }): Promise<void> {
-  if (mdmPollTimer) {
-    clearInterval(mdmPollTimer)
-    mdmPollTimer = null
-  }
   for (const timer of pendingDeletions.values()) clearTimeout(timer)
   pendingDeletions.clear()
-  lastMdmSnapshot = null
   initialized = false
   disposed = false
   testOverrides = overrides ?? null

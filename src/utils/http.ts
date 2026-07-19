@@ -16,9 +16,8 @@ export function getUserAgent(): string {
   const clientApp = process.env.CLAUDE_AGENT_SDK_CLIENT_APP
     ? `, client-app/${process.env.CLAUDE_AGENT_SDK_CLIENT_APP}`
     : ''
-  // 定时任务发起的请求使用轮次/进程级工作负载标签。代理可能移除自定义 HTTP
-  // 标头，因此这仅用于第一方可观测性；QoS 路由改用计费归因块中的 cc_workload。
-  // getAnthropicClient 会逐请求调用本方法，以读取与归因标头一致的工作负载状态。
+  // 定时任务发起的请求使用轮次/进程级工作负载标签。
+  // getAnthropicClient 会逐请求调用本方法以读取当前工作负载状态。
   const workload = getWorkload()
   const workloadSuffix = workload ? `, workload/${workload}` : ''
   return `claude-cli/${getRuntimeVersion()} (${process.env.CLAUDE_CODE_ENTRYPOINT ?? 'cli'}${agentSdkVersion}${clientApp}${workloadSuffix})`

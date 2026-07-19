@@ -327,7 +327,7 @@ export function groupHooksByEventAndMatcher(
       for (const matcher of matchers) {
         const matcherKey = matcher.matcher || ''
 
-        // 只有 PluginHookMatcher 有 pluginRoot；HookCallbackMatcher（内部回调，如 attributionHooks、sessionFileAccessHooks）没有。
+        // 只有 PluginHookMatcher 有 pluginRoot；内部 HookCallbackMatcher 没有。
         if ('pluginRoot' in matcher) {
           eventGroup[matcherKey] ??= []
           for (const hook of matcher.hooks) {

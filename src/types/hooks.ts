@@ -15,7 +15,6 @@ import type { Message } from 'src/types/message.js'
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js'
 import { permissionUpdateSchema } from 'src/utils/permissions/PermissionUpdateSchema.js'
 import type { AppState } from '../state/AppState.js'
-import type { AttributionState } from '../utils/commitAttribution.js'
 
 /** 判断是否满足 is Hook Event 对应的数据或状态。 */
 export function isHookEvent(value: string): value is HookEvent {
@@ -204,10 +203,6 @@ type _assertSDKTypesMatch = Assert<
 export type HookCallbackContext = {
   /** 获取 get App State 对应的数据或状态。 */
   getAppState: () => AppState
-  /** 更新 update Attribution State 对应的数据或状态。 */
-  updateAttributionState: (
-    updater: (prev: AttributionState) => AttributionState,
-  ) => void
 }
 
 /** 作为回调的钩子。 */

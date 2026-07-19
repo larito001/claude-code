@@ -1,4 +1,3 @@
-import { feature } from 'src/utils/features.js'
 import { access } from 'fs/promises'
 import { tmpdir as osTmpdir } from 'os'
 import { join as nativeJoin } from 'path'
@@ -127,20 +126,6 @@ export async function createBashShellProvider(
       const normalizedCommand = rewriteWindowsNullRedirect(command)
       const addStdinRedirect = shouldAddStdinRedirect(normalizedCommand)
       let quotedCommand = quoteShellCommand(normalizedCommand, addStdinRedirect)
-
-      // Debug logging for heredoc/multiline commands to trace trailer handling
-      // Only log when commit attribution is enabled to avoid noise
-      if (
-        feature('COMMIT_ATTRIBUTION') &&
-        (command.includes('<<') || command.includes('\n'))
-      ) {
-        logForDebugging(
-          `Shell: Command before quoting (first 500 chars):\n${command.slice(0, 500)}`,
-        )
-        logForDebugging(
-          `Shell: Quoted command (first 500 chars):\n${quotedCommand.slice(0, 500)}`,
-        )
-      }
 
       // Special handling for pipes: move stdin redirect after first command
       // This ensures the redirect applies to the first command, not to eval itself.

@@ -1,7 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
-import { feature } from 'src/utils/features.js';
 import * as React from 'react';
-import { getAllowedChannels, getQuestionPreviewFormat } from 'src/bootstrap/state.js';
+import { getQuestionPreviewFormat } from 'src/bootstrap/state.js';
 import { MessageResponse } from 'src/components/MessageResponse.js';
 import { BLACK_CIRCLE } from 'src/constants/figures.js';
 import { getModeColor } from 'src/utils/permissions/PermissionMode.js';
@@ -105,9 +104,7 @@ function _temp(t0) {
 }
 export const AskUserQuestionTool: Tool<InputSchema, Output> = buildTool({
   name: ASK_USER_QUESTION_TOOL_NAME,
-  searchHint: 'prompt the user with a multiple-choice question',
   maxResultSizeChars: 100_000,
-  shouldDefer: true,
   async description() {
     return DESCRIPTION;
   },
@@ -132,12 +129,6 @@ export const AskUserQuestionTool: Tool<InputSchema, Output> = buildTool({
   isEnabled() {
     // When --channels is active the user is likely on Telegram/Discord, not
     // watching the TUI. The multiple-choice dialog would hang with nobody at
-    // the keyboard. Channel permission relay already skips
-    // requiresUserInteraction() tools (interactiveHandler.ts) so there's
-    // no alternate approval path.
-    if ((feature('MCP_CHANNELS')) && getAllowedChannels().length > 0) {
-      return false;
-    }
     return true;
   },
   isConcurrencySafe() {

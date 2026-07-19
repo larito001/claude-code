@@ -18,7 +18,6 @@ import type { Tools } from '../Tool.js';
 import { findToolByName } from '../Tool.js';
 import type { AgentDefinitionsResult } from '../tools/AgentTool/loadAgentsDir.js';
 import type { Message as MessageType, NormalizedMessage, ProgressMessage as ProgressMessageType, RenderableMessage } from '../types/message.js';
-import { type AdvisorBlock, isAdvisorBlock } from '../utils/advisor.js';
 import { collapseBackgroundBashNotifications } from '../utils/collapseBackgroundBashNotifications.js';
 import { collapseHookSummaries } from '../utils/collapseHookSummaries.js';
 import { collapseReadSearchGroups } from '../utils/collapseReadSearch.js';
@@ -437,10 +436,6 @@ const MessagesImpl = ({
   lookupsRef.current = lookups_0;
   const isItemClickable = useCallback((msg_6: RenderableMessage): boolean => {
     if (msg_6.type === 'collapsed_read_search') return true;
-    if (msg_6.type === 'assistant') {
-      const b = msg_6.message.content[0] as unknown as AdvisorBlock | undefined;
-      return b != null && isAdvisorBlock(b) && b.type === 'advisor_tool_result' && b.content.type === 'advisor_result';
-    }
     if (msg_6.type !== 'user') return false;
     const b_0 = msg_6.message.content[0];
     if (b_0?.type !== 'tool_result' || b_0.is_error || !msg_6.toolUseResult) return false;
@@ -497,7 +492,7 @@ const MessagesImpl = ({
   // renderToolResultMessage shows. Falls back to renderableSearchText
   // (duck-types toolUseResult) for tools that haven't implemented it,
   // and for all non-tool-result message types. The drift-catcher test
-  // (toolSearchText.test.tsx) renders + compares to keep these in sync.
+  // The transcript renderer compares these values to keep display state in sync.
   //
   // A second-React-root reconcile approach was tried and ruled out
   // (measured 3.1ms/msg, growing — flushSyncWork processes all roots;

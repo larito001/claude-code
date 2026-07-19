@@ -1,9 +1,5 @@
-import { feature } from 'src/utils/features.js'
 import { z } from 'zod/v4'
-import {
-  getAllowedChannels,
-  handlePlanModeTransition,
-} from '../../bootstrap/state.js'
+import { handlePlanModeTransition } from '../../bootstrap/state.js'
 import type { Tool } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { lazySchema } from '../../utils/lazySchema.js'
@@ -35,7 +31,6 @@ export type Output = z.infer<OutputSchema>
 
 export const EnterPlanModeTool: Tool<InputSchema, Output> = buildTool({
   name: ENTER_PLAN_MODE_TOOL_NAME,
-  searchHint: 'switch to plan mode to design an approach before coding',
   maxResultSizeChars: 100_000,
   async description() {
     return 'Requests permission to enter plan mode for complex tasks requiring exploration and design'
@@ -52,17 +47,7 @@ export const EnterPlanModeTool: Tool<InputSchema, Output> = buildTool({
   userFacingName() {
     return ''
   },
-  shouldDefer: true,
   isEnabled() {
-    // When --channels is active, ExitPlanMode is disabled (its approval
-    // dialog needs the terminal). Disable entry too so plan mode isn't a
-    // trap the model can enter but never leave.
-    if (
-      (feature('MCP_CHANNELS')) &&
-      getAllowedChannels().length > 0
-    ) {
-      return false
-    }
     return true
   },
   isConcurrencySafe() {

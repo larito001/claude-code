@@ -194,7 +194,6 @@ export const AgentTool = buildTool({
     return await getPrompt(filteredAgents, isCoordinator, allowedAgentTypes);
   },
   name: AGENT_TOOL_NAME,
-  searchHint: 'delegate work to a subagent',
   maxResultSizeChars: 100_000,
   async description() {
     return 'Launch a new agent';

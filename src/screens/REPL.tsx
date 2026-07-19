@@ -147,8 +147,6 @@ import { partialCompactConversation } from '../services/compact/compact.js';
 import type { LogOption } from '../types/logs.js';
 import type { AgentColorName } from '../tools/AgentTool/agentColorManager.js';
 import { fileHistoryMakeSnapshot, type FileHistoryState, fileHistoryRewind, type FileHistorySnapshot, copyFileHistoryForResume, fileHistoryEnabled, fileHistoryHasAnyChanges } from '../utils/fileHistory.js';
-import { type AttributionState, incrementPromptCount } from '../utils/commitAttribution.js';
-import { recordAttributionSnapshot } from '../utils/sessionStorage.js';
 import { computeStandaloneAgentContext, restoreAgentFromSession, restoreSessionStateFromLog, restoreWorktreeForResume, exitRestoredWorktree } from '../utils/sessionRestore.js';
 import { updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
@@ -197,7 +195,6 @@ import { useAutoModeUnavailableNotification } from 'src/hooks/notifs/useAutoMode
 import { AUTO_MODE_DESCRIPTION } from 'src/components/AutoModeOptInDialog.js';
 import { useLspInitializationNotification } from 'src/hooks/notifs/useLspInitializationNotification.js';
 import { UserTextMessage } from 'src/components/messages/UserTextMessage.js';
-import { useDeprecationWarningNotification } from 'src/hooks/notifs/useDeprecationWarningNotification.js';
 import { useIDEStatusIndicator } from 'src/hooks/notifs/useIDEStatusIndicator.js';
 import { useTeammateLifecycleNotification } from 'src/hooks/notifs/useTeammateShutdownNotification.js';
 import { useFastModeNotification } from 'src/hooks/notifs/useFastModeNotification.js';
@@ -633,7 +630,6 @@ export function REPL({
   useAutoModeUnavailableNotification();
   useSettingsErrors();
   useFastModeNotification();
-  useDeprecationWarningNotification(mainLoopModel);
   useLspInitializationNotification();
   useTeammateLifecycleNotification();
 
@@ -1988,16 +1984,6 @@ export function REPL({
           };
         });
       },
-      updateAttributionState(updater: (prev: AttributionState) => AttributionState) {
-        setAppState(prev => {
-          const updated = updater(prev.attribution);
-          if (updated === prev.attribution) return prev;
-          return {
-            ...prev,
-            attribution: updated
-          };
-        });
-      },
       openMessageSelector: () => {
         if (!disabled) {
           setIsMessageSelectorVisible(true);
@@ -2778,18 +2764,6 @@ export function REPL({
         resetTimingRefs();
       }
 
-      // Increment prompt count for attribution tracking and save snapshot
-      // The snapshot persists promptCount so it survives compaction
-      if (feature('COMMIT_ATTRIBUTION')) {
-        setAppState(prev => ({
-          ...prev,
-          attribution: incrementPromptCount(prev.attribution, snapshot => {
-            void recordAttributionSnapshot(snapshot).catch(error => {
-              logForDebugging(`Attribution: Failed to save snapshot: ${error}`);
-            });
-          })
-        }));
-      }
     }
 
     // Handle speculation acceptance

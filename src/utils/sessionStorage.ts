@@ -29,14 +29,12 @@ import {
 import { builtInCommandNames } from '../commands.js'
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
 import { getFeatureValue } from '../services/featureConfig.js'
-import { REPL_TOOL_NAME } from '../tools/REPLTool/constants.js'
 import {
   type AgentId,
   asAgentId,
   asSessionId,
   type SessionId,
 } from '../types/ids.js'
-import type { AttributionSnapshotMessage } from '../types/logs.js'
 import {
   type ContentReplacementEntry,
   type Entry,
@@ -923,12 +921,6 @@ class Project {
     })
   }
 
-  async insertAttributionSnapshot(snapshot: AttributionSnapshotMessage) {
-    return this.trackWrite(async () => {
-      await this.appendEntry(snapshot)
-    })
-  }
-
   async insertContentReplacement(
     replacements: ContentReplacementRecord[],
     agentId?: AgentId,
@@ -1004,9 +996,6 @@ class Project {
       void this.enqueueWrite(sessionFile, entry)
     } else if (entry.type === 'file-history-snapshot') {
       // File history snapshots can always be appended
-      void this.enqueueWrite(sessionFile, entry)
-    } else if (entry.type === 'attribution-snapshot') {
-      // Attribution snapshots can always be appended
       void this.enqueueWrite(sessionFile, entry)
     } else if (entry.type === 'speculation-accept') {
       // Speculation accept entries can always be appended
@@ -1137,7 +1126,7 @@ export async function recordTranscript(
   startingParentUuidHint?: UUID,
   allMessages?: readonly Message[],
 ): Promise<UUID | null> {
-  const cleanedMessages = cleanMessagesForLogging(messages, allMessages)
+  const cleanedMessages = cleanMessagesForLogging(messages)
   const sessionId = getSessionId() as UUID
   const messageSet = await getSessionMessages(sessionId)
   const newMessages: typeof cleanedMessages = []
@@ -1209,12 +1198,6 @@ export async function recordFileHistorySnapshot(
     snapshot,
     isSnapshotUpdate,
   )
-}
-
-export async function recordAttributionSnapshot(
-  snapshot: AttributionSnapshotMessage,
-) {
-  await getProject().insertAttributionSnapshot(snapshot)
 }
 
 export async function recordContentReplacement(
@@ -1675,20 +1658,6 @@ function buildFileHistorySnapshotChain(
 }
 
 /**
- * Builds an attribution snapshot chain from the conversation.
- * Unlike file history snapshots, attribution snapshots are returned in full
- * because they use generated UUIDs (not message UUIDs) and represent
- * cumulative state that should be restored on session resume.
- */
-function buildAttributionSnapshotChain(
-  attributionSnapshots: Map<UUID, AttributionSnapshotMessage>,
-  _conversation: TranscriptMessage[],
-): AttributionSnapshotMessage[] {
-  // Return all attribution snapshots - they will be merged during restore
-  return Array.from(attributionSnapshots.values())
-}
-
-/**
  * Loads a transcript from a JSON or JSONL file and converts it to LogOption format
  * @param filePath Path to the transcript file (.json or .jsonl)
  * @returns LogOption containing the transcript messages
@@ -1704,7 +1673,6 @@ export async function loadTranscriptFromFile(
       customTitles,
       tags,
       fileHistorySnapshots,
-      attributionSnapshots,
       leafUuids,
       contentReplacements,
       worktreeStates,
@@ -1739,7 +1707,6 @@ export async function loadTranscriptFromFile(
         buildFileHistorySnapshotChain(fileHistorySnapshots, transcript),
         tag,
         filePath,
-        buildAttributionSnapshotChain(attributionSnapshots, transcript),
         undefined,
         contentReplacements.get(sessionId) ?? [],
       ),
@@ -1878,7 +1845,6 @@ function convertToLogOption(
   fileHistorySnapshots?: FileHistorySnapshot[],
   tag?: string,
   fullPath?: string,
-  attributionSnapshots?: AttributionSnapshotMessage[],
   agentSetting?: string,
   contentReplacements?: ContentReplacementRecord[],
 ): LogOption {
@@ -1910,7 +1876,6 @@ function convertToLogOption(
     customTitle,
     tag,
     fileHistorySnapshots: fileHistorySnapshots,
-    attributionSnapshots: attributionSnapshots,
     contentReplacements,
     gitBranch: lastMessage.gitBranch,
     projectPath: firstMessage.cwd,
@@ -2318,7 +2283,6 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
       modes,
       worktreeStates,
       fileHistorySnapshots,
-      attributionSnapshots,
       contentReplacements,
       leafUuids,
     } = await loadTranscriptFile(sessionFile)
@@ -2372,10 +2336,6 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
       leafUuid: mostRecentLeaf?.uuid ?? log.leafUuid,
       fileHistorySnapshots: buildFileHistorySnapshotChain(
         fileHistorySnapshots,
-        transcript,
-      ),
-      attributionSnapshots: buildAttributionSnapshotChain(
-        attributionSnapshots,
         transcript,
       ),
       contentReplacements: sessionId
@@ -2800,7 +2760,6 @@ function walkChainBeforeParse(buf: Buffer): Buffer {
 
 /**
  * 从转录文件加载所有消息、摘要和文件历史快照。
- * 返回消息、摘要、自定义标题、标签、文件历史快照和属性快照。
  */
 export async function loadTranscriptFile(
   filePath: string,
@@ -2819,7 +2778,6 @@ export async function loadTranscriptFile(
   modes: Map<UUID, string>
   worktreeStates: Map<UUID, PersistedWorktreeSession | null>
   fileHistorySnapshots: Map<UUID, FileHistorySnapshotMessage>
-  attributionSnapshots: Map<UUID, AttributionSnapshotMessage>
   contentReplacements: Map<UUID, ContentReplacementRecord[]>
   agentContentReplacements: Map<AgentId, ContentReplacementRecord[]>
   leafUuids: Set<UUID>
@@ -2837,7 +2795,6 @@ export async function loadTranscriptFile(
   const modes = new Map<UUID, string>()
   const worktreeStates = new Map<UUID, PersistedWorktreeSession | null>()
   const fileHistorySnapshots = new Map<UUID, FileHistorySnapshotMessage>()
-  const attributionSnapshots = new Map<UUID, AttributionSnapshotMessage>()
   const contentReplacements = new Map<UUID, ContentReplacementRecord[]>()
   const agentContentReplacements = new Map<
     AgentId,
@@ -2845,16 +2802,7 @@ export async function loadTranscriptFile(
   >()
 
   try {
-    // For large transcripts, avoid materializing megabytes of stale content.
-    // 单前向分块读取：在以下位置跳过归因快照行
-    // fd 级别（从不缓冲），紧凑边界截断
-    // 累加器流中。峰值分配是输出大小，而不是
-    // 文件大小 — 84% 陈旧 attr-snaps 分配的 151 MB 会话
-    // ~32 MB，而不是 159+64 MB。这很重要，因为 mimalloc 不
-    // return those pages to the OS even after JS-level GC frees the backing
-    // 缓冲区（测量：Bun.gc(true) 之后 arrayBuffers=0 但 RSS 停留在
-    // 旧扫描+剥离路径上约为 316 MB，此处约为 155 MB）。
-    //
+    // For large transcripts, avoid materializing pre-compaction content.
     // 恢复边界前元数据（代理设置、模式、pr-link 等）
     // 通过[0，边界）的廉价字节级前向扫描。
     let buf: Buffer | null = null
@@ -2882,9 +2830,7 @@ export async function loadTranscriptFile(
       }
     }
     buf ??= await readFile(filePath)
-    // For large buffers (which here means readTranscriptForLoad output with
-    // attr-snaps 已在 fd 级别剥离 — <5MB 的 readFile 路径
-    // 落入下面的大小门），主要成本是解析死区
+    // For large buffers, the main cost is parsing dead branches
     // 无论如何，buildConversationChain 的分支分支都会被丢弃。跳过
     // 当调用者需要全部时
     // 叶子（ /insights 的 loadAllLogsFromSessionFile 选择带有
@@ -2965,8 +2911,6 @@ export async function loadTranscriptFile(
         prRepositories.set(entry.sessionId, entry.prRepository)
       } else if (entry.type === 'file-history-snapshot') {
         fileHistorySnapshots.set(entry.messageId, entry)
-      } else if (entry.type === 'attribution-snapshot') {
-        attributionSnapshots.set(entry.messageId, entry)
       } else if (entry.type === 'content-replacement') {
         // 子代理通过agentId决定密钥（侧链简历）；主线程
         // 决策关键由 sessionId (/resume) 决定。
@@ -3078,7 +3022,6 @@ export async function loadTranscriptFile(
     modes,
     worktreeStates,
     fileHistorySnapshots,
-    attributionSnapshots,
     contentReplacements,
     agentContentReplacements,
     leafUuids,
@@ -3086,7 +3029,7 @@ export async function loadTranscriptFile(
 }
 
 /**
- * 从特定会话文件加载所有消息、摘要、文件历史快照和属性快照。
+ * 从特定会话文件加载所有消息、摘要和文件历史快照。
  */
 async function loadSessionFile(sessionId: UUID): Promise<{
   messages: Map<UUID, TranscriptMessage>
@@ -3096,7 +3039,6 @@ async function loadSessionFile(sessionId: UUID): Promise<{
   agentSettings: Map<UUID, string>
   worktreeStates: Map<UUID, PersistedWorktreeSession | null>
   fileHistorySnapshots: Map<UUID, FileHistorySnapshotMessage>
-  attributionSnapshots: Map<UUID, AttributionSnapshotMessage>
   contentReplacements: Map<UUID, ContentReplacementRecord[]>
 }> {
   const sessionFile = join(
@@ -3149,7 +3091,6 @@ export async function getLastSessionLog(
     agentSettings,
     worktreeStates,
     fileHistorySnapshots,
-    attributionSnapshots,
     contentReplacements,
   } = await loadSessionFile(sessionId)
   if (messages.size === 0) return null
@@ -3185,7 +3126,6 @@ export async function getLastSessionLog(
       buildFileHistorySnapshotChain(fileHistorySnapshots, transcript),
       tag,
       getTranscriptPathForSession(sessionId),
-      buildAttributionSnapshotChain(attributionSnapshots, transcript),
       agentSetting,
       contentReplacements.get(sessionId) ?? [],
     ),
@@ -3627,94 +3567,10 @@ export function isLoggableMessage(m: Message): boolean {
   return true
 }
 
-function collectReplIds(messages: readonly Message[]): Set<string> {
-  const ids = new Set<string>()
-  for (const m of messages) {
-    if (m.type === 'assistant' && Array.isArray(m.message.content)) {
-      for (const b of m.message.content) {
-        if (b.type === 'tool_use' && b.name === REPL_TOOL_NAME) {
-          ids.add(b.id)
-        }
-      }
-    }
-  }
-  return ids
-}
-
-/**
- * Make REPL invisible in the persisted transcript: strip
- * REPL tool_use/tool_result pairs and promote isVirtual messages to real. On
- * --resume the model then sees a coherent native-tool-call history (assistant
- * called Bash, got result, called Read, got result) without the REPL wrapper.
- * replIds is pre-collected from the FULL session array, not the slice being
- * transformed — recordTranscript receives incremental slices where the REPL
- * tool_use (earlier render) and its tool_result (later render, after async
- * execution) land in separate calls. A fresh per-call Set would miss the id
- * and leave an orphaned tool_result on disk.
- */
-function transformMessagesForExternalTranscript(
-  messages: Transcript,
-  replIds: Set<string>,
-): Transcript {
-  return messages.flatMap(m => {
-    if (m.type === 'assistant' && Array.isArray(m.message.content)) {
-      const content = m.message.content
-      const hasRepl = content.some(
-        b => b.type === 'tool_use' && b.name === REPL_TOOL_NAME,
-      )
-      const filtered = hasRepl
-        ? content.filter(
-            b => !(b.type === 'tool_use' && b.name === REPL_TOOL_NAME),
-          )
-        : content
-      if (filtered.length === 0) return []
-      if (m.isVirtual) {
-        const { isVirtual: _omit, ...rest } = m
-        return [{ ...rest, message: { ...m.message, content: filtered } }]
-      }
-      if (filtered !== content) {
-        return [{ ...m, message: { ...m.message, content: filtered } }]
-      }
-      return [m]
-    }
-    if (m.type === 'user' && Array.isArray(m.message.content)) {
-      const content = m.message.content
-      const hasRepl = content.some(
-        b => b.type === 'tool_result' && replIds.has(b.tool_use_id),
-      )
-      const filtered = hasRepl
-        ? content.filter(
-            b => !(b.type === 'tool_result' && replIds.has(b.tool_use_id)),
-          )
-        : content
-      if (filtered.length === 0) return []
-      if (m.isVirtual) {
-        const { isVirtual: _omit, ...rest } = m
-        return [{ ...rest, message: { ...m.message, content: filtered } }]
-      }
-      if (filtered !== content) {
-        return [{ ...m, message: { ...m.message, content: filtered } }]
-      }
-      return [m]
-    }
-    // string-content user, system, attachment
-    if ('isVirtual' in m && m.isVirtual) {
-      const { isVirtual: _omit, ...rest } = m
-      return [rest]
-    }
-    return [m]
-  }) as Transcript
-}
-
 export function cleanMessagesForLogging(
   messages: Message[],
-  allMessages: readonly Message[] = messages,
 ): Transcript {
-  const filtered = messages.filter(isLoggableMessage) as Transcript
-  return transformMessagesForExternalTranscript(
-    filtered,
-    collectReplIds(allMessages),
-  )
+  return messages.filter(isLoggableMessage) as Transcript
 }
 
 /**
@@ -3869,7 +3725,6 @@ export async function loadAllLogsFromSessionFile(
     prRepositories,
     modes,
     fileHistorySnapshots,
-    attributionSnapshots,
     contentReplacements,
     leafUuids,
   } = await loadTranscriptFile(sessionFile, { keepAllLeaves: true })
@@ -3937,10 +3792,6 @@ export async function loadAllLogsFromSessionFile(
       projectPath: projectPathOverride ?? firstMessage.cwd,
       fileHistorySnapshots: buildFileHistorySnapshotChain(
         fileHistorySnapshots,
-        chain,
-      ),
-      attributionSnapshots: buildAttributionSnapshotChain(
-        attributionSnapshots,
         chain,
       ),
       contentReplacements: contentReplacements.get(sessionId) ?? [],

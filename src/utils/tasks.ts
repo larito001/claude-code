@@ -1,9 +1,9 @@
 import { mkdir, readdir, readFile, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { z } from 'zod/v4'
-import { getIsNonInteractiveSession, getSessionId } from '../bootstrap/state.js'
+import { getSessionId } from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
-import { getFrameworkConfigHomeDir, getTeamsDir, isEnvTruthy } from './envUtils.js'
+import { getFrameworkConfigHomeDir, getTeamsDir } from './envUtils.js'
 import { errorMessage, getErrnoCode } from './errors.js'
 import { lazySchema } from './lazySchema.js'
 import * as lockfile from './lockfile.js'
@@ -129,13 +129,6 @@ async function writeHighWaterMark(
   await writeFile(path, String(value))
 }
 
-export function isTodoV2Enabled(): boolean {
-  // Force-enable tasks in non-interactive mode (e.g. SDK users who want Task tools over TodoWrite)
-  if (isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_TASKS)) {
-    return true
-  }
-  return !getIsNonInteractiveSession()
-}
 
 /**
  * Resets the task list for a new swarm - clears any existing tasks.

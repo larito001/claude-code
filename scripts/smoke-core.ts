@@ -140,7 +140,6 @@ try {
     setInProgressToolUseIDs: () => {},
     setResponseLength: () => {},
     updateFileHistoryState: () => {},
-    updateAttributionState: () => {},
   }
 
   await runWithCwdOverride(tempProject, async () => {

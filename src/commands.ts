@@ -1,5 +1,4 @@
 import addDir from './commands/add-dir/index.js'
-import advisor from './commands/advisor.js'
 import btw from './commands/btw/index.js'
 import clear from './commands/clear/index.js'
 import color from './commands/color/index.js'
@@ -57,7 +56,6 @@ import exit from './commands/exit/index.js'
 import exportCommand from './commands/export/index.js'
 import model from './commands/model/index.js'
 import tag from './commands/tag/index.js'
-import outputStyle from './commands/output-style/index.js'
 import statusline from './commands/statusline.js'
 import effort from './commands/effort/index.js'
 import { getSettingSourceName } from './utils/settings/constants.js'
@@ -82,7 +80,6 @@ export { getCommandName, isCommandEnabled } from './types/command.js'
 // 声明为函数，以便在调用 getCommands 之前不执行此操作，因为底层函数会读取配置，而模块初始化期间无法读取配置
 const COMMANDS = memoize((): Command[] => [
   addDir,
-  advisor,
   agents,
   branch,
   btw,
@@ -107,7 +104,6 @@ const COMMANDS = memoize((): Command[] => [
   mcp,
   memory,
   model,
-  outputStyle,
   reloadPlugins,
   rename,
   resume,

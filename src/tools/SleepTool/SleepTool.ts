@@ -86,9 +86,7 @@ function waitUntilTimerOrNotification(
 
 export const SleepTool = buildTool({
   name: SLEEP_TOOL_NAME,
-  searchHint: 'pause until a timer or background notification arrives',
   maxResultSizeChars: 1_000,
-  alwaysLoad: true,
   get inputSchema(): InputSchema {
     return inputSchema()
   },

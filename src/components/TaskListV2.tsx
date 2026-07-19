@@ -11,7 +11,7 @@ import { isAgentSwarmsEnabled } from '../utils/agentSwarmsEnabled.js';
 import { count } from '../utils/array.js';
 import { summarizeRecentActivities } from '../utils/collapseReadSearch.js';
 import { truncateToWidth } from '../utils/format.js';
-import { isTodoV2Enabled, type Task } from '../utils/tasks.js';
+import type { Task } from '../utils/tasks.js';
 import type { Theme } from '../utils/theme.js';
 import ThemedText from './design-system/ThemedText.js';
 type Props = {
@@ -83,9 +83,6 @@ export function TaskListV2({
     const timer = setTimeout(forceUpdate_0 => forceUpdate_0((n: number) => n + 1), earliestExpiry - currentNow, forceUpdate);
     return () => clearTimeout(timer);
   }, [tasks]);
-  if (!isTodoV2Enabled()) {
-    return null;
-  }
   if (tasks.length === 0) {
     return null;
   }

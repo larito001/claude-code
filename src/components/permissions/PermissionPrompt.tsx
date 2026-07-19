@@ -3,7 +3,6 @@ import React, { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { Box, Text } from '../../ink.js';
 import type { KeybindingAction } from '../../keybindings/types.js';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
-import { useSetAppState } from '../../state/AppState.js';
 import { type OptionWithDescription, Select } from '../CustomSelect/select.js';
 export type FeedbackType = 'accept' | 'reject';
 export type PermissionPromptOption<T extends string> = {
@@ -44,7 +43,6 @@ export function PermissionPrompt(t0) {
     question: t1
   } = t0;
   const question = t1 === undefined ? "Do you want to proceed?" : t1;
-  const setAppState = useSetAppState();
   const [acceptFeedback, setAcceptFeedback] = useState("");
   const [rejectFeedback, setRejectFeedback] = useState("");
   const [acceptInputMode, setAcceptInputMode] = useState(false);
@@ -209,13 +207,11 @@ export function PermissionPrompt(t0) {
   }
   useKeybindings(keybindingHandlers, t6);
   let t7;
-  if ($[31] !== onCancel || $[32] !== setAppState) {
+  if ($[31] !== onCancel) {
     t7 = () => {
-      setAppState(_temp);
       onCancel?.();
     };
     $[31] = onCancel;
-    $[32] = setAppState;
     $[33] = t7;
   } else {
     t7 = $[33];
@@ -282,13 +278,4 @@ export function PermissionPrompt(t0) {
     t13 = $[53];
   }
   return t13;
-}
-function _temp(prev) {
-  return {
-    ...prev,
-    attribution: {
-      ...prev.attribution,
-      escapeCount: prev.attribution.escapeCount + 1
-    }
-  };
 }

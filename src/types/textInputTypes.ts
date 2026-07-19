@@ -220,7 +220,7 @@ export type QueuedCommand = {
   /** 此命令的来源。标记到生成的 UserMessage 上，以便转录从结构上记录来源（而不仅仅是内容中的 XML 标签）。undefined = 人类（键盘）。 */
   origin?: MessageOrigin
   /**
-   * 工作量标签，通过 billing-header 归属块中的 cc_workload= 线程化。队列是 cron 调度器触发和回合实际运行之间的异步边界 — 用户提示可能插入其间 — 因此标签存在于 QueuedCommand 本身，并且仅在此命令出队时才提升为引导状态。
+   * 工作量标签。队列是 cron 调度器触发和回合实际运行之间的异步边界 — 用户提示可能插入其间 — 因此标签存在于 QueuedCommand 本身，并且仅在此命令出队时才提升为当前状态。
    */
   workload?: string
   /**

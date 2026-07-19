@@ -7,22 +7,15 @@ if (typeof runtimeGlobal.MACRO === 'undefined') {
     VERSION: '2.1.87',
     BUILD_TIME: new Date().toISOString(),
     FEEDBACK_CHANNEL: '#claude-code-research',
-    ISSUES_EXPLAINER: 'https://github.com/beita6969/claude-code/issues',
+    ISSUES_EXPLAINER: 'https://github.com/larito001/claude-code/issues',
   };
 }
 
-// 这些副作用必须在所有其他导入之前运行：
-// 1. profileCheckpoint 在重模块评估开始之前标记条目
-// 2. startMdmRawRead 触发 MDM 子进程（plutil/reg 查询），以便它们在
-//    与下面剩余的约 135 毫秒的导入并行
+// 此副作用必须在所有其他导入之前运行，以便在重模块评估开始前标记条目。
 import { profileCheckpoint, profileReport } from './utils/startupProfiler.js';
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 profileCheckpoint('main_tsx_entry');
-import { startMdmRawRead } from './utils/settings/mdm/rawRead.js';
-
-// eslint-disable-next-line custom-rules/no-top-level-side-effects
-startMdmRawRead();
 import { feature } from 'src/utils/features.js';
 import { Command as CommanderCommand, InvalidArgumentError, Option } from '@commander-js/extra-typings';
 import chalk from 'chalk';
@@ -35,12 +28,10 @@ import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from './ink.js';
 import { launchRepl } from './replLauncher.js';
-import { prefetchOfficialMcpUrls } from './services/mcp/officialRegistry.js';
 import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from './services/mcp/types.js';
 import type { ToolInputJSONSchema } from './Tool.js';
 import { createSyntheticOutputTool, isSyntheticOutputToolEnabled } from './tools/SyntheticOutputTool/SyntheticOutputTool.js';
 import { getTools } from './tools.js';
-import { canUserConfigureAdvisor, getInitialAdvisorSetting, isAdvisorEnabled, isValidAdvisorModel, modelSupportsAdvisor } from './utils/advisor.js';
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js';
 import { count } from './utils/array.js';
 import { installAsciicastRecorder } from './utils/asciicast.js';
@@ -97,14 +88,12 @@ import { getWorktreePaths } from './utils/getWorktreePaths.js';
 import { getBranch } from './utils/git.js';
 import { safeParseJSON } from './utils/json.js';
 import { logError } from './utils/log.js';
-import { getModelDeprecationWarning } from './utils/model/deprecation.js';
-import { getDefaultMainLoopModel, getUserSpecifiedModelSetting, normalizeModelStringForAPI, parseUserSpecifiedModel } from './utils/model/model.js';
+import { getDefaultMainLoopModel, getUserSpecifiedModelSetting, parseUserSpecifiedModel } from './utils/model/model.js';
 import { ensureModelStringsInitialized } from './utils/model/modelStrings.js';
 import { PERMISSION_MODES } from './utils/permissions/PermissionMode.js';
 import { checkAndDisableBypassPermissions, getAutoModeEnabledStateIfCached, initializeToolPermissionContext, initialPermissionModeFromCLI, isDefaultPermissionModeAuto, parseToolListFromCLI, stripDangerousPermissionsForAutoMode, verifyAutoModeGateAccess } from './utils/permissions/permissionSetup.js';
 import { processSessionStartHooks, processSetupHooks } from './utils/sessionStart.js';
 import { cacheSessionTitle, getSessionIdFromLog, loadTranscriptFromFile, saveAgentSetting, saveMode, searchSessionsByCustomTitle, sessionIdExists } from './utils/sessionStorage.js';
-import { ensureMdmSettingsLoaded } from './utils/settings/mdm/settings.js';
 import { getInitialSettings, getSettingsWithErrors } from './utils/settings/settings.js';
 import { resetSettingsCache } from './utils/settings/settingsCache.js';
 import type { ValidationError } from './utils/settings/validation.js';
@@ -114,13 +103,10 @@ import { validateUuid } from './utils/uuid.js';
 // 插件启动检查现在在 REPL.tsx 中以非阻塞方式处理
 
 import { registerMcpAddCommand } from 'src/commands/mcp/addCommand.js';
-import { registerMcpXaaIdpCommand } from 'src/commands/mcp/xaaIdpCommand.js';
 import { areMcpConfigsAllowedWithEnterpriseMcpConfig, doesEnterpriseMcpConfigExist, filterMcpServersByPolicy, getClaudeCodeMcpConfigs, parseMcpConfig, parseMcpConfigFromFilePath } from 'src/services/mcp/config.js';
-import { isXaaEnabled } from 'src/services/mcp/xaaIdpLogin.js';
 import { getRelevantTips } from 'src/services/tips/tipRegistry.js';
 import { registerCleanup } from 'src/utils/cleanupRegistry.js';
 import { eagerParseCliFlag } from 'src/utils/cliArgs.js';
-import { createEmptyAttributionState } from 'src/utils/commitAttribution.js';
 import { registerSession, updateSessionName } from 'src/utils/concurrentSessions.js';
 import { getCwd } from 'src/utils/cwd.js';
 import { logForDebugging, setHasFormattedOutput } from 'src/utils/debug.js';
@@ -134,7 +120,7 @@ import { setCwd } from 'src/utils/Shell.js';
 import { type ProcessedResume, processResumedConversation } from 'src/utils/sessionRestore.js';
 import { parseSettingSourcesFlag } from 'src/utils/settings/constants.js';
 import { plural } from 'src/utils/stringUtils.js';
-import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, setAllowedChannels, setAllowedSettingSources, setClientType, setCwdState, setFlagSettingsPath, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionPersistenceDisabled, setSessionSource, switchSession } from './bootstrap/state.js';
+import { getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, setAllowedSettingSources, setClientType, setCwdState, setFlagSettingsPath, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionPersistenceDisabled, setSessionSource, switchSession } from './bootstrap/state.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') as typeof import('./utils/permissions/autoModeState.js') : null;
@@ -216,7 +202,6 @@ export function startDeferredPrefetches(): void {
   prefetchSystemContextIfSafe();
   void getRelevantTips();
   // 后台能力预取
-  void prefetchOfficialMcpUrls();
   void refreshModelCapabilities();
 
   // 文件更改检测器从 init() 推迟到解锁首次渲染
@@ -466,9 +451,6 @@ async function run(): Promise<CommanderCommand> {
   // 使用preAction钩子确保仅在执行命令时运行初始化，而不是在显示帮助时。这避免了对环境变量信号的需求。
   program.hook('preAction', async thisCommand => {
     profileCheckpoint('preAction_start');
-    // 等待在模块评估时启动的异步子进程加载（第12-20行）。几乎免费——子进程在上述~135ms的导入期间完成。必须在init()之前解析，init()会触发第一次设置读取（applySafeConfigEnvironmentVariables → getSettingsForSource('policySettings') → isRemoteManagedSettingsEligible → 同步钥匙串读取否则~65ms）。
-    await ensureMdmSettingsLoaded();
-    profileCheckpoint('preAction_after_mdm');
     await init();
     profileCheckpoint('preAction_after_init');
 
@@ -497,7 +479,7 @@ async function run(): Promise<CommanderCommand> {
   .helpOption('-h, --help', 'Display help for command').option('-d, --debug [filter]', 'Enable debug mode with optional category filtering (e.g., "api,hooks" or "!1p,!file")', (_value: string | true) => {
     // 如果提供了值，它将是过滤字符串；如果未提供但标志存在，值将为true。实际过滤由debug.ts通过解析process.argv处理。
     return true;
-  }).addOption(new Option('--debug-to-stderr', 'Enable debug mode (to stderr)').argParser(Boolean).hideHelp()).option('--debug-file <path>', 'Write debug logs to a specific file path (implicitly enables debug mode)', () => true).option('--verbose', 'Override verbose mode setting from config', () => true).option('-p, --print', 'Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag in directories you trust.', () => true).option('--bare', 'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. API requests use ANTHROPIC_API_KEY or the configured apiKeyHelper. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.', () => true).addOption(new Option('--init', 'Run Setup hooks with init trigger, then continue').hideHelp()).addOption(new Option('--init-only', 'Run Setup and SessionStart:startup hooks, then exit').hideHelp()).addOption(new Option('--maintenance', 'Run Setup hooks with maintenance trigger, then continue').hideHelp()).addOption(new Option('--output-format <format>', 'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming)').choices(['text', 'json', 'stream-json'])).addOption(new Option('--json-schema <schema>', 'JSON Schema for structured output validation. ' + 'Example: {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}').argParser(String)).option('--include-hook-events', 'Include all hook lifecycle events in the output stream (only works with --output-format=stream-json)', () => true).option('--include-partial-messages', 'Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)', () => true).addOption(new Option('--input-format <format>', 'Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input)').choices(['text', 'stream-json'])).option('--mcp-debug', '[DEPRECATED. Use --debug instead] Enable MCP debug mode (shows MCP server errors)', () => true).option('--dangerously-skip-permissions', 'Bypass all permission checks. Recommended only for sandboxes with no internet access.', () => true).option('--allow-dangerously-skip-permissions', 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.', () => true).addOption(new Option('--thinking <mode>', 'Thinking mode: enabled (equivalent to adaptive), disabled').choices(['enabled', 'adaptive', 'disabled']).hideHelp()).addOption(new Option('--max-thinking-tokens <tokens>', '[DEPRECATED. Use --thinking instead for newer models] Maximum number of thinking tokens (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-turns <turns>', 'Maximum number of agentic turns in non-interactive mode. This will early exit the conversation after the specified number of turns. (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-budget-usd <amount>', 'Maximum dollar amount to spend on API calls (only works with --print)').argParser(value => {
+  }).addOption(new Option('--debug-to-stderr', 'Enable debug mode (to stderr)').argParser(Boolean).hideHelp()).option('--debug-file <path>', 'Write debug logs to a specific file path (implicitly enables debug mode)', () => true).option('--verbose', 'Override verbose mode setting from config', () => true).option('-p, --print', 'Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag in directories you trust.', () => true).option('--bare', 'Minimal mode: skip hooks, LSP, plugin sync, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. API requests use ANTHROPIC_API_KEY or the configured apiKeyHelper. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.', () => true).addOption(new Option('--init', 'Run Setup hooks with init trigger, then continue').hideHelp()).addOption(new Option('--init-only', 'Run Setup and SessionStart:startup hooks, then exit').hideHelp()).addOption(new Option('--maintenance', 'Run Setup hooks with maintenance trigger, then continue').hideHelp()).addOption(new Option('--output-format <format>', 'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming)').choices(['text', 'json', 'stream-json'])).addOption(new Option('--json-schema <schema>', 'JSON Schema for structured output validation. ' + 'Example: {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}').argParser(String)).option('--include-hook-events', 'Include all hook lifecycle events in the output stream (only works with --output-format=stream-json)', () => true).option('--include-partial-messages', 'Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)', () => true).addOption(new Option('--input-format <format>', 'Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input)').choices(['text', 'stream-json'])).option('--dangerously-skip-permissions', 'Bypass all permission checks. Recommended only for sandboxes with no internet access.', () => true).option('--allow-dangerously-skip-permissions', 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.', () => true).addOption(new Option('--thinking <mode>', 'Thinking mode: enabled (equivalent to adaptive), disabled').choices(['enabled', 'adaptive', 'disabled']).hideHelp()).addOption(new Option('--max-turns <turns>', 'Maximum number of agentic turns in non-interactive mode. This will early exit the conversation after the specified number of turns. (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-budget-usd <amount>', 'Maximum dollar amount to spend on API calls (only works with --print)').argParser(value => {
     const amount = Number(value);
     if (isNaN(amount) || amount <= 0) {
       throw new Error('--max-budget-usd must be a positive number greater than 0');
@@ -518,7 +500,7 @@ async function run(): Promise<CommanderCommand> {
       throw new InvalidArgumentError(`It must be one of: ${allowed.join(', ')}`);
     }
     return value;
-  })).option('--agent <agent>', `Agent for the current session. Overrides the 'agent' setting.`).option('--betas <betas...>', 'Beta headers to include in API requests (API key users only)').option('--fallback-model <model>', 'Enable automatic fallback to specified model when default model is overloaded (only works with --print)').addOption(new Option('--workload <tag>', 'Workload tag for billing-header attribution (cc_workload). Process-scoped; set by SDK daemon callers that spawn subprocesses for cron work. (only works with --print)').hideHelp()).option('--settings <file-or-json>', 'Path to a settings JSON file or a JSON string to load additional settings from').option('--add-dir <directories...>', 'Additional directories to allow tool access to').option('--ide', 'Automatically connect to IDE on startup if exactly one valid IDE is available', () => true).option('--strict-mcp-config', 'Only use MCP servers from --mcp-config, ignoring all other MCP configurations', () => true).option('--session-id <uuid>', 'Use a specific session ID for the conversation (must be a valid UUID)').option('-n, --name <name>', 'Set a display name for this session (shown in /resume and terminal title)').option('--agents <json>', 'JSON object defining custom agents (e.g. \'{"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}\')').option('--setting-sources <sources>', 'Comma-separated list of setting sources to load (user, project, local).')
+  })).option('--agent <agent>', `Agent for the current session. Overrides the 'agent' setting.`).option('--betas <betas...>', 'Beta headers to include in API requests (API key users only)').option('--fallback-model <model>', 'Enable automatic fallback to specified model when default model is overloaded (only works with --print)').addOption(new Option('--workload <tag>', 'Workload tag for request classification. Process-scoped; set by SDK daemon callers that spawn subprocesses for cron work. (only works with --print)').hideHelp()).option('--settings <file-or-json>', 'Path to a settings JSON file or a JSON string to load additional settings from').option('--add-dir <directories...>', 'Additional directories to allow tool access to').option('--ide', 'Automatically connect to IDE on startup if exactly one valid IDE is available', () => true).option('--strict-mcp-config', 'Only use MCP servers from --mcp-config, ignoring all other MCP configurations', () => true).option('--session-id <uuid>', 'Use a specific session ID for the conversation (must be a valid UUID)').option('-n, --name <name>', 'Set a display name for this session (shown in /resume and terminal title)').option('--agents <json>', 'JSON object defining custom agents (e.g. \'{"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}\')').option('--setting-sources <sources>', 'Comma-separated list of setting sources to load (user, project, local).')
   // gh-33508: <paths...> (variadic) consumed everything until the next
   // --flag. `claude --plugin-dir /path mcp add --transport http` swallowed
   // `mcp` and `add` as paths, then choked on --transport as an unknown
@@ -873,48 +855,6 @@ async function run(): Promise<CommanderCommand> {
     // 存储用于CLAUDE.md加载的额外目录（由环境变量控制）。
     setAdditionalDirectoriesForClaudeMd(addDir);
 
-    // 来自--channels标志的频道服务器允许列表——其入站推送通知应注册此会话的服务器。该选项在feature()块内添加，因此TS在选项类型上不知道它——与main.tsx:1824处的--assistant相同的模式。devChannels被延迟：showSetupScreens显示确认对话框，仅在接受时追加到allowedChannels。
-    let devChannels: ChannelEntry[] | undefined;
-    if (feature('MCP_CHANNELS')) {
-      /** 解析 parse Channel Entries 对应的数据或状态。 */
-      const parseChannelEntries = (raw: string[], flag: string): ChannelEntry[] => {
-        const entries: ChannelEntry[] = [];
-        const bad: string[] = [];
-        for (const c of raw) {
-          if (c.startsWith('server:') && c.length > 7) {
-            entries.push({
-              kind: 'server',
-              name: c.slice(7)
-            });
-          } else {
-            bad.push(c);
-          }
-        }
-        if (bad.length > 0) {
-          process.stderr.write(chalk.red(`${flag} entries must use server:<name>: ${bad.join(', ')}\n`));
-          process.exit(1);
-        }
-        return entries;
-      };
-      const channelOpts = options as {
-        channels?: string[];
-        dangerouslyLoadDevelopmentChannels?: string[];
-      };
-      const rawChannels = channelOpts.channels;
-      const rawDev = channelOpts.dangerouslyLoadDevelopmentChannels;
-      // 始终解析并设置允许的通道列表。在启动界面中渲染适当的分支（disabled/noAuth/policyBlocked/listening）。gateChannelServer() 强制执行。--channels 在交互式和 print/SDK 模式下均有效；dev-channels 仅限交互式（需要确认对话框）。
-      let channelEntries: ChannelEntry[] = [];
-      if (rawChannels && rawChannels.length > 0) {
-        channelEntries = parseChannelEntries(rawChannels, '--channels');
-        setAllowedChannels(channelEntries);
-      }
-      if (!isNonInteractiveSession) {
-        if (rawDev && rawDev.length > 0) {
-          devChannels = parseChannelEntries(rawDev, '--dangerously-load-development-channels');
-        }
-      }
-    }
-
     // 此 await 替换了启动路径中已有的阻塞 existsSync/statSync 调用。挂钟时间不变；我们只是在文件系统 I/O 期间让出事件循环而不是阻塞它。参见 #19661。
     const initResult = await initializeToolPermissionContext({
       allowedToolsCli: allowedTools,
@@ -1139,29 +1079,6 @@ async function run(): Promise<CommanderCommand> {
     setInitialMainLoopModel(getUserSpecifiedModelSetting() || null);
     const initialMainLoopModel = getInitialMainLoopModel();
     const resolvedInitialModel = parseUserSpecifiedModel(initialMainLoopModel ?? getDefaultMainLoopModel());
-    let advisorModel: string | undefined;
-    if (isAdvisorEnabled()) {
-      const advisorOption = canUserConfigureAdvisor() ? (options as {
-        advisor?: string;
-      }).advisor : undefined;
-      if (advisorOption) {
-        logForDebugging(`[AdvisorTool] --advisor ${advisorOption}`);
-        if (!modelSupportsAdvisor(resolvedInitialModel)) {
-          process.stderr.write(chalk.red(`Error: The model "${resolvedInitialModel}" does not support the advisor tool.\n`));
-          process.exit(1);
-        }
-        const normalizedAdvisorModel = normalizeModelStringForAPI(parseUserSpecifiedModel(advisorOption));
-        if (!isValidAdvisorModel(normalizedAdvisorModel)) {
-          process.stderr.write(chalk.red(`Error: The model "${advisorOption}" cannot be used as an advisor.\n`));
-          process.exit(1);
-        }
-      }
-      advisorModel = canUserConfigureAdvisor() ? advisorOption ?? getInitialAdvisorSetting() : advisorOption;
-      if (advisorModel) {
-        logForDebugging(`[AdvisorTool] Advisor model: ${advisorModel}`);
-      }
-    }
-
     // 对于使用 --agent-type 的 tmux teammates，追加自定义 agent 的提示
     if (isAgentSwarmsEnabled() && storedTeammateOpts?.agentId && storedTeammateOpts?.agentName && storedTeammateOpts?.teamName && storedTeammateOpts?.agentType) {
       // 查找自定义 agent 定义
@@ -1213,7 +1130,7 @@ async function run(): Promise<CommanderCommand> {
       // 现在记录启动时间，在任何阻塞对话框渲染之前。从 REPL 首次渲染（旧位置）记录日志包含了用户停留在信任/OAuth/引导/恢复选择器上的时间——p99 约为 70 秒，主要由等待对话框的时间主导，而不是代码路径启动时间。
       logForDebugging('[STARTUP] Running showSetupScreens()...');
       const setupScreensStart = Date.now();
-      await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, devChannels);
+      await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions);
       logForDebugging(`[STARTUP] showSetupScreens() completed in ${Date.now() - setupScreensStart}ms`);
 
     }
@@ -1299,7 +1216,7 @@ async function run(): Promise<CommanderCommand> {
 
     // 在信任对话框后预取 MCP 资源（这是执行发生的地方）。
     // 仅交互模式：print 模式延迟连接，直到 headlessStore 存在
-    // 并逐个推送服务器（如下），以便 ToolSearch 的 pending-client 处理正常工作
+    // 并逐个推送服务器（如下），以便连接状态可以及时更新。
     // 并且一个慢速服务器不会阻塞整个批处理。
     const mcpPromise = isNonInteractiveSession ? Promise.resolve({
       clients: [],
@@ -1342,22 +1259,6 @@ async function run(): Promise<CommanderCommand> {
       thinkingConfig = {
         type: 'disabled'
       };
-    } else {
-      const maxThinkingTokens = process.env.MAX_THINKING_TOKENS ? parseInt(process.env.MAX_THINKING_TOKENS, 10) : options.maxThinkingTokens;
-      if (maxThinkingTokens !== undefined) {
-        if (maxThinkingTokens > 0) {
-          thinkingEnabled = true;
-          thinkingConfig = {
-            type: 'enabled',
-            budgetTokens: maxThinkingTokens
-          };
-        } else if (maxThinkingTokens === 0) {
-          thinkingEnabled = false;
-          thinkingConfig = {
-            type: 'disabled'
-          };
-        }
-      }
     }
     logForDiagnosticsNoPII('info', 'started', {
       version: MACRO.VERSION,
@@ -1439,9 +1340,6 @@ async function run(): Promise<CommanderCommand> {
         ...(isFastModeEnabled() && {
           fastMode: getInitialFastModeSetting(effectiveModel ?? null)
         }),
-        ...(isAdvisorEnabled() && advisorModel && {
-          advisorModel
-        }),
       };
 
       // 初始化应用状态
@@ -1480,7 +1378,7 @@ async function run(): Promise<CommanderCommand> {
       setSdkBetas(filterAllowedSdkBetas(betas));
 
       // 打印模式MCP：每个服务器增量推送到headlessStore。
-      // 镜像useManageMCPConnections——先推送待处理项（以便ToolSearch在ToolSearchTool.ts:334处的待处理检查能看到它们），
+      // 镜像 useManageMCPConnections——先推送待处理项，
       // 然后在每个服务器稳定时替换为已连接/已失败状态。
       /** 执行 connect Mcp Batch 对应的业务处理。 */
       const connectMcpBatch = (configs: Record<string, ScopedMcpServerConfig>, label: string): Promise<void> => {
@@ -1567,9 +1465,6 @@ async function run(): Promise<CommanderCommand> {
 
     // 启动时记录模型配置
 
-    // 获取初始模型的弃用警告（resolvedInitialModel提前计算以并行化钩子）
-    const deprecationWarning = getModelDeprecationWarning(resolvedInitialModel);
-
     // 构建初始通知队列
     const initialNotifications: Array<{
       key: string;
@@ -1581,14 +1476,6 @@ async function run(): Promise<CommanderCommand> {
       initialNotifications.push({
         key: 'permission-mode-notification',
         text: permissionModeNotification,
-        priority: 'high'
-      });
-    }
-    if (deprecationWarning) {
-      initialNotifications.push({
-        key: 'model-deprecation-warning',
-        text: deprecationWarning,
-        color: 'warning',
         priority: 'high'
       });
     }
@@ -1634,13 +1521,11 @@ async function run(): Promise<CommanderCommand> {
       elicitation: {
         queue: []
       },
-      todos: {},
       fileHistory: {
         snapshots: [],
         trackedFiles: new Set(),
         snapshotSequence: 0
       },
-      attribution: createEmptyAttributionState(),
       thinkingEnabled,
       promptSuggestionEnabled: shouldEnablePromptSuggestion(),
       sessionHooks: new Map(),
@@ -1670,9 +1555,6 @@ async function run(): Promise<CommanderCommand> {
       effortValue: parseEffortValue(options.effort) ?? getInitialEffortSetting(),
       activeOverlays: new Set<string>(),
       fastMode: getInitialFastModeSetting(resolvedInitialModel),
-      ...(isAdvisorEnabled() && advisorModel && {
-        advisorModel
-      }),
       // 同步计算teamContext以避免渲染期间调用useEffect setState。
       teamContext: computeInitialTeamContext?.()
     };
@@ -1730,7 +1612,6 @@ async function run(): Promise<CommanderCommand> {
         }
         const loaded = await processResumedConversation(result, {
           forkSession: !!options.forkSession,
-          includeAttribution: true,
           transcriptPath: result.fullPath
         }, resumeContext);
         if (loaded.restoredAgentDef) {
@@ -1926,9 +1807,6 @@ async function run(): Promise<CommanderCommand> {
   // 工作树标志
   program.option('-w, --worktree [name]', 'Create a new git worktree for this session (optionally specify a name)');
   program.option('--tmux', 'Create a tmux session for the worktree (requires --worktree). Uses iTerm2 native panes when available; use --tmux=classic for traditional tmux.');
-  if (canUserConfigureAdvisor()) {
-    program.addOption(new Option('--advisor <model>', 'Enable the server-side advisor tool with the specified model (alias or full ID).').hideHelp());
-  }
   program.addOption(new Option('--tasks [id]', 'Watch a task list and automatically process available tasks.').argParser(String));
   program.option('--agent-teams', 'Enable multi-agent mode for this session', () => true);
   if (feature('TRANSCRIPT_CLASSIFIER')) {
@@ -1936,10 +1814,6 @@ async function run(): Promise<CommanderCommand> {
   }
   if (feature('PROACTIVE')) {
     program.addOption(new Option('--proactive', 'Start in proactive autonomous mode'));
-  }
-  if (feature('MCP_CHANNELS')) {
-    program.addOption(new Option('--channels <servers...>', 'MCP servers whose channel notifications (inbound push) should register this session. Space-separated server names.').hideHelp());
-    program.addOption(new Option('--dangerously-load-development-channels <servers...>', 'Load channel servers not on the approved allowlist. For local channel development only. Shows a confirmation dialog at startup.').hideHelp());
   }
 
   // 队友身份选项（由leader在生成tmux队友时设置）
@@ -1988,9 +1862,6 @@ async function run(): Promise<CommanderCommand> {
 
   // 注册mcp add子命令（提取以便测试）
   registerMcpAddCommand(mcp);
-  if (isXaaEnabled()) {
-    registerMcpXaaIdpCommand(mcp);
-  }
   mcp.command('remove <name>').description('Remove an MCP server').option('-s, --scope <scope>', 'Configuration scope (local, user, or project) - if not specified, removes from whichever scope it exists in').action(async (name: string, options: {
     scope?: string;
   }) => {

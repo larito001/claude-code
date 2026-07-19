@@ -85,7 +85,6 @@ assert(
 
 const retainedControlRequests = [
   { subtype: 'end_session', reason: 'host_closed' },
-  { subtype: 'channel_enable', serverName: 'channel-server' },
   { subtype: 'mcp_authenticate', serverName: 'oauth-server' },
   {
     subtype: 'mcp_oauth_callback_url',

@@ -26,7 +26,6 @@ import {
   type PromptInputMode,
 } from '../../types/textInputTypes.js'
 import {
-  type AgentMentionAttachment,
   createAttachmentMessage,
   getAttachmentMessages,
 } from '../attachments.js'
@@ -460,26 +459,6 @@ async function processUserInputBase(
       canUseTool,
     )
     return addImageMetadataMessage(slashResult, imageMetadataTexts)
-  }
-
-  // 记录 agent 提及查询以供分析
-  if (inputString !== null && mode === 'prompt') {
-    const trimmedInput = inputString.trim()
-
-    /** 执行 agent Mention 对应的业务处理。 */
-    const agentMention = attachmentMessages.find(
-      (m): m is AttachmentMessage<AgentMentionAttachment> =>
-        m.attachment.type === 'agent_mention',
-    )
-
-    if (agentMention) {
-      const agentMentionString = `@agent-${agentMention.attachment.agentType}`
-      const isSubagentOnly = trimmedInput === agentMentionString
-      const isPrefix =
-        trimmedInput.startsWith(agentMentionString) && !isSubagentOnly
-
-      // Log whenever users use @agent-<name> syntax
-    }
   }
 
   // 常规用户提示

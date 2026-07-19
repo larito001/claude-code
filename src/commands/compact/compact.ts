@@ -20,7 +20,6 @@ import type { Message } from '../../types/message.js'
 import { hasExactErrorMessage } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
 import { getMessagesAfterCompactBoundary } from '../../utils/messages.js'
-import { getUpgradeMessage } from '../../utils/model/contextWindowUpgradeCheck.js'
 import {
   buildEffectiveSystemPrompt,
   type SystemPrompt,
@@ -117,7 +116,6 @@ function buildDisplayText(
   context: ToolUseContext,
   userDisplayMessage?: string,
 ): string {
-  const upgradeMessage = getUpgradeMessage('tip')
   const expandShortcut = getShortcutDisplay(
     'app:toggleTranscript',
     'Global',
@@ -128,7 +126,6 @@ function buildDisplayText(
       ? []
       : [`(${expandShortcut} to see full summary)`]),
     ...(userDisplayMessage ? [userDisplayMessage] : []),
-    ...(upgradeMessage ? [upgradeMessage] : []),
   ]
   return chalk.dim('Compacted ' + dimmed.join('\n'))
 }

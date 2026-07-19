@@ -18,7 +18,6 @@ import { getFsImplementation, safeResolvePath } from '../fsOperations.js'
 import { addFileGlobRuleToGitignore } from '../git/gitignore.js'
 import { safeParseJSON } from '../json.js'
 import { logError } from '../log.js'
-import { getPlatform } from '../platform.js'
 import { clone, jsonStringify } from '../slowOperations.js'
 import { profileCheckpoint } from '../startupProfiler.js'
 import {
@@ -31,7 +30,6 @@ import {
   getManagedFilePath,
   getManagedSettingsDropInDir,
 } from './managedPath.js'
-import { getHkcuSettings, getMdmSettings } from './mdm/settings.js'
 import {
   getCachedParsedFile,
   getCachedSettingsForSource,
@@ -297,24 +295,10 @@ export function getSettingsForSource(
 function getSettingsForSourceUncached(
   source: SettingSource,
 ): SettingsJson | null {
-  // 对于 policySettings：第一个源优先（HKLM/plist > file > HKCU）
+  // 策略设置统一从管理员管理的配置文件及 drop-ins 加载。
   if (source === 'policySettings') {
-    const mdmResult = getMdmSettings()
-    if (Object.keys(mdmResult.settings).length > 0) {
-      return mdmResult.settings
-    }
-
     const { settings: fileSettings } = loadManagedFileSettings()
-    if (fileSettings) {
-      return fileSettings
-    }
-
-    const hkcu = getHkcuSettings()
-    if (Object.keys(hkcu.settings).length > 0) {
-      return hkcu.settings
-    }
-
-    return null
+    return fileSettings
   }
 
   const settingsFilePath = getSettingsFilePathForSource(source)
@@ -341,35 +325,11 @@ function getSettingsForSourceUncached(
 }
 
 /**
- * 获取最高优先级活动策略设置源的来源。
- * 使用“第一个源优先”——返回第一个有内容的源。
- * 优先级：plist/hklm > file (managed-settings.json) > hkcu
+ * 获取活动策略设置源的来源。
  */
-export function getPolicySettingsOrigin():
-  | 'plist'
-  | 'hklm'
-  | 'file'
-  | 'hkcu'
-  | null {
-  // 2. 仅管理员 MDM（HKLM / macOS plist）
-  const mdmResult = getMdmSettings()
-  if (Object.keys(mdmResult.settings).length > 0) {
-    return getPlatform() === 'macos' ? 'plist' : 'hklm'
-  }
-
-  // 3. managed-settings.json + managed-settings.d/（基于文件，需要管理员权限）
+export function getPolicySettingsOrigin(): 'file' | null {
   const { settings: fileSettings } = loadManagedFileSettings()
-  if (fileSettings) {
-    return 'file'
-  }
-
-  // 4. HKCU（最低——用户可写）
-  const hkcu = getHkcuSettings()
-  if (Object.keys(hkcu.settings).length > 0) {
-    return 'hkcu'
-  }
-
-  return null
+  return fileSettings ? 'file' : null
 }
 
 /**
@@ -632,38 +592,10 @@ function loadSettingsFromDisk(): SettingsWithErrors {
 
     // 按优先级顺序使用深度合并来合并每个源的设置
     for (const source of getEnabledSettingSources()) {
-      // policySettings：“第一个源获胜” — 使用具有内容的最高优先级源。
-      // 优先级：HKLM/plist > managed-settings.json > HKCU
+      // policySettings 由 managed-settings.json 和 drop-ins 提供。
       if (source === 'policySettings') {
-        let policySettings: SettingsJson | null = null
-        const policyErrors: ValidationError[] = []
-
-        // 2. 仅管理员 MDM（HKLM / macOS plist）
-        if (!policySettings) {
-          const mdmResult = getMdmSettings()
-          if (Object.keys(mdmResult.settings).length > 0) {
-            policySettings = mdmResult.settings
-          }
-          policyErrors.push(...mdmResult.errors)
-        }
-
-        // 3. managed-settings.json + managed-settings.d/（基于文件，需要管理员权限）
-        if (!policySettings) {
-          const { settings, errors } = loadManagedFileSettings()
-          if (settings) {
-            policySettings = settings
-          }
-          policyErrors.push(...errors)
-        }
-
-        // 4. HKCU（最低 — 用户可写，仅当上述不存在时）
-        if (!policySettings) {
-          const hkcu = getHkcuSettings()
-          if (Object.keys(hkcu.settings).length > 0) {
-            policySettings = hkcu.settings
-          }
-          policyErrors.push(...hkcu.errors)
-        }
+        const { settings: policySettings, errors: policyErrors } =
+          loadManagedFileSettings()
 
         // 将获胜的策略源合并到设置链中
         if (policySettings) {

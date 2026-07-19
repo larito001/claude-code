@@ -14,7 +14,7 @@ import { diffArrays } from 'diff'
 import type hljsDefault from 'highlight.js'
 import { basename, extname } from 'path'
 
-// 惰性：将 highlight.js 的加载推迟到首次渲染。完整 bundle 在 require 时注册了 190 多种语言语法（约 50MB，macOS 上 100-200ms，Windows 上数倍于此）。如果使用顶级导入，任何到达此模块的调用者 chunk——包括通过 StructuredDiff.tsx → colorDiff.ts 的 test/preload.ts——都会在模块求值时支付该成本，并在进程的其余部分占用该堆内存。在 Windows CI 上，这会导致同一分片中的后续测试进入 GC 暂停区域，并导致 beforeEach/afterEach 钩子超时（officialRegistry.test.ts，PR #24150）。与 NAPI 包装器用于 dlopen 的相同惰性模式。
+// 惰性：将 highlight.js 的加载推迟到首次渲染。完整 bundle 在 require 时注册了 190 多种语言语法（约 50MB，macOS 上 100-200ms，Windows 上数倍于此）。如果使用顶级导入，任何到达此模块的调用者 chunk——包括通过 StructuredDiff.tsx → colorDiff.ts 的 test/preload.ts——都会在模块求值时支付该成本，并在进程的其余部分占用该堆内存。在 Windows CI 上，这会导致同一分片中的后续测试进入 GC 暂停区域，并导致测试钩子超时。与 NAPI 包装器用于 dlopen 的相同惰性模式。
 type HLJSApi = typeof hljsDefault
 let cachedHljs: HLJSApi | null = null
 /** 执行 hljs 对应的业务处理。 */

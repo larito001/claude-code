@@ -6,7 +6,6 @@ import { BLACK_CIRCLE } from '../../constants/figures.js';
 import { Box, NoSelect, Text } from '../../ink.js';
 import { API_ERROR_MESSAGE_PREFIX, API_TIMEOUT_ERROR_MESSAGE, CREDIT_BALANCE_TOO_LOW_ERROR_MESSAGE, CUSTOM_OFF_SWITCH_MESSAGE, INVALID_API_KEY_ERROR_MESSAGE, INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL, ORG_DISABLED_ERROR_MESSAGE_ENV_KEY, PROMPT_TOO_LONG_ERROR_MESSAGE, startsWithApiErrorPrefix } from '../../services/api/errors.js';
 import { isEmptyMessageText, NO_RESPONSE_REQUESTED } from '../../utils/messages.js';
-import { getUpgradeMessage } from '../../utils/model/contextWindowUpgradeCheck.js';
 import { getDefaultSonnetModel, renderModelName } from '../../utils/model/model.js';
 import { isMacOsKeychainLocked } from '../../utils/secureStorage/macOsKeychainStorage.js';
 import { CtrlOToExpand } from '../CtrlOToExpand.js';
@@ -63,17 +62,9 @@ export function AssistantTextMessage(t0) {
       }
     case PROMPT_TOO_LONG_ERROR_MESSAGE:
       {
-        let t2;
-        if ($[3] === Symbol.for("react.memo_cache_sentinel")) {
-          t2 = getUpgradeMessage("warning");
-          $[3] = t2;
-        } else {
-          t2 = $[3];
-        }
-        const upgradeHint = t2;
         let t3;
         if ($[4] === Symbol.for("react.memo_cache_sentinel")) {
-          t3 = <MessageResponse height={1}><Text color="error">Context limit reached · /compact or /clear to continue{upgradeHint ? ` · ${upgradeHint}` : ""}</Text></MessageResponse>;
+          t3 = <MessageResponse height={1}><Text color="error">Context limit reached · /compact or /clear to continue</Text></MessageResponse>;
           $[4] = t3;
         } else {
           t3 = $[4];

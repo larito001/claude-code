@@ -1,6 +1,5 @@
 import { feature } from 'src/utils/features.js'
 import type { UUID } from 'crypto'
-import uniqBy from 'lodash-es/uniqBy.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const sessionTranscriptModule = feature('SESSION_TRANSCRIPT')
@@ -11,14 +10,13 @@ import { APIUserAbortError } from '@anthropic-ai/sdk'
 import { getInvokedSkillsForAgent } from '../../bootstrap/state.js'
 import type { QuerySource } from '../../constants/querySource.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
-import type { Tool, ToolUseContext } from '../../Tool.js'
+import type { ToolUseContext } from '../../Tool.js'
 import type { LocalAgentTaskState } from '../../tasks/LocalAgentTask/LocalAgentTask.js'
 import { FileReadTool } from '../../tools/FileReadTool/FileReadTool.js'
 import {
   FILE_READ_TOOL_NAME,
   FILE_UNCHANGED_STUB,
 } from '../../tools/FileReadTool/prompt.js'
-import { ToolSearchTool } from '../../tools/ToolSearchTool/ToolSearchTool.js'
 import type { AgentId } from '../../types/ids.js'
 import type {
   AssistantMessage,
@@ -34,7 +32,6 @@ import {
   createAttachmentMessage,
   generateFileAttachment,
   getAgentListingDeltaAttachment,
-  getDeferredToolsDeltaAttachment,
   getMcpInstructionsDeltaAttachment,
 } from '../../utils/attachments.js'
 import { getMemoryPath } from '../../utils/config.js'
@@ -78,10 +75,6 @@ import {
   tokenCountFromLastAPIResponse,
   tokenCountWithEstimation,
 } from '../../utils/tokens.js'
-import {
-  extractDiscoveredToolNames,
-  isToolSearchEnabled,
-} from '../../utils/toolSearch.js'
 import { getFeatureValue } from '../featureConfig.js'
 import {
   getMaxOutputTokensForModel,
@@ -494,17 +487,7 @@ export async function compactConversation(
       postCompactFileAttachments.push(skillAttachment)
     }
 
-    // Compaction ate prior delta attachments. Re-announce from the current
-    // state so the model has tool/instruction context on the first
-    // post-compact turn. Empty message history → diff against nothing →
-    // announces the full set.
-    for (const att of getDeferredToolsDeltaAttachment(
-      context.options.tools,
-      context.options.mainLoopModel,
-      [],
-    )) {
-      postCompactFileAttachments.push(createAttachmentMessage(att))
-    }
+    // Re-announce dynamic agent and MCP instruction state after compaction.
     for (const att of getAgentListingDeltaAttachment(context, [])) {
       postCompactFileAttachments.push(createAttachmentMessage(att))
     }
@@ -533,15 +516,6 @@ export async function compactConversation(
       preCompactTokenCount ?? 0,
       messages.at(-1)?.uuid,
     )
-    // Carry loaded-tool state — the summary doesn't preserve tool_reference
-    // blocks, so the post-compact schema filter needs this to keep sending
-    // already-loaded deferred tool schemas to the API.
-    const preCompactDiscovered = extractDiscoveredToolNames(messages)
-    if (preCompactDiscovered.size > 0) {
-      boundaryMarker.compactMetadata.preCompactDiscoveredTools = [
-        ...preCompactDiscovered,
-      ].sort()
-    }
 
     const transcriptPath = getTranscriptPath()
     const summaryMessages: UserMessage[] = [
@@ -816,15 +790,7 @@ export async function partialCompactConversation(
       postCompactFileAttachments.push(skillAttachment)
     }
 
-    // Re-announce only what was in the summarized portion — messagesToKeep
-    // is scanned, so anything already announced there is skipped.
-    for (const att of getDeferredToolsDeltaAttachment(
-      context.options.tools,
-      context.options.mainLoopModel,
-      messagesToKeep,
-    )) {
-      postCompactFileAttachments.push(createAttachmentMessage(att))
-    }
+    // Re-announce dynamic agent and MCP instruction state not present in the kept tail.
     for (const att of getAgentListingDeltaAttachment(context, messagesToKeep)) {
       postCompactFileAttachments.push(createAttachmentMessage(att))
     }
@@ -865,14 +831,6 @@ export async function partialCompactConversation(
       userFeedback,
       messagesToSummarize.length,
     )
-    // allMessages not just messagesToSummarize — set union is idempotent,
-    // simpler than tracking which half each tool lived in.
-    const preCompactDiscovered = extractDiscoveredToolNames(allMessages)
-    if (preCompactDiscovered.size > 0) {
-      boundaryMarker.compactMetadata.preCompactDiscoveredTools = [
-        ...preCompactDiscovered,
-      ].sort()
-    }
 
     const transcriptPath = getTranscriptPath()
     const summaryMessages: UserMessage[] = [
@@ -1071,34 +1029,7 @@ async function streamCompactSummary({
       let response: AssistantMessage | undefined
       context.setResponseLength?.(() => 0)
 
-      // Check if tool search is enabled using the main loop's tools list.
-      // context.options.tools includes MCP tools merged via useMergedTools.
-      const useToolSearch = await isToolSearchEnabled(
-        context.options.mainLoopModel,
-        context.options.tools,
-        async () => appState.toolPermissionContext,
-        context.options.agentDefinitions.activeAgents,
-        'compact',
-      )
-
-      // When tool search is enabled, include ToolSearchTool and MCP tools. They get
-      // defer_loading: true and don't count against context - the API filters them out
-      // of system_prompt_tools before token counting (see api/token_count_api/counting.py:188
-      // and api/public_api/messages/handler.py:324).
-      // Filter MCP tools from context.options.tools (not appState.mcp.tools) so we
-      // get the permission-filtered set from useMergedTools — same source used for
-      // isToolSearchEnabled above and normalizeMessagesForAPI below.
-      // Deduplicate by name to avoid API errors when MCP tools share names with built-in tools.
-      const tools: Tool[] = useToolSearch
-        ? uniqBy(
-            [
-              FileReadTool,
-              ToolSearchTool,
-              ...context.options.tools.filter(t => t.isMcp),
-            ],
-            'name',
-          )
-        : [FileReadTool]
+      const tools = [FileReadTool]
 
       const streamingGen = queryModelWithStreaming({
         messages: normalizeMessagesForAPI(
@@ -1198,7 +1129,7 @@ async function streamCompactSummary({
  * Files already present as Read tool results in preservedMessages are skipped —
  * re-injecting identical content the model can already see in the preserved tail
  * is pure waste (up to 25K tok/compact). Mirrors the diff-against-preserved
- * pattern that getDeferredToolsDeltaAttachment uses at the same call sites.
+ * pattern used by the other post-compaction attachments.
  *
  * @param readFileState The current file state tracking recently read files
  * @param toolUseContext The tool use context for calling FileReadTool

@@ -28,8 +28,6 @@ const NULL_RENDERING_TYPES = [
   'plan_mode_reentry',
   'structured_output',
   'team_context',
-  'todo_reminder',
-  'deferred_tools_delta',
   'mcp_instructions_delta',
   'token_usage',
   'ultrathink_effort',

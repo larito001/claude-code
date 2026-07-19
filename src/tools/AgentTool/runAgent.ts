@@ -759,12 +759,6 @@ export async function* runAgent({
     unregisterPerfettoAgent(agentId)
     // 释放转录子目录映射
     clearAgentTranscriptSubdir(agentId)
-    // 释放此代理的待办事项条目。没有这个，每个调用TodoWrite的子代理都会在AppState.todos中永久留下一个键（即使所有项目完成，值也是[]但键保留）。鲸鱼会话生成数百个代理；每个孤立键都是一个会累积的小泄漏。
-    rootSetAppState(prev => {
-      if (!(agentId in prev.todos)) return prev
-      const { [agentId]: _removed, ...todos } = prev.todos
-      return { ...prev, todos }
-    })
     // 杀死此代理生成的所有后台bash任务。没有这个，一旦主会话最终退出，`run_in_background` shell循环（例如测试夹具fake-logs.sh）会作为PPID=1的僵尸进程存活，超过代理的寿命。
     killShellTasksForAgent(agentId, toolUseContext.getAppState, rootSetAppState)
   }

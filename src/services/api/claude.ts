@@ -23,17 +23,13 @@ import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { Stream } from '@anthropic-ai/sdk/streaming.mjs'
 import { randomUUID } from 'crypto'
 import { isFirstPartyAnthropicBaseUrl } from 'src/utils/anthropicUrl.js'
-import {
-  getAttributionHeader,
-  getCLISyspromptPrefix,
-} from '../../constants/system.js'
+import { getCLISyspromptPrefix } from '../../constants/system.js'
 import {
   getEmptyToolPermissionContext,
   type QueryChainTracking,
   type Tool,
   type ToolPermissionContext,
   type Tools,
-  toolMatchesName,
 } from '../../Tool.js'
 import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
 import type {
@@ -58,7 +54,6 @@ import {
 import { resolveAppliedEffort } from '../../utils/effort.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
-import { computeFingerprintFromMessages } from '../../utils/fingerprint.js'
 import { logError } from '../../utils/log.js'
 import {
   createAssistantAPIErrorMessage,
@@ -66,9 +61,6 @@ import {
   ensureToolResultPairing,
   normalizeContentFromAPI,
   normalizeMessagesForAPI,
-  stripAdvisorBlocks,
-  stripCallerFieldFromAssistantMessage,
-  stripToolReferenceBlocksFromUserMessage,
 } from '../../utils/messages.js'
 import {
   getDefaultOpusModel,
@@ -124,16 +116,8 @@ import type { Notification } from 'src/context/notifications.js'
 import { addToTotalSessionCost } from 'src/cost-tracker.js'
 import { getFeatureValue } from 'src/services/featureConfig.js'
 import type { AgentId } from 'src/types/ids.js'
-import {
-  ADVISOR_TOOL_INSTRUCTIONS,
-  getExperimentAdvisorModels,
-  isAdvisorEnabled,
-  isValidAdvisorModel,
-  modelSupportsAdvisor,
-} from 'src/utils/advisor.js'
 import { getAgentContext } from 'src/utils/agentContext.js'
 import {
-  getToolSearchBetaHeader,
   modelSupportsStructuredOutputs,
   shouldIncludeFirstPartyOnlyBetas,
   shouldUseGlobalCacheScope,
@@ -157,19 +141,7 @@ import {
   modelSupportsThinking,
   type ThinkingConfig,
 } from 'src/utils/thinking.js'
-import {
-  extractDiscoveredToolNames,
-  isDeferredToolsDeltaEnabled,
-  isToolSearchEnabled,
-} from 'src/utils/toolSearch.js'
 import { API_MAX_MEDIA_PER_REQUEST } from '../../constants/apiLimits.js'
-import { ADVISOR_BETA_HEADER } from '../../constants/betas.js'
-import {
-  formatDeferredToolLine,
-  isDeferredTool,
-  TOOL_SEARCH_TOOL_NAME,
-} from '../../tools/ToolSearchTool/prompt.js'
-import { count } from '../../utils/array.js'
 import { validateBoundedIntEnvVar } from '../../utils/envValidation.js'
 import { safeParseJSON } from '../../utils/json.js'
 import {
@@ -179,7 +151,6 @@ import {
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { startLLMRequestSpan } from '../../utils/telemetry/sessionTracing.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
-import { getInitializationStatus } from '../lsp/manager.js'
 import { withStreamingVCR, withVCR } from '../vcr.js'
 import { CLIENT_REQUEST_ID_HEADER, getAnthropicClient } from './client.js'
 import {
@@ -590,7 +561,6 @@ export type Options = {
   agentId?: AgentId // 仅对子代理设置
   outputFormat?: BetaJSONOutputFormat
   fastMode?: boolean
-  advisorModel?: string
   /** 添加或注册 add Notification 对应的数据或状态。 */
   addNotification?: (notif: Notification) => void
   // API端任务预算（output_config.task_budget）。与
@@ -673,19 +643,6 @@ export async function* queryModelWithStreaming({
       options,
     )
   })
-}
-
-/**
- * 确定是否应延迟LSP工具（工具出现时带有defer_loading: true）
- * 因为LSP初始化尚未完成。
- */
-function shouldDeferLspTool(tool: Tool): boolean {
-  if (!('isLsp' in tool) || !tool.isLsp) {
-    return false
-  }
-  const status = getInitializationStatus()
-  // 在挂起或未启动时延迟
-  return status.status === 'pending' || status.status === 'not-started'
 }
 
 /**
@@ -969,113 +926,10 @@ async function* queryModel(
     options.querySource === 'verification_agent'
   const betas = getMergedBetas(options.model, { isAgenticQuery })
 
-  // 当 advisor 启用时，始终发送 advisor beta 标头，以便非代理查询（compact、side_question、extract_memories 等）可以解析对话历史中已有的 advisor server_tool_use 块。
-  if (isAdvisorEnabled()) {
-    betas.push(ADVISOR_BETA_HEADER)
-  }
-
-  let advisorModel: string | undefined
-  if (isAgenticQuery && isAdvisorEnabled()) {
-    let advisorOption = options.advisorModel
-
-    const advisorExperiment = getExperimentAdvisorModels()
-    if (advisorExperiment !== undefined) {
-      if (
-        normalizeModelStringForAPI(advisorExperiment.baseModel) ===
-        normalizeModelStringForAPI(options.model)
-      ) {
-        // 如果基础模型匹配，则覆盖 advisor 模型。只有当用户无法自行配置时，才应使用实验模型。
-        advisorOption = advisorExperiment.advisorModel
-      }
-    }
-
-    if (advisorOption) {
-      const normalizedAdvisorModel = normalizeModelStringForAPI(
-        parseUserSpecifiedModel(advisorOption),
-      )
-      if (!modelSupportsAdvisor(options.model)) {
-        logForDebugging(
-          `[AdvisorTool] Skipping advisor - base model ${options.model} does not support advisor`,
-        )
-      } else if (!isValidAdvisorModel(normalizedAdvisorModel)) {
-        logForDebugging(
-          `[AdvisorTool] Skipping advisor - ${normalizedAdvisorModel} is not a valid advisor model`,
-        )
-      } else {
-        advisorModel = normalizedAdvisorModel
-        logForDebugging(
-          `[AdvisorTool] Server-side tool enabled with ${advisorModel} as the advisor model`,
-        )
-      }
-    }
-  }
-
-  // 检查工具搜索是否启用（检查模式、模型支持以及自动模式的阈值）。这是异步的，因为可能需要为 TstAuto 模式计算 MCP 工具描述大小。
-  let useToolSearch = await isToolSearchEnabled(
-    options.model,
-    tools,
-    options.getToolPermissionContext,
-    options.agents,
-    'query',
-  )
-
-  // 一次预计算——isDeferredTool 每次调用会执行两次本地特性配置查找。
-  const deferredToolNames = new Set<string>()
-  if (useToolSearch) {
-    for (const t of tools) {
-      if (isDeferredTool(t)) deferredToolNames.add(t.name)
-    }
-  }
-
-  // 即使工具搜索模式已启用，如果没有延迟工具且没有 MCP 服务器仍在连接中，则跳过。当服务器处于待连接状态时，保持 ToolSearch 可用，以便模型在它们连接后可以发现工具。
-  if (
-    useToolSearch &&
-    deferredToolNames.size === 0 &&
-    !options.hasPendingMcpServers
-  ) {
-    logForDebugging(
-      'Tool search disabled: no deferred tools available to search',
-    )
-    useToolSearch = false
-  }
-
-  // 如果此模型未启用工具搜索，则过滤掉 ToolSearchTool。ToolSearchTool 返回 tool_reference 块，不支持的工具搜索的模型无法处理这些块。
-  let filteredTools: Tools
-
-  if (useToolSearch) {
-    // 动态工具加载：仅包含通过消息历史中的 tool_reference 块发现延迟工具。这消除了预先声明所有延迟工具的需要，并移除了工具数量的限制。
-    const discoveredToolNames = extractDiscoveredToolNames(messages)
-
-    filteredTools = tools.filter(tool => {
-      // 始终包含非延迟工具
-      if (!deferredToolNames.has(tool.name)) return true
-      // 始终包含 ToolSearchTool（以便它可以发现更多工具）
-      if (toolMatchesName(tool, TOOL_SEARCH_TOOL_NAME)) return true
-      // 仅包含已发现的延迟工具
-      return discoveredToolNames.has(tool.name)
-    })
-  } else {
-    filteredTools = tools.filter(
-      t => !toolMatchesName(t, TOOL_SEARCH_TOOL_NAME),
-    )
-  }
-
-  // 如果启用，添加工具搜索 beta 标头——这是接受 defer_loading 所必需的。
-  const toolSearchHeader = useToolSearch ? getToolSearchBetaHeader() : null
-  if (toolSearchHeader) {
-    if (!betas.includes(toolSearchHeader)) {
-      betas.push(toolSearchHeader)
-    }
-  }
-
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
-  /** 执行 will Defer 对应的业务处理。 */
-  const willDefer = (t: Tool) =>
-    useToolSearch && (deferredToolNames.has(t.name) || shouldDeferLspTool(t))
-  // MCP 工具是每个用户的→动态工具部分→无法全局缓存。仅在 MCP 工具实际渲染时进行门控（不是 defer_loading）。
+  // MCP 工具是每个用户的动态工具部分，无法全局缓存。
   const needsToolBasedCacheMarker =
-    useGlobalCacheFeature &&
-    filteredTools.some(t => t.isMcp === true && !willDefer(t))
+    useGlobalCacheFeature && tools.some(t => t.isMcp === true)
 
   // 确保在启用全局缓存时存在 prompt_caching_scope beta 标头。
   if (
@@ -1092,67 +946,28 @@ async function* queryModel(
       : 'system_prompt'
     : 'none'
 
-  // 构建工具模式，当工具搜索启用时为 MCP 工具添加 defer_loading。注意：我们将完整的 `tools` 列表（而非 filteredTools）传递给 toolToAPISchema，以便 ToolSearchTool 的提示可以列出所有可用的 MCP 工具。过滤仅影响实际发送给 API 的工具，不影响模型在工具描述中看到的内容。
+  // 所有内置工具和 MCP 工具都直接发送给模型。
   const toolSchemas = await Promise.all(
-    filteredTools.map(tool =>
+    tools.map(tool =>
       toolToAPISchema(tool, {
         getToolPermissionContext: options.getToolPermissionContext,
         tools,
         agents: options.agents,
         allowedAgentTypes: options.allowedAgentTypes,
         model: options.model,
-        deferLoading: willDefer(tool),
       }),
     ),
   )
-
-  if (useToolSearch) {
-    /** 执行 included Deferred Tools 对应的业务处理。 */
-    const includedDeferredTools = count(filteredTools, t =>
-      deferredToolNames.has(t.name),
-    )
-    logForDebugging(
-      `Dynamic tool loading: ${includedDeferredTools}/${deferredToolNames.size} deferred tools included`,
-    )
-  }
 
   queryCheckpoint('query_tool_schema_build_end')
 
   // 在构建系统提示之前规范化消息（用于指纹识别所需）
   queryCheckpoint('query_message_normalization_start')
-  let messagesForAPI = normalizeMessagesForAPI(messages, filteredTools)
+  let messagesForAPI = normalizeMessagesForAPI(messages, tools)
   queryCheckpoint('query_message_normalization_end')
-
-  // 模型特定的后处理：如果所选模型不支持工具搜索，则剥离工具搜索相关字段。
-  //
-  // 为什么在 normalizeMessagesForAPI 之外还需要这个？
-  // - normalizeMessagesForAPI 使用 isToolSearchEnabledNoModelCheck()，因为它被从许多上下文调用，其中一些没有模型上下文。将其签名中添加模型将是一个大型重构。
-  // - 此后处理使用模型感知的 isToolSearchEnabled() 检查
-  // - 这处理对话中模型切换（例如 Sonnet → Haiku）的情况，其中来自前一模型的过时工具搜索字段会导致 400 错误
-  //
-  // 注意：对于 assistant 消息，normalizeMessagesForAPI 已经规范化了工具输入，因此 stripCallerFieldFromAssistantMessage 只需要删除 'caller' 字段（不需要重新规范化输入）。
-  if (!useToolSearch) {
-    messagesForAPI = messagesForAPI.map(msg => {
-      switch (msg.type) {
-        case 'user':
-          // 从 tool_result 内容中剥离 tool_reference 块
-          return stripToolReferenceBlocksFromUserMessage(msg)
-        case 'assistant':
-          // 从 tool_use 块中剥离 'caller' 字段
-          return stripCallerFieldFromAssistantMessage(msg)
-        default:
-          return msg
-      }
-    })
-  }
 
   // 修复在恢复 tool_use 时可能发生的 tool_use/tool_result 配对错乱，并剥离引用不存在 tool_use 的孤立 tool_result。
   messagesForAPI = ensureToolResultPairing(messagesForAPI)
-
-  // 剥离 advisor 块——如果没有 beta 标头，API 会拒绝它们。
-  if (!betas.includes(ADVISOR_BETA_HEADER)) {
-    messagesForAPI = stripAdvisorBlocks(messagesForAPI)
-  }
 
   // 在发起 API 调用前剥离多余的媒体项。API 会拒绝包含超过 100 个媒体项的请求，但返回令人困惑的错误。为了避免报错（在 Cowork/CCD 中很难从其恢复），我们静默地丢弃最旧的媒体项以保持在限制内。
   messagesForAPI = stripExcessMediaItems(
@@ -1160,37 +975,14 @@ async function* queryModel(
     API_MAX_MEDIA_PER_REQUEST,
   )
 
-  // 从第一条用户消息计算请求归属指纹。必须在注入合成消息（例如 deferred tool names）之前运行，以便指纹反映实际用户输入。
-  const fingerprint = computeFingerprintFromMessages(messagesForAPI)
-
-  // 当增量附件启用时，通过持久化的 deferred_tools_delta 附件宣告延迟工具，而不是通过此临时前置项（只要池发生变化就会破坏缓存）。
-  if (useToolSearch && !isDeferredToolsDeltaEnabled()) {
-    const deferredToolList = tools
-      .filter(t => deferredToolNames.has(t.name))
-      .map(formatDeferredToolLine)
-      .sort()
-      .join('\n')
-    if (deferredToolList) {
-      messagesForAPI = [
-        createUserMessage({
-          content: `<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>`,
-          isMeta: true,
-        }),
-        ...messagesForAPI,
-      ]
-    }
-  }
-
   // filter(Boolean) 通过将每个元素转换为布尔值来工作——空字符串变为 false 并被过滤掉。
   systemPrompt = asSystemPrompt(
     [
-      getAttributionHeader(fingerprint),
       getCLISyspromptPrefix({
         isNonInteractive: options.isNonInteractiveSession,
         hasAppendSystemPrompt: options.hasAppendSystemPrompt,
       }),
       ...systemPrompt,
-      ...(advisorModel ? [ADVISOR_TOOL_INSTRUCTIONS] : []),
     ].filter(Boolean),
   )
 
@@ -1207,14 +999,6 @@ async function* queryModel(
 
   // 构建用于详细跟踪的最小上下文（当 beta 跟踪启用时）注意：实际的新上下文 (new_context) 消息提取是在 sessionTracing.ts 中完成的，基于 messagesForAPI 数组中的 querySource（代理）使用基于哈希的跟踪。
   const extraToolSchemas = [...(options.extraToolSchemas ?? [])]
-  if (advisorModel) {
-    // 根据 API 约定，服务器工具必须位于 tools 数组中。在 toolSchemas（携带 cache_control 标记）之后追加，以便切换 /advisor 仅搅动小的后缀，不会搅动缓存的先前部分。
-    extraToolSchemas.push({
-      type: 'advisor_20260301',
-      name: 'advisor',
-      model: advisorModel,
-    } as unknown as BetaToolUnion)
-  }
   const allTools = [...toolSchemas, ...extraToolSchemas]
 
   const isFastMode =
@@ -1261,14 +1045,10 @@ async function* queryModel(
   const effort = resolveAppliedEffort(options.model, options.effortValue)
 
   if (feature('PROMPT_CACHE_BREAK_DETECTION')) {
-    // 从哈希中排除 defer_loading 工具——API 会将其从提示中剥离，因此它们永远不会影响实际的缓存键。包含它们会在发现工具或 MCP 服务器重新连接时产生误报的“工具模式已更改”的断点。
-    const toolsForCacheDetection = allTools.filter(
-      t => !('defer_loading' in t && t.defer_loading),
-    )
     // 捕获所有可能影响服务器端缓存键的因素。传递锁存的标头值（非实时状态），以便断点检测反映我们实际发送的内容，而不是用户切换的内容。
     recordPromptState({
       system,
-      toolSchemas: toolsForCacheDetection,
+      toolSchemas: allTools,
       querySource: options.querySource,
       model: options.model,
       agentId: options.agentId,
@@ -1670,9 +1450,6 @@ async function* queryModel(
                   ...part.content_block,
                   input: '' as unknown as { [key: string]: unknown },
                 }
-                if ((part.content_block.name as string) === 'advisor') {
-                  logForDebugging(`[AdvisorTool] Advisor tool called`)
-                }
                 break
               case 'text':
                 contentBlocks[part.index] = {
@@ -1693,11 +1470,6 @@ async function* queryModel(
               default:
                 // 更尴尬的是，SDK在工作时会修改文本块的内容。我们希望块是不可变的，这样我们可以自己累积状态。
                 contentBlocks[part.index] = { ...part.content_block }
-                if (
-                  (part.content_block.type as string) === 'advisor_tool_result'
-                ) {
-                  logForDebugging(`[AdvisorTool] Advisor tool result received`)
-                }
                 break
             }
             break
@@ -1731,7 +1503,6 @@ async function* queryModel(
               type: 'assistant',
               uuid: randomUUID(),
               timestamp: new Date().toISOString(),
-              ...(advisorModel && { advisorModel }),
             }
             newMessages.push(m)
             yield m
@@ -1944,9 +1715,6 @@ async function* queryModel(
         type: 'assistant',
         uuid: randomUUID(),
         timestamp: new Date().toISOString(),
-        ...(advisorModel && {
-          advisorModel,
-        }),
       }
       newMessages.push(m)
       fallbackMessage = m
@@ -2009,7 +1777,6 @@ async function* queryModel(
           type: 'assistant',
           uuid: randomUUID(),
           timestamp: new Date().toISOString(),
-          ...(advisorModel && { advisorModel }),
         }
         newMessages.push(m)
         fallbackMessage = m

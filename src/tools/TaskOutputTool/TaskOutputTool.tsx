@@ -135,9 +135,7 @@ async function waitForTaskCompletion(taskId: string, getAppState: () => {
 }
 export const TaskOutputTool: Tool<InputSchema, TaskOutputToolOutput> = buildTool({
   name: TASK_OUTPUT_TOOL_NAME,
-  searchHint: 'read output/logs from a background task',
   maxResultSizeChars: 100_000,
-  shouldDefer: true,
   userFacingName() {
     return 'Task Output';
   },

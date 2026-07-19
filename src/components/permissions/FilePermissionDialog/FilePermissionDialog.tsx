@@ -8,7 +8,6 @@ import { getFsImplementation, safeResolvePath } from '../../../utils/fsOperation
 import { expandPath } from '../../../utils/path.js';
 import { Select } from '../../CustomSelect/index.js';
 import { ShowInIDEPrompt } from '../../ShowInIDEPrompt.js';
-import { usePermissionPromptTracking } from '../hooks.js';
 import { PermissionDialog } from '../PermissionDialog.js';
 import type { ToolUseConfirm } from '../PermissionRequest.js';
 import type { WorkerBadgeProps } from '../WorkerBadge.js';
@@ -56,7 +55,6 @@ export function FilePermissionDialog<T extends ToolInput = ToolInput>({
   ideDiffSupport,
   workerBadge
 }: FilePermissionDialogProps<T>): React.ReactNode {
-  usePermissionPromptTracking(toolUseConfirm);
   const symlinkTarget = useMemo(() => {
     if (!path || operationType === 'read') {
       return null;

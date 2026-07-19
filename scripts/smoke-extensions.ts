@@ -314,7 +314,6 @@ try {
     setInProgressToolUseIDs: () => {},
     setResponseLength: () => {},
     updateFileHistoryState: () => {},
-    updateAttributionState: () => {},
   }
   const parentMessage = createAssistantMessage({
     content: [

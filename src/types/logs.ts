@@ -39,7 +39,6 @@ export type LogOption = {
   customTitle?: string // 可选的用户设置自定义标题
   tag?: string // 会话的可选标签（可在 /resume 中搜索）
   fileHistorySnapshots?: FileHistorySnapshot[] // 可选的文件历史快照
-  attributionSnapshots?: AttributionSnapshotMessage[] // 可选的归属快照
   gitBranch?: string // 会话结束时的 Git 分支
   projectPath?: string // 原始项目目录路径
   prNumber?: number // 链接到此会话的 GitHub PR 编号
@@ -169,27 +168,6 @@ export type FileHistorySnapshotMessage = {
   isSnapshotUpdate: boolean
 }
 
-/** 跟踪Claude角色贡献的按文件归属状态。 */
-export type FileAttributionState = {
-  contentHash: string // 文件内容的SHA-256哈希值
-  claudeContribution: number // 由Claude写入的字符数
-  mtime: number // 文件修改时间
-}
-
-/** 存储在会话记录中的归属快照消息。跟踪Claude的字符级贡献以用于提交归属。 */
-export type AttributionSnapshotMessage = {
-  type: 'attribution-snapshot'
-  messageId: UUID
-  surface: string // 客户端界面（cli, ide, web, api）
-  fileStates: Record<string, FileAttributionState>
-  promptCount?: number // 会话中的总提示次数
-  promptCountAtLastCommit?: number // 上次提交时的提示次数
-  permissionPromptCount?: number // 显示的权限提示总次数
-  permissionPromptCountAtLastCommit?: number // 上次提交时的权限提示次数
-  escapeCount?: number // ESC按键总次数（取消的权限提示）
-  escapeCountAtLastCommit?: number // 上次提交时的ESC按键次数
-}
-
 export type TranscriptMessage = SerializedMessage & {
   parentUuid: UUID | null
   logicalParentUuid?: UUID | null // 当parentUuid因会话中断而被设为null时，保留逻辑父级
@@ -221,7 +199,6 @@ export type Entry =
   | AgentSettingMessage
   | PRLinkMessage
   | FileHistorySnapshotMessage
-  | AttributionSnapshotMessage
   | QueueOperationMessage
   | SpeculationAcceptMessage
   | ModeEntry

@@ -5,7 +5,6 @@ import { Box, Text, useTheme } from '../../ink.js';
 import { env } from '../../utils/env.js';
 import { shouldShowAlwaysAllowOptions } from '../../utils/permissions/permissionsLoader.js';
 import { truncateToLines } from '../../utils/stringUtils.js';
-import { usePermissionPromptTracking } from './hooks.js';
 import { PermissionDialog } from './PermissionDialog.js';
 import { PermissionPrompt, type PermissionPromptOption } from './PermissionPrompt.js';
 import type { PermissionRequestProps } from './PermissionRequest.js';
@@ -34,7 +33,6 @@ export function FallbackPermissionRequest(t0) {
     t1 = $[3];
   }
   const userFacingName = t1;
-  usePermissionPromptTracking(toolUseConfirm);
   let t3;
   if ($[5] !== onDone || $[6] !== onReject || $[7] !== toolUseConfirm) {
     t3 = (value, feedback) => {

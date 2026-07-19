@@ -8,7 +8,6 @@ import { isAllowlistedCommand } from '../../../tools/PowerShellTool/readOnlyVali
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js';
 import { getCompoundCommandPrefixesStatic } from '../../../utils/powershell/staticPrefix.js';
 import { Select } from '../../CustomSelect/select.js';
-import { usePermissionPromptTracking } from '../hooks.js';
 import { PermissionDecisionDebugInfo } from '../PermissionDecisionDebugInfo.js';
 import { PermissionDialog } from '../PermissionDialog.js';
 import { PermissionExplainerContent, usePermissionExplainerUI } from '../PermissionExplanation.js';
@@ -89,7 +88,6 @@ export function PowerShellPermissionRequest(props: PermissionRequestProps): Reac
     hasUserEditedPrefix.current = true;
     setEditablePrefix(value);
   }, []);
-  usePermissionPromptTracking(toolUseConfirm);
   const options = useMemo(() => powershellToolUseOptions({
     suggestions: toolUseConfirm.permissionResult.behavior === 'ask' ? toolUseConfirm.permissionResult.suggestions : undefined,
     onRejectFeedbackChange: setRejectFeedback,

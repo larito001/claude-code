@@ -62,11 +62,6 @@ import type {
   McpSdkServerConfig,
   ScopedMcpServerConfig,
 } from 'src/services/mcp/types.js'
-import {
-  ChannelMessageNotificationSchema,
-  gateChannelServer,
-  wrapChannelMessage,
-} from 'src/services/mcp/channelNotification.js'
 import { validateUuid } from 'src/utils/uuid.js'
 import { fromArray } from 'src/utils/generators.js'
 import { ask } from 'src/QueryEngine.js'
@@ -172,14 +167,12 @@ import { parseSessionIdentifier } from 'src/utils/sessionUrl.js'
 import {  resetSessionFilePointer,
   doesMessageExistInSession,
   findUnresolvedToolUse,
-  recordAttributionSnapshot,
   saveAgentSetting,
   saveMode,
   saveAiGeneratedTitle,
   saveCustomTitle,
   restoreSessionMetadata,
 } from 'src/utils/sessionStorage.js'
-import { incrementPromptCount } from 'src/utils/commitAttribution.js'
 import {
   setupSdkMcpClients,
   connectToServer,
@@ -245,9 +238,6 @@ import {
   getFlagSettingsInline,
   setFlagSettingsInline,
   getMainThreadAgentType,
-  getAllowedChannels,
-  setAllowedChannels,
-  type ChannelEntry,
 } from 'src/bootstrap/state.js'
 import { runWithWorkload, WORKLOAD_CRON } from 'src/utils/workloadContext.js'
 import type { UUID } from 'crypto'
@@ -698,15 +688,6 @@ export async function runHeadless(
 
   // 权限提示显示时的回调
   const onPermissionPrompt = (details: RequiresActionDetails) => {
-    if (feature('COMMIT_ATTRIBUTION')) {
-      setAppState(prev => ({
-        ...prev,
-        attribution: {
-          ...prev.attribution,
-          permissionPromptCount: prev.attribution.permissionPromptCount + 1,
-        },
-      }))
-    }
     notifySessionStateChanged('requires_action', details)
   }
 
@@ -1435,10 +1416,8 @@ function runHeadlessStreaming(
               },
             }))
           : undefined
-      // 带允许列表预过滤的功能透传。IDE读取experimental['claude/channel']以决定是否显示"启用频道"提示——仅在channel_enable实际通过允许列表时才回显它。这不是安全边界（处理程序会重新运行完整门控）；只是避免死按钮。
       let capabilities: { experimental?: Record<string, unknown> } | undefined
       if (
-        (feature('MCP_CHANNELS')) &&
         connection.type === 'connected' &&
         connection.capabilities.experimental
       ) {
@@ -1619,11 +1598,6 @@ function runHeadlessStreaming(
             ...dynamicMcpState.clients,
           ]
           registerElicitationHandlers(allMcpClients)
-          // 在构建时通过 `--channels` 列入允许列表的服务器通道处理器（或通过 `enableChannel()` 在会话中启用）。每轮运行，如同 `registerElicitationHandlers` —— 每个客户端幂等（`setNotificationHandler` 替换而非堆叠），对未列入允许列表的服务器无操作（一次特性开关检查）。
-          for (const client of allMcpClients) {
-            reregisterChannelHandlerAfterReconnect(client)
-          }
-
           const allTools = buildAllTools(appState)
 
           for (const uuid of batchUuids) {
@@ -2186,9 +2160,8 @@ function runHeadlessStreaming(
           // 缺少此项时，messages.ts的metaProp求值为{}→导致提示
           // 在-p模式下cron触发于中间回合时泄漏到可见转录中。
           isMeta: true,
-          // 关联到计费头归属块中的cc_workload=，
-          // 以便API可以以较低QoS处理cron请求。drainCommandQueue
-          // 每次迭代读取此值并将其提升到bootstrap状态，供ask()调用使用。
+          // 标记 cron 请求；drainCommandQueue 每次迭代读取此值并将其
+          // 提升到当前工作负载状态，供 ask() 调用使用。
           workload: WORKLOAD_CRON,
         })
         void run()
@@ -2285,16 +2258,6 @@ function runHeadlessStreaming(
 
       if (message.type === 'control_request') {
         if (message.request.subtype === 'interrupt') {
-          // 当提交归属明确启用时，跟踪中断。
-          if (feature('COMMIT_ATTRIBUTION')) {
-            setAppState(prev => ({
-              ...prev,
-              attribution: {
-                ...prev.attribution,
-                escapeCount: prev.attribution.escapeCount + 1,
-              },
-            }))
-          }
           if (abortController) {
             abortController.abort()
           }
@@ -2632,7 +2595,6 @@ function runHeadlessStreaming(
             }
             if (result.client.type === 'connected') {
               registerElicitationHandlers([result.client])
-              reregisterChannelHandlerAfterReconnect(result.client)
               sendControlResponseSuccess(message)
             } else {
               const errorMessage =
@@ -2726,7 +2688,6 @@ function runHeadlessStreaming(
             }))
             if (result.client.type === 'connected') {
               registerElicitationHandlers([result.client])
-              reregisterChannelHandlerAfterReconnect(result.client)
               sendControlResponseSuccess(message)
             } else {
               const errorMessage =
@@ -2736,19 +2697,6 @@ function runHeadlessStreaming(
               sendControlResponseError(message, errorMessage)
             }
           }
-        } else if (message.request.subtype === 'channel_enable') {
-          const currentAppState = getAppState()
-          handleChannelEnable(
-            message.request_id,
-            message.request.serverName,
-            // 池展开匹配mcp_status——所有三个客户端来源。
-            [
-              ...currentAppState.mcp.clients,
-              ...sdkClients,
-              ...dynamicMcpState.clients,
-            ],
-            output,
-          )
         } else if (message.request.subtype === 'mcp_authenticate') {
           const { serverName } = message.request
           const currentAppState = getAppState()
@@ -3228,18 +3176,6 @@ function runHeadlessStreaming(
         uuid: message.uuid,
         priority: message.priority,
       })
-      // 增加用于归因追踪的提示计数并保存快照。快照保留 promptCount 以便在压缩后仍存在
-      if (feature('COMMIT_ATTRIBUTION')) {
-        setAppState(prev => ({
-          ...prev,
-          /** 执行 attribution 对应的业务处理。 */
-          attribution: incrementPromptCount(prev.attribution, snapshot => {
-            void recordAttributionSnapshot(snapshot).catch(error => {
-              logForDebugging(`Attribution: Failed to save snapshot: ${error}`)
-            })
-          }),
-        }))
-      }
       void run()
     }
     inputClosed = true
@@ -3741,124 +3677,6 @@ function handleSetPermissionMode(
     ),
     mode: request.mode,
   }
-}
-
-/**
- */
-function handleChannelEnable(
-  requestId: string,
-  serverName: string,
-  connectionPool: readonly MCPServerConnection[],
-  output: Stream<StdoutMessage>,
-): void {
-  /** 执行 respond Error 对应的业务处理。 */
-  const respondError = (error: string) =>
-    output.enqueue({
-      type: 'control_response',
-      response: { subtype: 'error', request_id: requestId, error },
-    })
-
-  if (!(feature('MCP_CHANNELS'))) {
-    return respondError('channels feature not available in this build')
-  }
-
-  // 只有“已连接”的客户端具有 .capabilities 和 .client 来注册处理程序。调用处的 pool 展开与 mcp_status 匹配。
-  const connection = connectionPool.find(
-    c => c.name === serverName && c.type === 'connected',
-  )
-  if (!connection || connection.type !== 'connected') {
-    return respondError(`server ${serverName} is not connected`)
-  }
-
-  const entry: ChannelEntry = {
-    kind: 'server',
-    name: serverName,
-  }
-  // 幂等性：重复启用时不重复追加。
-  const prior = getAllowedChannels()
-  /** 执行 already 对应的业务处理。 */
-  const already = prior.some(e => e.name === entry.name)
-  if (!already) setAllowedChannels([...prior, entry])
-
-  const gate = gateChannelServer(
-    serverName,
-    connection.capabilities,
-  )
-  if (gate.action === 'skip') {
-    // 回滚——仅移除我们追加的条目。
-    if (!already) setAllowedChannels(prior)
-    return respondError(gate.reason)
-  }
-
-  logMCPDebug(serverName, 'Channel notifications registered')
-
-  // 与 useManageMCPConnections 中交互式注册块相同的入队形状。drainCommandQueue 在回合之间处理它——通道消息以优先级 'next' 入队，并在到达后的下一回合被模型看到。
-  connection.client.setNotificationHandler(
-    ChannelMessageNotificationSchema(),
-    async notification => {
-      const { content, meta } = notification.params
-      logMCPDebug(
-        serverName,
-        `notifications/claude/channel: ${content.slice(0, 80)}`,
-      )
-      enqueue({
-        mode: 'prompt',
-        value: wrapChannelMessage(serverName, content, meta),
-        priority: 'next',
-        isMeta: true,
-        origin: { kind: 'channel', server: serverName },
-        skipSlashCommands: true,
-      })
-    },
-  )
-
-  output.enqueue({
-    type: 'control_response',
-    response: {
-      subtype: 'success',
-      request_id: requestId,
-      response: undefined,
-    },
-  })
-}
-
-/**
- * 在 mcp_reconnect / mcp_toggle 创建新客户端后重新注册通道通知处理程序。handleChannelEnable 将处理程序绑定到了旧客户端对象；allowedChannels 在重连后保留，但处理程序绑定不会。没有这个，重连后通道消息会静默丢失，而 IDE 仍认为通道是活跃的。镜像了 useManageMCPConnections 中交互式 CLI 的 onConnectionAttempt，该函数在每次新连接时重新门控。与 registerElicitationHandlers 在相同的调用点成对出现。如果服务器从未启用通道，则为无操作：gateChannelServer 内部调用 findChannelEntry，对于未列出的服务器返回 skip/session，因此重连非通道 MCP 服务器仅花费一次特性标志检查。
- */
-function reregisterChannelHandlerAfterReconnect(
-  connection: MCPServerConnection,
-): void {
-  if (!(feature('MCP_CHANNELS'))) return
-  if (connection.type !== 'connected') return
-
-  const gate = gateChannelServer(
-    connection.name,
-    connection.capabilities,
-  )
-  if (gate.action !== 'register') return
-
-  logMCPDebug(
-    connection.name,
-    'Channel notifications re-registered after reconnect',
-  )
-  connection.client.setNotificationHandler(
-    ChannelMessageNotificationSchema(),
-    async notification => {
-      const { content, meta } = notification.params
-      logMCPDebug(
-        connection.name,
-        `notifications/claude/channel: ${content.slice(0, 80)}`,
-      )
-      enqueue({
-        mode: 'prompt',
-        value: wrapChannelMessage(connection.name, content, meta),
-        priority: 'next',
-        isMeta: true,
-        origin: { kind: 'channel', server: connection.name },
-        skipSlashCommands: true,
-      })
-    },
-  )
 }
 
 /** 根据 outputFormat 以正确的格式发出错误消息。使用 stream-json 时，向 stdout 写入 JSON；否则向 stderr 写入纯文本。 */

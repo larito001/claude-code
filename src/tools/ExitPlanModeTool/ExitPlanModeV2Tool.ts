@@ -2,7 +2,6 @@ import { feature } from 'src/utils/features.js'
 import { writeFile } from 'fs/promises'
 import { z } from 'zod/v4'
 import {
-  getAllowedChannels,
   hasExitedPlanModeInSession,
   setHasExitedPlanMode,
   setNeedsAutoModeExitAttachment,
@@ -143,7 +142,6 @@ export type Output = z.infer<OutputSchema>
 
 export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
   name: EXIT_PLAN_MODE_V2_TOOL_NAME,
-  searchHint: 'present plan for approval and start coding (plan mode only)',
   maxResultSizeChars: 100_000,
   async description() {
     return 'Prompts the user to exit plan mode and start coding'
@@ -160,17 +158,7 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
   userFacingName() {
     return ''
   },
-  shouldDefer: true,
   isEnabled() {
-    // When --channels is active the user is likely on Telegram/Discord, not
-    // watching the TUI. The plan-approval dialog would hang. Paired with the
-    // same gate on EnterPlanMode so plan mode isn't a trap.
-    if (
-      (feature('MCP_CHANNELS')) &&
-      getAllowedChannels().length > 0
-    ) {
-      return false
-    }
     return true
   },
   isConcurrencySafe() {

@@ -135,10 +135,6 @@ export function buildSettingSourcesProperties(): Property[] {
         return null; // Skip - no policy settings exist
       }
       switch (origin) {
-        case 'plist':
-          return 'Enterprise managed settings (plist)';
-        case 'hklm':
-          return 'Enterprise managed settings (HKLM)';
         case 'file':
           {
             const {
@@ -153,8 +149,6 @@ export function buildSettingSourcesProperties(): Property[] {
             }
             return 'Enterprise managed settings (file)';
           }
-        case 'hkcu':
-          return 'Enterprise managed settings (HKCU)';
       }
     }
     return getSettingSourceDisplayNameCapitalized(source);

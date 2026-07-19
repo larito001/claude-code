@@ -17,17 +17,14 @@ import { count, uniq } from './array.js'
 import { getFsImplementation } from './fsOperations.js'
 import { readdir, stat } from 'fs/promises'
 import type { IDESelection } from '../hooks/useIdeSelection.js'
-import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
 import { TASK_UPDATE_TOOL_NAME } from '../tools/TaskUpdateTool/constants.js'
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
 import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js'
-import type { TodoList } from './todo/types.js'
 import {
   type Task,
   listTasks,
   getTaskListId,
-  isTodoV2Enabled,
 } from './tasks.js'
 import { getPlanFilePath, getPlan } from './plans.js'
 import { getConnectedIdeName } from './ide.js'
@@ -122,7 +119,6 @@ import { drainPendingMessages } from '../tasks/LocalAgentTask/LocalAgentTask.js'
 import type { TaskType, TaskStatus } from '../Task.js'
 import {
   getOriginalCwd,
-  getSessionId,
   getSdkBetas,
   getTotalCostUSD,
   getTotalOutputTokens,
@@ -138,13 +134,6 @@ import {
   setLastEmittedDate,
 } from '../bootstrap/state.js'
 import type { QuerySource } from '../constants/querySource.js'
-import {
-  getDeferredToolsDelta,
-  isDeferredToolsDeltaEnabled,
-  isToolSearchEnabledOptimistic,
-  isToolSearchToolAvailable,
-  modelSupportsToolReference,
-} from './toolSearch.js'
 import {
   getMcpInstructionsDelta,
   isMcpInstructionsDeltaEnabled,
@@ -214,7 +203,7 @@ import { isInProcessTeammate } from './teammateContext.js'
 import { removeTeammateFromTeamFile } from './swarm/teamHelpers.js'
 import { unassignTeammateTasks } from './tasks.js'
 
-export const TODO_REMINDER_CONFIG = {
+export const TASK_REMINDER_CONFIG = {
   TURNS_SINCE_WRITE: 10,
   TURNS_BETWEEN_REMINDERS: 10,
 } as const
@@ -439,11 +428,6 @@ export type Attachment =
       filename: string
     }
   | {
-      type: 'todo_reminder'
-      content: TodoList
-      itemCount: number
-    }
-  | {
       type: 'task_reminder'
       content: Task[]
       itemCount: number
@@ -630,12 +614,6 @@ export type Attachment =
       level: 'high'
     }
   | {
-      type: 'deferred_tools_delta'
-      addedNames: string[]
-      addedLines: string[]
-      removedNames: string[]
-    }
-  | {
       type: 'agent_listing_delta'
       addedTypes: string[]
       addedLines: string[]
@@ -747,15 +725,6 @@ export async function getAttachments(
     maybe('ultrathink_effort', () =>
       Promise.resolve(getUltrathinkEffortAttachment(input)),
     ),
-    maybe('deferred_tools_delta', () =>
-      Promise.resolve(
-        getDeferredToolsDeltaAttachment(
-          toolUseContext.options.tools,
-          toolUseContext.options.mainLoopModel,
-          messages,
-        ),
-      ),
-    ),
     maybe('agent_listing_delta', () =>
       Promise.resolve(getAgentListingDeltaAttachment(toolUseContext, messages)),
     ),
@@ -786,10 +755,8 @@ export async function getAttachments(
           ),
         ]
       : []),
-    maybe('todo_reminders', () =>
-      isTodoV2Enabled()
-        ? getTaskReminderAttachments(messages, toolUseContext)
-        : getTodoReminderAttachments(messages, toolUseContext),
+    maybe('task_reminders', () =>
+      getTaskReminderAttachments(messages, toolUseContext),
     ),
     ...(isAgentSwarmsEnabled()
       ? [
@@ -911,7 +878,7 @@ export async function getQueuedCommandAttachments(
   // Include both 'prompt' and 'task-notification' commands as attachments.
   // During proactive agentic loops, task-notification commands would otherwise
   // stay in the queue permanently (useQueueProcessor can't run while a query
-  // is active), causing hasPendingNotifications() to return true and Sleep to
+  // is active), causing hasCommandsInQueue() to return true and Sleep to
   // wake immediately with 0ms duration in an infinite loop.
   const filtered = queuedCommands.filter(_ =>
     INLINE_NOTIFICATION_MODES.has(_.mode),
@@ -1297,27 +1264,6 @@ function getUltrathinkEffortAttachment(input: string | null): Attachment[] {
     return []
   }
   return [{ type: 'ultrathink_effort', level: 'high' }]
-}
-
-// Exported for compact.ts — the gate must be identical at both call sites.
-export function getDeferredToolsDeltaAttachment(
-  tools: Tools,
-  model: string,
-  messages: Message[] | undefined,
-): Attachment[] {
-  if (!isDeferredToolsDeltaEnabled()) return []
-  // These three checks mirror the sync parts of isToolSearchEnabled —
-  // the attachment text says "available via ToolSearch", so ToolSearch
-  // has to actually be in the request. The async auto-threshold check
-  // is not replicated. In tst-auto below-threshold the attachment can fire while ToolSearch
-  // is filtered out, but that's a narrow case and the tools announced
-  // are directly callable anyway.
-  if (!isToolSearchEnabledOptimistic()) return []
-  if (!modelSupportsToolReference(model)) return []
-  if (!isToolSearchToolAvailable(tools)) return []
-  const delta = getDeferredToolsDelta(tools, messages ?? [])
-  if (!delta) return []
-  return [{ type: 'deferred_tools_delta', ...delta }]
 }
 
 /**
@@ -2568,12 +2514,7 @@ export function extractMcpResourceMentions(content: string): string[] {
 }
 
 export function extractAgentMentions(content: string): string[] {
-  // Extract agent mentions in two formats:
-  // 1. @agent-<agent-type> (legacy/manual typing)
-  //    Example: "@agent-code-elegance-refiner" → "agent-code-elegance-refiner"
-  // 2. @"<agent-type> (agent)" (from autocomplete selection)
-  //    Example: '@"code-reviewer (agent)"' → "code-reviewer"
-  // Supports colons, dots, and at-signs for plugin-scoped agents like "@agent-asana:project-status-updater"
+  // Extract autocomplete agent mentions such as @"code-reviewer (agent)".
   const results: string[] = []
 
   // Match quoted format: @"<type> (agent)"
@@ -2583,13 +2524,6 @@ export function extractAgentMentions(content: string): string[] {
     if (match[2]) {
       results.push(match[2])
     }
-  }
-
-  // Match unquoted format: @agent-<type>
-  const unquotedAgentRegex = /(^|\s)@(agent-[\w:.@-]+)/g
-  const unquotedMatches = content.match(unquotedAgentRegex) || []
-  for (const m of unquotedMatches) {
-    results.push(m.slice(m.indexOf('@') + 1))
   }
 
   return uniq(results)
@@ -2954,101 +2888,6 @@ export function createAttachmentMessage(
   }
 }
 
-function getTodoReminderTurnCounts(messages: Message[]): {
-  turnsSinceLastTodoWrite: number
-  turnsSinceLastReminder: number
-} {
-  let lastTodoWriteIndex = -1
-  let lastReminderIndex = -1
-  let assistantTurnsSinceWrite = 0
-  let assistantTurnsSinceReminder = 0
-
-  // Iterate backwards to find most recent events
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i]
-
-    if (message?.type === 'assistant') {
-      if (isThinkingMessage(message)) {
-        // Skip thinking messages
-        continue
-      }
-
-      // Check for TodoWrite usage BEFORE incrementing counter
-      // (we don't want to count the TodoWrite message itself as "1 turn since write")
-      if (
-        lastTodoWriteIndex === -1 &&
-        'message' in message &&
-        Array.isArray(message.message?.content) &&
-        message.message.content.some(
-          block => block.type === 'tool_use' && block.name === 'TodoWrite',
-        )
-      ) {
-        lastTodoWriteIndex = i
-      }
-
-      // Count assistant turns before finding events
-      if (lastTodoWriteIndex === -1) assistantTurnsSinceWrite++
-      if (lastReminderIndex === -1) assistantTurnsSinceReminder++
-    } else if (
-      lastReminderIndex === -1 &&
-      message?.type === 'attachment' &&
-      message.attachment.type === 'todo_reminder'
-    ) {
-      lastReminderIndex = i
-    }
-
-    if (lastTodoWriteIndex !== -1 && lastReminderIndex !== -1) {
-      break
-    }
-  }
-
-  return {
-    turnsSinceLastTodoWrite: assistantTurnsSinceWrite,
-    turnsSinceLastReminder: assistantTurnsSinceReminder,
-  }
-}
-
-async function getTodoReminderAttachments(
-  messages: Message[] | undefined,
-  toolUseContext: ToolUseContext,
-): Promise<Attachment[]> {
-  // Skip if TodoWrite tool is not available
-  if (
-    !toolUseContext.options.tools.some(t =>
-      toolMatchesName(t, TODO_WRITE_TOOL_NAME),
-    )
-  ) {
-    return []
-  }
-
-  // Skip if no messages provided
-  if (!messages || messages.length === 0) {
-    return []
-  }
-
-  const { turnsSinceLastTodoWrite, turnsSinceLastReminder } =
-    getTodoReminderTurnCounts(messages)
-
-  // Check if we should show a reminder
-  if (
-    turnsSinceLastTodoWrite >= TODO_REMINDER_CONFIG.TURNS_SINCE_WRITE &&
-    turnsSinceLastReminder >= TODO_REMINDER_CONFIG.TURNS_BETWEEN_REMINDERS
-  ) {
-    const todoKey = toolUseContext.agentId ?? getSessionId()
-    const appState = toolUseContext.getAppState()
-    const todos = appState.todos[todoKey] ?? []
-    return [
-      {
-        type: 'todo_reminder',
-        content: todos,
-        itemCount: todos.length,
-      },
-    ]
-  }
-
-  return []
-}
-
 function getTaskReminderTurnCounts(messages: Message[]): {
   turnsSinceLastTaskManagement: number
   turnsSinceLastReminder: number
@@ -3109,10 +2948,6 @@ async function getTaskReminderAttachments(
   messages: Message[] | undefined,
   toolUseContext: ToolUseContext,
 ): Promise<Attachment[]> {
-  if (!isTodoV2Enabled()) {
-    return []
-  }
-
   // Skip if TaskUpdate tool is not available
   if (
     !toolUseContext.options.tools.some(t =>
@@ -3132,8 +2967,8 @@ async function getTaskReminderAttachments(
 
   // Check if we should show a reminder
   if (
-    turnsSinceLastTaskManagement >= TODO_REMINDER_CONFIG.TURNS_SINCE_WRITE &&
-    turnsSinceLastReminder >= TODO_REMINDER_CONFIG.TURNS_BETWEEN_REMINDERS
+    turnsSinceLastTaskManagement >= TASK_REMINDER_CONFIG.TURNS_SINCE_WRITE &&
+    turnsSinceLastReminder >= TASK_REMINDER_CONFIG.TURNS_BETWEEN_REMINDERS
   ) {
     const tasks = await listTasks(getTaskListId())
     return [

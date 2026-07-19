@@ -15,8 +15,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "src/*": ["./src/*"],
-      "bun:ffi": ["./src/stubs/bun-ffi.d.ts"]
+      "src/*": ["./src/*"]
     },
     "types": ["bun-types"]
   },

@@ -74,10 +74,8 @@ export function useScheduledTasks({
         mode: 'prompt',
         priority: 'later',
         isMeta: true,
-        // Threaded through to cc_workload= in the billing-header
-        // attribution block so the API can serve cron-initiated requests
-        // at lower QoS when capacity is tight. No human is actively
-        // waiting on this response.
+        // Mark cron-initiated requests so providers and diagnostics can
+        // distinguish them from interactive work.
         workload: WORKLOAD_CRON,
       })
 

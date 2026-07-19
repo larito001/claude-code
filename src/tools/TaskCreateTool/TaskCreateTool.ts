@@ -9,7 +9,6 @@ import {
   createTask,
   deleteTask,
   getTaskListId,
-  isTodoV2Enabled,
 } from '../../utils/tasks.js'
 import { getAgentName, getTeamName } from '../../utils/teammate.js'
 import { TASK_CREATE_TOOL_NAME } from './constants.js'
@@ -47,7 +46,6 @@ export type Output = z.infer<OutputSchema>
 
 export const TaskCreateTool = buildTool({
   name: TASK_CREATE_TOOL_NAME,
-  searchHint: 'create a task in the task list',
   maxResultSizeChars: 100_000,
   async description() {
     return DESCRIPTION
@@ -64,9 +62,8 @@ export const TaskCreateTool = buildTool({
   userFacingName() {
     return 'TaskCreate'
   },
-  shouldDefer: true,
   isEnabled() {
-    return isTodoV2Enabled()
+    return true
   },
   isConcurrencySafe() {
     return true

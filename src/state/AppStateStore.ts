@@ -1,7 +1,5 @@
 import type { Notification } from 'src/context/notifications.js'
-import type { TodoList } from 'src/utils/todo/types.js'
 import type { Command } from '../commands.js'
-import type { ChannelPermissionCallbacks } from '../services/mcp/channelPermissions.js'
 import type { ElicitationRequestEvent } from '../services/mcp/elicitationHandler.js'
 import type {
   MCPServerConnection,
@@ -21,10 +19,6 @@ import type { AgentId } from '../types/ids.js'
 import type { Message, UserMessage } from '../types/message.js'
 import type { LoadedPlugin, PluginError } from '../types/plugin.js'
 import type { DeepImmutable } from '../types/utils.js'
-import {
-  type AttributionState,
-  createEmptyAttributionState,
-} from '../utils/commitAttribution.js'
 import type { EffortValue } from '../utils/effort.js'
 import type { FileHistoryState } from '../utils/fileHistory.js'
 import type { REPLHookContext } from '../utils/hooks/postSamplingHooks.js'
@@ -135,8 +129,6 @@ export type AppState = DeepImmutable<{
   }
   agentDefinitions: AgentDefinitionsResult
   fileHistory: FileHistoryState
-  attribution: AttributionState
-  todos: { [agentId: string]: TodoList }
   notifications: {
     current: Notification | null
     queue: Notification[]
@@ -256,14 +248,8 @@ export type AppState = DeepImmutable<{
   activeOverlays: ReadonlySet<string>
   // Fast mode
   fastMode?: boolean
-  // Advisor model for server-side advisor tool (undefined = disabled).
-  advisorModel?: string
   // Effort value
   effortValue?: EffortValue
-  // Channel permission callbacks — permission prompts over Telegram/iMessage/etc.
-  // Races against local UI + bridge + hooks + classifier via claim() in
-  // interactiveHandler.ts. Constructed once in useManageMCPConnections.
-  channelPermissionCallbacks?: ChannelPermissionCallbacks
 }
 
 export type AppStateStore = Store<AppState>
@@ -305,7 +291,6 @@ export function getDefaultAppState(): AppState {
       trackedFiles: new Set(),
       snapshotSequence: 0,
     },
-    attribution: createEmptyAttributionState(),
     mcp: {
       clients: [],
       tools: [],
@@ -319,7 +304,6 @@ export function getDefaultAppState(): AppState {
       commands: [],
       errors: [],
     },
-    todos: {},
     notifications: {
       current: null,
       queue: [],
