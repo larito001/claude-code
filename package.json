@@ -22,6 +22,7 @@
     "build:sdk": "bun build src/entrypoints/agentSdkTypes.ts --outfile=dist/sdk/index.js --target=bun --format=esm --external=@anthropic-ai/claude-agent-sdk --sourcemap=inline && bun x tsc -p tsconfig.sdk.json",
     "typecheck": "bun x tsc -p tsconfig.framework.json --noEmit",
     "typecheck:legacy": "bun x tsc --noEmit",
+    "audit:comments": "bun run scripts/audit-src-comments.ts",
     "smoke": "bun run scripts/smoke.ts",
     "smoke:api": "bun --env-file=.env run scripts/smoke-api.ts",
     "smoke:core": "bun run scripts/smoke-core.ts",
