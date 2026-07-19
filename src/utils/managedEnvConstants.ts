@@ -1,40 +1,34 @@
 /**
- * Environment variables that control inference routing: which provider to use,
- * which endpoint to hit, and which model IDs to send.
+ * 控制推理路由的环境变量：使用哪个提供商，访问哪个端点，以及发送哪些模型ID。
  *
- * When CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST is truthy in the spawn env, these
- * are stripped from settings-sourced env so the host's routing config isn't
- * overridden by a user's ~/.claude/settings.json — e.g. a Bedrock setup for
- * terminal CLI that would break a host that only supports first-party auth.
+ * 当 CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST 在生成环境中为真时，这些变量会从设置来源的环境中剥离，以便主机的路由配置不会被用户的 ~/.claude/settings.json 覆盖——例如，终端 CLI 的 Bedrock 设置可能会破坏仅支持第一方认证的主机。
  *
- * @[MODEL LAUNCH]: New models usually don't need changes here —
- * VERTEX_REGION_CLAUDE_* is prefix-matched. New providers or new routing
- * config vars (endpoint, project, region, auth) do.
+ * @[MODEL LAUNCH]: 新模型通常不需要在这里更改——VERTEX_REGION_CLAUDE_* 是前缀匹配的。新的提供商或新的路由配置变量（端点、项目、区域、认证）则需要。
  */
 const PROVIDER_MANAGED_ENV_VARS = new Set([
-  // The flag itself — settings can't unset it once the host set it
+  // 标志本身——一旦主机设置，设置无法取消它
   'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
-  // Provider selection
+  // 提供商选择
   'CLAUDE_CODE_USE_BEDROCK',
   'CLAUDE_CODE_USE_VERTEX',
   'CLAUDE_CODE_USE_FOUNDRY',
-  // Endpoint config (base URLs, project/resource identifiers)
+  // 端点配置（基本 URL，项目/资源标识符）
   'ANTHROPIC_BASE_URL',
   'ANTHROPIC_BEDROCK_BASE_URL',
   'ANTHROPIC_VERTEX_BASE_URL',
   'ANTHROPIC_FOUNDRY_BASE_URL',
   'ANTHROPIC_FOUNDRY_RESOURCE',
   'ANTHROPIC_VERTEX_PROJECT_ID',
-  // Region routing (per-model VERTEX_REGION_CLAUDE_* handled by prefix below)
+  // 区域路由（每个模型的 VERTEX_REGION_CLAUDE_* 由下面的前缀处理）
   'CLOUD_ML_REGION',
-  // Auth
+  // 认证
   'ANTHROPIC_API_KEY',
   'AWS_BEARER_TOKEN_BEDROCK',
   'ANTHROPIC_FOUNDRY_API_KEY',
   'CLAUDE_CODE_SKIP_BEDROCK_AUTH',
   'CLAUDE_CODE_SKIP_VERTEX_AUTH',
   'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
-  // Model defaults — often set to provider-specific ID formats
+  // 模型默认值——通常设置为特定于提供商的 ID 格式
   'ANTHROPIC_MODEL',
   'ANTHROPIC_DEFAULT_HAIKU_MODEL',
   'ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION',
@@ -54,11 +48,11 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
 ])
 
 const PROVIDER_MANAGED_ENV_PREFIXES = [
-  // Per-model Vertex region overrides — scales with model releases, so
-  // prefix-matched to avoid drift on each launch.
+  // 每个模型的 Vertex 区域覆盖——随模型发布而扩展，因此前缀匹配以避免每次启动时漂移。
   'VERTEX_REGION_CLAUDE_',
 ]
 
+/** 判断是否满足 is Provider Managed Env Var 对应的数据或状态。 */
 export function isProviderManagedEnvVar(key: string): boolean {
   const upper = key.toUpperCase()
   return (
@@ -67,9 +61,7 @@ export function isProviderManagedEnvVar(key: string): boolean {
   )
 }
 
-/**
- * Dangerous shell settings that can execute arbitrary shell code
- */
+/** 危险的 shell 设置，可以执行任意 shell 代码 */
 export const DANGEROUS_SHELL_SETTINGS = [
   'apiKeyHelper',
   'awsAuthRefresh',
@@ -80,25 +72,22 @@ export const DANGEROUS_SHELL_SETTINGS = [
 ] as const
 
 /**
- * Safe environment variables that can be applied before trust dialog.
- * These are Claude Code specific settings that don't pose security risks.
+ * 可以信任对话之前应用的安全环境变量。这些是 Claude Code 特定的设置，不构成安全风险。
  *
- * IMPORTANT: This is the source of truth for which env vars are safe.
- * Any env var NOT in this list is considered dangerous and will trigger
- * a security dialog when set via remote managed settings.
+ * 重要：这是安全环境变量的唯一真实来源。不在这个列表中的任何环境变量都被认为是危险的，当通过远程管理设置设置时会触发安全对话框。
  *
- * Dangerous env vars (NOT in this list):
+ * 危险环境变量（不在本列表中）：
  *
- * === REDIRECT TO ATTACKER-CONTROLLED SERVER ===
+ * === 重定向到攻击者控制的服务器 ===
  * - ANTHROPIC_BASE_URL, ANTHROPIC_BEDROCK_BASE_URL, ANTHROPIC_FOUNDRY_BASE_URL, ANTHROPIC_VERTEX_BASE_URL
  * - HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
  * - OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
  *
- * === TRUST ATTACKER-CONTROLLED SERVER ===
+ * === 信任攻击者控制的服务器 ===
  * - NODE_TLS_REJECT_UNAUTHORIZED
  * - NODE_EXTRA_CA_CERTS
  *
- * === SWITCH TO ATTACKER-CONTROLLED PROJECT ===
+ * === 切换到攻击者控制的项目 ===
  * - ANTHROPIC_FOUNDRY_RESOURCE
  * - ANTHROPIC_API_KEY
  * - AWS_BEARER_TOKEN_BEDROCK

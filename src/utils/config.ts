@@ -58,7 +58,6 @@ export type ReleaseChannel = 'stable' | 'latest'
 
 export type ProjectConfig = {
   allowedTools: string[]
-  mcpContextUris: string[]
   mcpServers?: Record<string, McpServerConfig>
   lastAPIDuration?: number
   lastAPIDurationWithoutRetries?: number
@@ -103,8 +102,6 @@ export type ProjectConfig = {
   enableAllProjectMcpServers?: boolean
   // 禁用的 MCP 服务器列表（所有范围）- 用于启用/禁用切换
   disabledMcpServers?: string[]
-  // 默认禁用的内置 MCP 服务器的选择加入列表
-  enabledMcpServers?: string[]
   // 工作树会话管理
   activeWorktreeSession?: {
     originalCwd: string
@@ -118,7 +115,6 @@ export type ProjectConfig = {
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   allowedTools: [],
-  mcpContextUris: [],
   mcpServers: {},
   enabledMcpjsonServers: [],
   disabledMcpjsonServers: [],
@@ -137,7 +133,7 @@ import type { EDITOR_MODES, NOTIFICATION_CHANNELS } from './configConstants.js'
 
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number]
 
-// TODO：保留“emacs”以实现向后兼容性 - 在几个版本后删除
+// 旧配置可能仍包含“emacs”；继续接受该值以保证跨版本迁移。
 export type EditorMode = 'emacs' | (typeof EDITOR_MODES)[number]
 
 export type DiffTool = 'terminal' | 'auto'
@@ -151,22 +147,15 @@ export type GlobalConfig = {
   apiKeyHelper?: string
   projects?: Record<string, ProjectConfig>
   numStartups: number
-  // 上次显示 Doctor 时的会话计数
-  doctorShownAtSession?: number
   theme: ThemeSetting
   hasCompletedOnboarding?: boolean
   // 跟踪重置入门的最后一个版本，与 MIN_VERSION_REQUIRING_ONBOARDING_RESET 一起使用
   lastOnboardingVersion?: string
   mcpServers?: Record<string, McpServerConfig>
   preferredNotifChannel: NotificationChannel
-  /**
-   * @deprecated。请改用通知挂钩 (docs/hooks.md)。
-   */
-  customNotifyCommand?: string
   verbose: boolean
   hasAcknowledgedCostThreshold?: boolean
-  hasResetAutoModeOptInForDefaultOffer?: boolean // One-time migration guard for the auto-mode prompt.
-  iterm2KeyBindingInstalled?: boolean // 遗留 - 保留向后兼容性
+  hasResetAutoModeOptInForDefaultOffer?: boolean // 自动模式提示的一次性迁移保护。
   editorMode?: EditorMode
   bypassPermissionsModeAccepted?: boolean
   hasUsedBackslashReturn?: boolean
@@ -206,46 +195,11 @@ export type GlobalConfig = {
   }
 
 
-  // 反馈调查跟踪
-  feedbackSurveyState?: {
-    lastShownTime?: number
-  }
-
-  // 成绩单共享提示跟踪（“不要再问”）
-  transcriptShareDismissed?: boolean
-
   // 内存使用情况跟踪
   memoryUsageCount: number // 用户添加到内存的次数
 
-  // Sonnet-1M 配置
-  hasShownS1MWelcomeV2?: Record<string, boolean> // 是否已按组织显示 Sonnet-1M v2 欢迎消息
-  // 每个组织的 Sonnet-1M 订户访问缓存 - 密钥是组织 ID
-  // hasAccess 的意思是“hasAccessAsDefault”，但保留旧名称以供向后使用
-  // compatibility.
-  s1mAccessCache?: Record<
-    string,
-    { hasAccess: boolean; hasAccessNotAsDefault?: boolean; timestamp: number }
-  >
-  // 每个组织的 Sonnet-1M PayG 访问缓存 - 密钥是组织 ID
-  // hasAccess 的意思是“hasAccessAsDefault”，但保留旧名称以供向后使用
-  // compatibility.
-  s1mNonSubscriberAccessCache?: Record<
-    string,
-    { hasAccess: boolean; hasAccessNotAsDefault?: boolean; timestamp: number }
-  >
-
-  // 每个帐户的 Grove 配置缓存 - 密钥是帐户 UUID
-
-  hasVisitedExtraUsage?: boolean // 用户是否访问过 /extra-usage — 隐藏信用追加销售
-
   // Opus 1M 合并通知跟踪
   opus1mMergeNoticeSeenCount?: number // opus-1m-merge 通知已显示的次数
-
-  // 实验注册通知跟踪（由实验 ID 键入）
-  experimentNoticesSeenCount?: Record<string, number>
-
-  // OpusPlan 实验配置
-  hasShownOpusPlanWelcome?: Record<string, boolean> // 是否已按组织显示 OpusPlan 欢迎消息
 
   // 队列使用情况跟踪
   promptQueueUseCount: number // use 使用提示队列的次数
@@ -260,9 +214,6 @@ export type GlobalConfig = {
   todoFeatureEnabled: boolean // 是否启用待办事项功能
   showExpandedTodos?: boolean // 是否显示展开的待办事项，即使是空的
   showSpinnerTree?: boolean // 是否显示队友旋转树而不是药丸
-
-  // 首次开始时间跟踪
-  firstStartTime?: string // Claude Code 首次在此计算机上启动时的 ISO 时间戳
 
   messageIdleNotifThresholdMs: number // 用户必须空闲多长时间才能收到 Claude 生成完毕的通知
 
@@ -317,12 +268,6 @@ export type GlobalConfig = {
 
   // 自动完成排名的技能使用跟踪
   skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
-  // Chrome 扩展程序配对状态（跨会话持续存在）
-  chromeExtension?: {
-    pairedDeviceId?: string
-    pairedDeviceName?: string
-  }
-
   // LSP插件推荐偏好
   lspRecommendationDisabled?: boolean // 禁用所有 LSP 插件建议
   lspRecommendationNeverPlugins?: string[] // 绝不建议的插件 ID
@@ -432,6 +377,7 @@ export const GLOBAL_CONFIG_KEYS = [
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]
 
+/** 判断是否满足 is Global Config Key 对应的数据或状态。 */
 export function isGlobalConfigKey(key: string): key is GlobalConfigKey {
   return GLOBAL_CONFIG_KEYS.includes(key as GlobalConfigKey)
 }
@@ -447,18 +393,19 @@ export type ProjectConfigKey = (typeof PROJECT_CONFIG_KEYS)[number]
 /**
  * 检查用户是否已接受 cwd 的信任对话框。
  *
- * 该函数遍历父目录，检查父目录是否存在
- * 获得批准。接受对目录的信任意味着对子目录的信任
- * directories.
+ * 该函数逐级检查父目录是否已获批准。信任某个目录也意味着
+ * 信任它的所有子目录。
  *
  * @returns 信任对话框是否已被接受（即“不应显示”）
  */
 let _trustAccepted = false
 
+/** 重置或恢复 reset Trust Dialog Accepted Cache For Testing 对应的数据或状态。 */
 export function resetTrustDialogAcceptedCacheForTesting(): void {
   _trustAccepted = false
 }
 
+/** 检查 check Has Trust Dialog Accepted 对应的数据或状态。 */
 export function checkHasTrustDialogAccepted(): boolean {
   // 信任仅在会话期间从假→真转变（而不是相反），
   // 所以一旦为真我们就可以锁定它。 false 不被缓存——它会被重新检查
@@ -467,6 +414,7 @@ export function checkHasTrustDialogAccepted(): boolean {
   return (_trustAccepted ||= computeTrustDialogAccepted())
 }
 
+/** 计算 compute Trust Dialog Accepted 对应的数据或状态。 */
 function computeTrustDialogAccepted(): boolean {
   // 检查会话级信任（对于信任不持久的主目录情况）
   // 从主目录运行时，会显示信任对话框，但会存储接受
@@ -533,15 +481,12 @@ const TEST_PROJECT_CONFIG_FOR_TESTING: ProjectConfig = {
   ...DEFAULT_PROJECT_CONFIG,
 }
 
+/** 判断是否满足 is Project Config Key 对应的数据或状态。 */
 export function isProjectConfigKey(key: string): key is ProjectConfigKey {
   return PROJECT_CONFIG_KEYS.includes(key as ProjectConfigKey)
 }
 
-/**
- * Detect whether a fresh read would lose completed onboarding state that is
- * still present in the in-memory cache. This protects against truncated or
- * concurrently written configuration files being written back as defaults.
- */
+/** 检测一次全新读取是否会丢失仍在内存缓存中存在的已完成的引导状态。这防止被截断或并发写入的配置文件被写回为默认值。 */
 function wouldLoseOnboardingState(fresh: {
   hasCompletedOnboarding?: boolean
 }): boolean {
@@ -553,6 +498,7 @@ function wouldLoseOnboardingState(fresh: {
   return lostOnboarding
 }
 
+/** 设置并保存 save Global Config 对应的数据或状态。 */
 export function saveGlobalConfig(
   updater: (currentConfig: GlobalConfig) => GlobalConfig,
 ): void {
@@ -568,6 +514,7 @@ export function saveGlobalConfig(
 
   let written: GlobalConfig | null = null
   try {
+    /** 执行 did Write 对应的业务处理。 */
     const didWrite = saveConfigWithLock(
       getGlobalClaudeFile(),
       createDefaultGlobalConfig,
@@ -584,8 +531,7 @@ export function saveGlobalConfig(
         return written
       },
     )
-    // Update the cache only after a successful write. If the onboarding-state
-    // guard trips, the file and the valid cache must remain untouched.
+    // 仅成功写入后才更新缓存。如果引导状态保护触发，则文件和有效缓存必须保持不变。
     if (didWrite && written) {
       writeThroughGlobalConfigCache(written)
     }
@@ -593,10 +539,7 @@ export function saveGlobalConfig(
     logForDebugging(`Failed to save config with lock: ${error}`, {
       level: 'error',
     })
-    // Fall back to non-locked version on error. This fallback is a race
-    // window: if another process is mid-write (or the file got truncated),
-    // getConfig returns defaults. Refuse to write those over a good cached
-    // config to avoid wiping completed onboarding state.
+    // 出错时回退到非锁定版本。此回退存在一个竞态窗口：如果另一个进程正在写入（或文件被截断），getConfig 返回默认值。拒绝将这些默认值写入好的缓存配置，以避免擦除已完成的引导状态。
     const currentConfig = getConfig(
       getGlobalClaudeFile(),
       createDefaultGlobalConfig,
@@ -609,7 +552,7 @@ export function saveGlobalConfig(
       return
     }
     const config = updater(currentConfig)
-    // Skip if no changes (same reference returned)
+    // 如果无更改则跳过（返回相同引用）
     if (config === currentConfig) {
       return
     }
@@ -622,14 +565,14 @@ export function saveGlobalConfig(
   }
 }
 
-// Cache for global config
+// 全局配置的缓存
 let globalConfigCache: { config: GlobalConfig | null; mtime: number } = {
   config: null,
   mtime: 0,
 }
 
 /**
- * Removes history field from projects (migrated to history.jsonl)
+ * 从项目中移除 history 字段（已迁移到 history.jsonl）
  * @internal
  */
 function removeProjectHistory(
@@ -643,7 +586,7 @@ function removeProjectHistory(
   let needsCleaning = false
 
   for (const [path, projectConfig] of Object.entries(projects)) {
-    // history is removed from the type but may exist in old configs
+    // history 从类型中移除，但可能存在于旧配置中
     const legacy = projectConfig as ProjectConfig & { history?: unknown }
     if (legacy.history !== undefined) {
       needsCleaning = true
@@ -657,12 +600,11 @@ function removeProjectHistory(
   return needsCleaning ? cleanedProjects : projects
 }
 
-// fs.watchFile poll interval for detecting writes from other instances (ms)
+// fs.watchFile 轮询间隔，用于检测来自其他实例的写入（毫秒）
 const CONFIG_FRESHNESS_POLL_MS = 1000
 let freshnessWatcherStarted = false
 
-// fs.watchFile polls stat on the libuv threadpool and only calls us when mtime
-// changed — a stalled stat never blocks the main thread.
+// fs.watchFile 在 libuv 线程池上轮询 stat，仅在 mtime 更改时才调用我们——停滞的 stat 永远不会阻塞主线程。
 function startGlobalConfigFreshnessWatcher(): void {
   if (freshnessWatcherStarted || process.env.NODE_ENV === 'test') return
   freshnessWatcherStarted = true
@@ -671,16 +613,12 @@ function startGlobalConfigFreshnessWatcher(): void {
     file,
     { interval: CONFIG_FRESHNESS_POLL_MS, persistent: false },
     curr => {
-      // Our own writes fire this too — the write-through's Date.now()
-      // overshoot makes cache.mtime > file mtime, so we skip the re-read.
-      // Bun/Node also fire with curr.mtimeMs=0 when the file doesn't exist
-      // (initial callback or deletion) — the <= handles that too.
+      // 我们自己的写入也会触发此回调——write-through 的 Date.now() 超调使得 cache.mtime > 文件 mtime，因此我们跳过重新读取。当文件不存在时（初始回调或删除），Bun/Node 也会以 curr.mtimeMs=0 触发——<= 也处理了这种情况。
       if (curr.mtimeMs <= globalConfigCache.mtime) return
       void getFsImplementation()
         .readFile(file, { encoding: 'utf-8' })
         .then(content => {
-          // A write-through may have advanced the cache while we were reading;
-          // don't regress to the stale snapshot watchFile stat'd.
+          // 我们读取时，一次 write-through 可能已推进了缓存；不要退化为 watchFile 统计的过时快照。
           if (curr.mtimeMs <= globalConfigCache.mtime) return
           const parsed = safeParseJSON(stripBOM(content))
           if (parsed === null || typeof parsed !== 'object') return
@@ -701,34 +639,29 @@ function startGlobalConfigFreshnessWatcher(): void {
   })
 }
 
-// Write-through: what we just wrote IS the new config. cache.mtime overshoots
-// the file's real mtime (Date.now() is recorded after the write) so the
-// freshness watcher skips re-reading our own write on its next tick.
+// Write-through：我们刚刚写入的就是新配置。cache.mtime 超调了文件的真实 mtime（Date.now() 在写入后记录），因此新鲜度观察器在下一个 tick 跳过重新读取我们自己的写入。
 function writeThroughGlobalConfigCache(config: GlobalConfig): void {
   globalConfigCache = { config, mtime: Date.now() }
 }
 
+/** 获取 get Global Config 对应的数据或状态。 */
 export function getGlobalConfig(): GlobalConfig {
   if (process.env.NODE_ENV === 'test') {
     return TEST_GLOBAL_CONFIG_FOR_TESTING
   }
 
-  // Fast path: pure memory read. After startup, this always hits — our own
-  // writes go write-through and other instances' writes are picked up by the
-  // background freshness watcher (never blocks this path).
+  // 快速路径：纯内存读取。启动后，这始终命中——我们自己的写入通过 write-through 进行，其他实例的写入由后台新鲜度观察器拾取（从不阻塞此路径）。
   if (globalConfigCache.config) {
     return globalConfigCache.config
   }
 
-  // Slow path: startup load. Sync I/O here is acceptable because it runs
-  // exactly once, before any UI is rendered. Stat before read so any race
-  // self-corrects (old mtime + new content → watcher re-reads next tick).
+  // 慢路径：启动加载。同步 I/O 在此处可接受，因为它只运行一次，在渲染任何 UI 之前。读取前先执行 stat，任何竞态都会自我纠正（旧的 mtime + 新内容 → 观察器在下一个 tick 重新读取）。
   try {
     let stats: { mtimeMs: number; size: number } | null = null
     try {
       stats = getFsImplementation().statSync(getGlobalClaudeFile())
     } catch {
-      // File doesn't exist
+      // 文件不存在
     }
     const config = getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
     globalConfigCache = {
@@ -738,29 +671,30 @@ export function getGlobalConfig(): GlobalConfig {
     startGlobalConfigFreshnessWatcher()
     return config
   } catch {
-    // If anything goes wrong, fall back to uncached behavior
+    // 如果出现任何错误，回退到未缓存的行为。
     return getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
   }
 }
 
+/** 设置并保存 save Config 对应的数据或状态。 */
 function saveConfig<A extends object>(
   file: string,
   config: A,
   defaultConfig: A,
 ): void {
-  // Ensure the directory exists before writing the config file
+  // 在写入配置文件前确保目录存在。
   const dir = dirname(file)
   const fs = getFsImplementation()
-  // mkdirSync is already recursive in FsOperations implementation
+  // mkdirSync 在 FsOperations 实现中已经是递归的。
   fs.mkdirSync(dir)
 
-  // Filter out any values that match the defaults
+  // 过滤掉任何与默认值匹配的值。
   const filteredConfig = pickBy(
     config,
     (value, key) =>
       jsonStringify(value) !== jsonStringify(defaultConfig[key as keyof A]),
   )
-  // Write config file with secure permissions - mode only applies to new files
+  // 使用安全权限写入配置文件 - mode 仅适用于新文件。
   writeFileSyncAndFlush_DEPRECATED(
     file,
     jsonStringify(filteredConfig, null, 2),
@@ -771,12 +705,7 @@ function saveConfig<A extends object>(
   )
 }
 
-/**
- * Returns true if a write was performed; false if the write was skipped
- * (no changes, or auth-loss guard tripped). Callers use this to decide
- * whether to invalidate the cache -- invalidating after a skipped write
- * destroys the good cached state the auth-loss guard depends on.
- */
+/** 如果执行了写入则返回 true；如果跳过写入（无更改或身份验证丢失保护触发）则返回 false。调用者使用此值决定是否使缓存失效——在跳过写入后使缓存失效会破坏身份验证丢失保护所依赖的良好缓存状态。 */
 function saveConfigWithLock<A extends object>(
   file: string,
   createDefault: () => A,
@@ -786,7 +715,7 @@ function saveConfigWithLock<A extends object>(
   const dir = dirname(file)
   const fs = getFsImplementation()
 
-  // Ensure directory exists (mkdirSync is already recursive in FsOperations)
+  // 确保目录存在（mkdirSync 在 FsOperations 中已经是递归的）
   fs.mkdirSync(dir)
 
   let release
@@ -795,10 +724,9 @@ function saveConfigWithLock<A extends object>(
     const startTime = Date.now()
     release = lockfile.lockSync(file, {
       lockfilePath: lockFilePath,
+      /** 处理 on Compromised 对应的数据或状态。 */
       onCompromised: err => {
-        // Default onCompromised throws from a setTimeout callback, which
-        // becomes an unhandled exception. Log instead -- the lock being
-        // stolen (e.g. after a 10s event-loop stall) is recoverable.
+        // 默认的 onCompromised 从 setTimeout 回调中抛出异常，成为未处理的异常。改为记录日志——锁被窃取（例如在 10 秒事件循环暂停后）是可恢复的。
         logForDebugging(`Config lock compromised: ${err}`, { level: 'error' })
       },
     })
@@ -809,9 +737,7 @@ function saveConfigWithLock<A extends object>(
       )
     }
 
-    // Re-read the current config to get latest state. If the file is
-    // momentarily corrupted (concurrent writes, kill-during-write), this
-    // returns defaults -- we must not write those back over good config.
+    // 重新读取当前配置以获取最新状态。如果文件暂时损坏（并发写入、写入时被杀死），此操作返回默认值——我们绝不能将这些默认值写回好的配置。
     const currentConfig = getConfig(file, createDefault)
     if (file === getGlobalClaudeFile() && wouldLoseOnboardingState(currentConfig)) {
       logForDebugging(
@@ -821,30 +747,28 @@ function saveConfigWithLock<A extends object>(
       return false
     }
 
-    // Apply the merge function to get the updated config
+    // 应用合并函数以获取更新后的配置
     const mergedConfig = mergeFn(currentConfig)
 
-    // Skip write if no changes (same reference returned)
+    // 若无变化（返回相同引用）则跳过写入
     if (mergedConfig === currentConfig) {
       return false
     }
 
-    // Filter out any values that match the defaults
+    // 过滤掉与默认值匹配的任何值
     const filteredConfig = pickBy(
       mergedConfig,
       (value, key) =>
         jsonStringify(value) !== jsonStringify(defaultConfig[key as keyof A]),
     )
 
-    // Create timestamped backup of existing config before writing
-    // We keep multiple backups to prevent data loss if a reset/corrupted config
-    // overwrites a good backup. Backups are stored in ~/.claude/backups/ to
-    // keep the home directory clean.
+    // 在写入前为现有配置创建带时间戳的备份
+    // 保留多个备份以防止重置或损坏的配置覆盖良好备份。备份存储在 ~/.claude/backups/ 中以保持主目录整洁。
     try {
       const fileBase = basename(file)
       const backupDir = getConfigBackupDir()
 
-      // Ensure backup directory exists
+      // 确保备份目录存在
       try {
         fs.mkdirSync(backupDir)
       } catch (mkdirErr) {
@@ -854,16 +778,13 @@ function saveConfigWithLock<A extends object>(
         }
       }
 
-      // Check existing backups first -- skip creating a new one if a recent
-      // backup already exists. During startup, many saveGlobalConfig calls fire
-      // within milliseconds of each other; without this check, each call
-      // creates a new backup file that accumulates on disk.
+      // 先检查现有备份——如果近期备份已存在则跳过创建新备份。启动时，许多 saveGlobalConfig 调用会在毫秒内触发；若无此检查，每次调用都会创建一个新的备份文件并累积在磁盘上。
       const MIN_BACKUP_INTERVAL_MS = 60_000
       const existingBackups = fs
         .readdirStringSync(backupDir)
         .filter(f => f.startsWith(`${fileBase}.backup.`))
         .sort()
-        .reverse() // Most recent first (timestamps sort lexicographically)
+        .reverse() // 最近的最先（时间戳按字典序排序）
 
       const mostRecentBackup = existingBackups[0]
       const mostRecentTimestamp = mostRecentBackup
@@ -878,9 +799,9 @@ function saveConfigWithLock<A extends object>(
         fs.copyFileSync(file, backupPath)
       }
 
-      // Clean up old backups, keeping only the 5 most recent
+      // 清理旧备份，仅保留最近的5个
       const MAX_BACKUPS = 5
-      // Re-read if we just created one; otherwise reuse the list
+      // 如果刚刚创建了一个备份则重新读取；否则重用列表
       const backupsForCleanup = shouldCreateBackup
         ? fs
             .readdirStringSync(backupDir)
@@ -893,7 +814,7 @@ function saveConfigWithLock<A extends object>(
         try {
           fs.unlinkSync(join(backupDir, oldBackup))
         } catch {
-          // Ignore cleanup errors
+          // 忽略清理错误
         }
       }
     } catch (e) {
@@ -903,10 +824,10 @@ function saveConfigWithLock<A extends object>(
           level: 'error',
         })
       }
-      // No file to backup or backup failed, continue with write
+      // 没有要备份的文件或备份失败，继续写入
     }
 
-    // Write config file with secure permissions - mode only applies to new files
+    // 以安全权限写入配置文件——mode 仅适用于新文件
     writeFileSyncAndFlush_DEPRECATED(
       file,
       jsonStringify(filteredConfig, null, 2),
@@ -923,26 +844,26 @@ function saveConfigWithLock<A extends object>(
   }
 }
 
-// Flag to track if config reading is allowed
+// 标记以跟踪是否允许读取配置
 let configReadingAllowed = false
 
+/** 启动或启用 enable Configs 对应的数据或状态。 */
 export function enableConfigs(): void {
   if (configReadingAllowed) {
-    // Ensure this is idempotent
+    // 确保此操作是幂等的
     return
   }
 
   const startTime = Date.now()
   logForDiagnosticsNoPII('info', 'enable_configs_started')
 
-  // Any reads to configuration before this flag is set show an console warning
-  // to prevent us from adding config reading during module initialization
+  // 在此标志设置之前对配置的任何读取都会显示控制台警告，以防止在模块初始化期间添加配置读取
   configReadingAllowed = true
-  // We only check the global config because currently all the configs share a file
+  // 我们仅检查全局配置，因为目前所有配置共享一个文件
   getConfig(
     getGlobalClaudeFile(),
     createDefaultGlobalConfig,
-    true /* throw on invalid */,
+    true /* 无效时抛出错误 */,
   )
 
   logForDiagnosticsNoPII('info', 'enable_configs_completed', {
@@ -950,41 +871,33 @@ export function enableConfigs(): void {
   })
 }
 
-/**
- * Returns the directory where config backup files are stored.
- * Uses ~/.claude/backups/ to keep the home directory clean.
- */
+/** 返回存储配置备份文件的目录。使用 ~/.claude/backups/ 以保持主目录整洁。 */
 function getConfigBackupDir(): string {
   return join(getClaudeConfigHomeDir(), 'backups')
 }
 
-/**
- * Find the most recent backup file for a given config file.
- * Checks ~/.claude/backups/ first, then falls back to the legacy location
- * (next to the config file) for backwards compatibility.
- * Returns the full path to the most recent backup, or null if none exist.
- */
+/** 为给定配置文件找到最新的备份文件。先检查 ~/.claude/backups/，然后回退到旧位置（配置文件旁边）以保持向后兼容性。返回最新备份的完整路径，如果不存在则返回 null。 */
 function findMostRecentBackup(file: string): string | null {
   const fs = getFsImplementation()
   const fileBase = basename(file)
   const backupDir = getConfigBackupDir()
 
-  // Check the new backup directory first
+  // 先检查新的备份目录
   try {
     const backups = fs
       .readdirStringSync(backupDir)
       .filter(f => f.startsWith(`${fileBase}.backup.`))
       .sort()
 
-    const mostRecent = backups.at(-1) // Timestamps sort lexicographically
+    const mostRecent = backups.at(-1) // 时间戳按字典序排序
     if (mostRecent) {
       return join(backupDir, mostRecent)
     }
   } catch {
-    // Backup dir doesn't exist yet
+    // 备份目录尚不存在
   }
 
-  // Fall back to legacy location (next to the config file)
+  // 回退到旧位置（配置文件旁边）
   const fileDir = dirname(file)
 
   try {
@@ -993,32 +906,33 @@ function findMostRecentBackup(file: string): string | null {
       .filter(f => f.startsWith(`${fileBase}.backup.`))
       .sort()
 
-    const mostRecent = backups.at(-1) // Timestamps sort lexicographically
+    const mostRecent = backups.at(-1) // 时间戳按字典序排序
     if (mostRecent) {
       return join(fileDir, mostRecent)
     }
 
-    // Check for legacy backup file (no timestamp)
+    // 检查旧版备份文件（无时间戳）
     const legacyBackup = `${file}.backup`
     try {
       fs.statSync(legacyBackup)
       return legacyBackup
     } catch {
-      // Legacy backup doesn't exist
+      // 旧版备份不存在
     }
   } catch {
-    // Ignore errors reading directory
+    // 忽略读取目录时的错误
   }
 
   return null
 }
 
+/** 获取 get Config 对应的数据或状态。 */
 function getConfig<A>(
   file: string,
   createDefault: () => A,
   throwOnInvalid?: boolean,
 ): A {
-  // Log a warning if config is accessed before it's allowed
+  // 如果在允许之前访问配置，则记录警告
   if (!configReadingAllowed && process.env.NODE_ENV !== 'test') {
     throw new Error('Config accessed before allowed.')
   }
@@ -1030,20 +944,20 @@ function getConfig<A>(
       encoding: 'utf-8',
     })
     try {
-      // Strip BOM before parsing - PowerShell 5.x adds BOM to UTF-8 files
+      // 解析前去除 BOM——PowerShell 5.x 会向 UTF-8 文件添加 BOM
       const parsedConfig = jsonParse(stripBOM(fileContent))
       return {
         ...createDefault(),
         ...parsedConfig,
       }
     } catch (error) {
-      // Throw a ConfigParseError with the file path and default config
+      // 抛出带有文件路径和默认配置的 ConfigParseError
       const errorMessage =
         error instanceof Error ? error.message : String(error)
       throw new ConfigParseError(errorMessage, file, createDefault())
     }
   } catch (error) {
-    // Handle file not found - check for backup and return default
+    // 处理文件未找到——检查备份并返回默认值
     const errCode = getErrnoCode(error)
     if (errCode === 'ENOENT') {
       const backupPath = findMostRecentBackup(file)
@@ -1057,12 +971,12 @@ function getConfig<A>(
       return createDefault()
     }
 
-    // Re-throw ConfigParseError if throwOnInvalid is true
+    // 如果 throwOnInvalid 为 true，则重新抛出 ConfigParseError
     if (error instanceof ConfigParseError && throwOnInvalid) {
       throw error
     }
 
-    // Log config parse errors so users know what happened
+    // 记录配置解析错误，以便用户了解发生了什么
     if (error instanceof ConfigParseError) {
       logForDebugging(
         `Config file corrupted, resetting to defaults: ${error.message}`,
@@ -1075,11 +989,11 @@ function getConfig<A>(
         `\nClaude configuration file at ${file} is corrupted: ${error.message}\n`,
       )
 
-      // Try to backup the corrupted config file (only if not already backed up)
+      // 尝试备份损坏的配置文件（仅当尚未备份时）
       const fileBase = basename(file)
       const corruptedBackupDir = getConfigBackupDir()
 
-      // Ensure backup directory exists
+      // 确保备份目录存在
       try {
         fs.mkdirSync(corruptedBackupDir)
       } catch (mkdirErr) {
@@ -1089,6 +1003,7 @@ function getConfig<A>(
         }
       }
 
+      /** 执行 existing Corrupted Backups 对应的业务处理。 */
       const existingCorruptedBackups = fs
         .readdirStringSync(corruptedBackupDir)
         .filter(f => f.startsWith(`${fileBase}.corrupted.`))
@@ -1096,7 +1011,7 @@ function getConfig<A>(
       let corruptedBackupPath: string | undefined
       let alreadyBackedUp = false
 
-      // Check if current corrupted content matches any existing backup
+      // 检查当前损坏的内容是否与任何现有备份匹配
       const currentContent = fs.readFileSync(file, { encoding: 'utf-8' })
       for (const backup of existingCorruptedBackups) {
         try {
@@ -1109,7 +1024,7 @@ function getConfig<A>(
             break
           }
         } catch {
-          // Ignore read errors on backups
+          // 忽略备份上的读取错误
         }
       }
 
@@ -1127,11 +1042,11 @@ function getConfig<A>(
             },
           )
         } catch {
-          // Ignore backup errors
+          // 忽略备份错误
         }
       }
 
-      // Notify user about corrupted config and available backup
+      // 通知用户配置已损坏及可用的备份
       const backupPath = findMostRecentBackup(file)
       if (corruptedBackupPath) {
         process.stderr.write(
@@ -1155,21 +1070,22 @@ function getConfig<A>(
   }
 }
 
-// Memoized function to get the project path for config lookup
+// 记忆化函数，用于获取配置查找的项目路径
 export const getProjectPathForConfig = memoize((): string => {
   const originalCwd = getOriginalCwd()
   const gitRoot = findCanonicalGitRoot(originalCwd)
 
   if (gitRoot) {
-    // Normalize for consistent JSON keys (forward slashes on all platforms)
-    // This ensures paths like C:\Users\... and C:/Users/... map to the same key
+    // 规范化为一致的 JSON 键（所有平台上使用正斜杠）
+    // 这确保像 C:\Users\... 和 C:/Users/... 的路径映射到相同的键
     return normalizePathForConfigKey(gitRoot)
   }
 
-  // Not in a git repo
+  // 不在 git 仓库中
   return normalizePathForConfigKey(resolve(originalCwd))
 })
 
+/** 获取 get Current Project Config 对应的数据或状态。 */
 export function getCurrentProjectConfig(): ProjectConfig {
   if (process.env.NODE_ENV === 'test') {
     return TEST_PROJECT_CONFIG_FOR_TESTING
@@ -1183,22 +1099,29 @@ export function getCurrentProjectConfig(): ProjectConfig {
   }
 
   const projectConfig = config.projects[absolutePath] ?? DEFAULT_PROJECT_CONFIG
-  // Not sure how this became a string
-  // TODO: Fix upstream
-  if (typeof projectConfig.allowedTools === 'string') {
-    projectConfig.allowedTools =
-      (safeParseJSON(projectConfig.allowedTools) as string[]) ?? []
+  // 兼容旧版本曾把 allowedTools 写成 JSON 字符串的配置；读取时规范化，
+  // 但不修改全局缓存对象，避免一次读取产生隐式持久状态变化。
+  const legacyAllowedTools = projectConfig.allowedTools as string[] | string
+  if (typeof legacyAllowedTools === 'string') {
+    const parsed = safeParseJSON(legacyAllowedTools)
+    return {
+      ...projectConfig,
+      allowedTools: Array.isArray(parsed)
+        ? parsed.filter((tool): tool is string => typeof tool === 'string')
+        : [],
+    }
   }
 
   return projectConfig
 }
 
+/** 设置并保存 save Current Project Config 对应的数据或状态。 */
 export function saveCurrentProjectConfig(
   updater: (currentConfig: ProjectConfig) => ProjectConfig,
 ): void {
   if (process.env.NODE_ENV === 'test') {
     const config = updater(TEST_PROJECT_CONFIG_FOR_TESTING)
-    // Skip if no changes (same reference returned)
+    // 如果没有更改则跳过（返回相同的引用）
     if (config === TEST_PROJECT_CONFIG_FOR_TESTING) {
       return
     }
@@ -1209,6 +1132,7 @@ export function saveCurrentProjectConfig(
 
   let written: GlobalConfig | null = null
   try {
+    /** 执行 did Write 对应的业务处理。 */
     const didWrite = saveConfigWithLock(
       getGlobalClaudeFile(),
       createDefaultGlobalConfig,
@@ -1216,7 +1140,7 @@ export function saveCurrentProjectConfig(
         const currentProjectConfig =
           current.projects?.[absolutePath] ?? DEFAULT_PROJECT_CONFIG
         const newProjectConfig = updater(currentProjectConfig)
-        // Skip if no changes (same reference returned)
+        // 如果没有更改则跳过（返回相同的引用）
         if (newProjectConfig === currentProjectConfig) {
           return current
         }
@@ -1238,8 +1162,7 @@ export function saveCurrentProjectConfig(
       level: 'error',
     })
 
-    // Same race window as saveGlobalConfig's fallback -- refuse to write
-    // defaults over good cached config. See GH #3117.
+    // 与 saveGlobalConfig 的后备机制相同的竞态窗口——拒绝将默认值覆盖好的缓存配置。参见 GH #3117。
     const config = getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
     if (wouldLoseOnboardingState(config)) {
       logForDebugging(
@@ -1251,7 +1174,7 @@ export function saveCurrentProjectConfig(
     const currentProjectConfig =
       config.projects?.[absolutePath] ?? DEFAULT_PROJECT_CONFIG
     const newProjectConfig = updater(currentProjectConfig)
-    // Skip if no changes (same reference returned)
+    // 如果没有更改则跳过（返回相同的引用）
     if (newProjectConfig === currentProjectConfig) {
       return
     }
@@ -1267,17 +1190,7 @@ export function saveCurrentProjectConfig(
   }
 }
 
-export function recordFirstStartTime(): void {
-  const config = getGlobalConfig()
-  if (!config.firstStartTime) {
-    const firstStartTime = new Date().toISOString()
-    saveGlobalConfig(current => ({
-      ...current,
-      firstStartTime: current.firstStartTime ?? firstStartTime,
-    }))
-  }
-}
-
+/** 获取 get Memory Path 对应的数据或状态。 */
 export function getMemoryPath(memoryType: MemoryType): string {
   const cwd = getOriginalCwd()
 
@@ -1293,24 +1206,27 @@ export function getMemoryPath(memoryType: MemoryType): string {
     case 'AutoMem':
       return getAutoMemEntrypoint()
   }
-  // TeamMem is only a valid MemoryType when feature('TEAMMEM') is true
+  // 仅当 feature('TEAMMEM') 为 true 时，TeamMem 才是有效的 MemoryType
   if (feature('TEAMMEM')) {
     return teamMemPaths!.getTeamMemEntrypoint()
   }
-  return '' // Unreachable when MemoryType is exhaustively handled.
+  return '' // 当 MemoryType 被详尽处理时不可达。
 }
 
+/** 获取 get Managed Claude Rules Dir 对应的数据或状态。 */
 export function getManagedClaudeRulesDir(): string {
   return join(getManagedFilePath(), '.claude', 'rules')
 }
 
+/** 获取 get User Claude Rules Dir 对应的数据或状态。 */
 export function getUserClaudeRulesDir(): string {
   return join(getClaudeConfigHomeDir(), 'rules')
 }
 
-// Exported for testing only
+// 仅为测试而导出
 export const _getConfigForTesting = getConfig
 export const _wouldLoseOnboardingStateForTesting = wouldLoseOnboardingState
+/** 执行 set Global Config Cache For Testing 对应的业务处理。 */
 export function _setGlobalConfigCacheForTesting(
   config: GlobalConfig | null,
 ): void {

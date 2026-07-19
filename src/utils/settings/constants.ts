@@ -1,28 +1,29 @@
 import { getAllowedSettingSources } from '../../bootstrap/state.js'
 
 /**
- * All possible sources where settings can come from
- * Order matters - later sources override earlier ones
+ * 设置可以来源的所有可能位置
+ * 顺序很重要——后面的来源会覆盖前面的
  */
 export const SETTING_SOURCES = [
-  // User settings (global)
+  // 用户设置（全局）
   'userSettings',
 
-  // Project settings (shared per-directory)
+  // 项目设置（按目录共享）
   'projectSettings',
 
-  // Local settings (gitignored)
+  // 本地设置（被 git 忽略）
   'localSettings',
 
-  // Flag settings (from --settings flag)
+  // 标志设置（来自 --settings 标志）
   'flagSettings',
 
-  // Policy settings (managed-settings.json or remote settings from API)
+  // 策略设置（managed-settings.json 或来自 API 的远程设置）
   'policySettings',
 ] as const
 
 export type SettingSource = (typeof SETTING_SOURCES)[number]
 
+/** 获取 get Setting Source Name 对应的数据或状态。 */
 export function getSettingSourceName(source: SettingSource): string {
   switch (source) {
     case 'userSettings':
@@ -39,9 +40,9 @@ export function getSettingSourceName(source: SettingSource): string {
 }
 
 /**
- * Get short display name for a setting source (capitalized, for context/skills UI)
- * @param source The setting source or 'plugin'/'built-in'
- * @returns Short capitalized display name like 'User', 'Project', 'Plugin'
+ * 获取设置来源的简短显示名称（大写，用于上下文/技能 UI）
+ * @param source 设置来源或 'plugin'/'built-in'
+ * @returns 简短大写的显示名称，如 'User'、'Project'、'Plugin'
  */
 export function getSourceDisplayName(
   source: SettingSource | 'plugin' | 'built-in',
@@ -65,9 +66,9 @@ export function getSourceDisplayName(
 }
 
 /**
- * Get display name for a setting or permission rule source (lowercase, for inline use)
- * @param source The setting source or permission rule source
- * @returns Display name for the source in lowercase
+ * 获取设置或权限规则来源的显示名称（小写，用于内嵌使用）
+ * @param source 设置来源或权限规则来源
+ * @returns 来源的小写显示名称
  */
 export function getSettingSourceDisplayNameLowercase(
   source: SettingSource | 'cliArg' | 'command' | 'session',
@@ -93,9 +94,9 @@ export function getSettingSourceDisplayNameLowercase(
 }
 
 /**
- * Get display name for a setting or permission rule source (capitalized, for UI labels)
- * @param source The setting source or permission rule source
- * @returns Display name for the source with first letter capitalized
+ * 获取设置或权限规则来源的显示名称（首字母大写，用于 UI 标签）
+ * @param source 设置来源或权限规则来源
+ * @returns 首字母大写的来源显示名称
  */
 export function getSettingSourceDisplayNameCapitalized(
   source: SettingSource | 'cliArg' | 'command' | 'session',
@@ -121,13 +122,14 @@ export function getSettingSourceDisplayNameCapitalized(
 }
 
 /**
- * Parse the --setting-sources CLI flag into SettingSource array
- * @param flag Comma-separated string like "user,project,local"
- * @returns Array of SettingSource values
+ * 解析 --setting-sources CLI 标志为 SettingSource 数组
+ * @param flag 逗号分隔的字符串，如 "user,project,local"
+ * @returns SettingSource 值数组
  */
 export function parseSettingSourcesFlag(flag: string): SettingSource[] {
   if (flag === '') return []
 
+  /** 执行 names 对应的业务处理。 */
   const names = flag.split(',').map(s => s.trim())
   const result: SettingSource[] = []
 
@@ -153,13 +155,13 @@ export function parseSettingSourcesFlag(flag: string): SettingSource[] {
 }
 
 /**
- * Get enabled setting sources with policy/flag always included
- * @returns Array of enabled SettingSource values
+ * 获取启用的设置来源，始终包含策略/标志
+ * @returns 启用的 SettingSource 值数组
  */
 export function getEnabledSettingSources(): SettingSource[] {
   const allowed = getAllowedSettingSources()
 
-  // Always include policy and flag settings
+  // 始终包含策略和标志设置
   const result = new Set<SettingSource>(allowed)
   result.add('policySettings')
   result.add('flagSettings')
@@ -167,26 +169,24 @@ export function getEnabledSettingSources(): SettingSource[] {
 }
 
 /**
- * Check if a specific source is enabled
- * @param source The source to check
- * @returns true if the source should be loaded
+ * 检查特定来源是否已启用
+ * @param source 要检查的来源
+ * @returns 如果应加载该来源则返回 true
  */
 export function isSettingSourceEnabled(source: SettingSource): boolean {
   const enabled = getEnabledSettingSources()
   return enabled.includes(source)
 }
 
-/**
- * Editable setting sources (excludes policySettings and flagSettings which are read-only)
- */
+/** 可编辑的设置来源（排除仅读的 policySettings 和 flagSettings） */
 export type EditableSettingSource = Exclude<
   SettingSource,
   'policySettings' | 'flagSettings'
 >
 
 /**
- * List of sources where permission rules can be saved, in display order.
- * Used by permission-rule and hook-save UIs to present source options.
+ * 可保存权限规则的来源列表，按显示顺序排列。
+ * 权限规则和钩子保存 UI 使用此列表展示来源选项。
  */
 export const SOURCES = [
   'localSettings',
@@ -195,8 +195,8 @@ export const SOURCES = [
 ] as const satisfies readonly EditableSettingSource[]
 
 /**
- * The JSON Schema URL for Claude Code settings
- * You can edit the contents at https://github.com/SchemaStore/schemastore/blob/master/src/schemas/json/claude-code-settings.json
+ * Claude Code 设置的 JSON Schema URL
+ * 你可以在 https://github.com/SchemaStore/schemastore/blob/master/src/schemas/json/claude-code-settings.json 编辑内容
  */
 export const CLAUDE_CODE_SETTINGS_SCHEMA_URL =
   'https://json.schemastore.org/claude-code-settings.json'

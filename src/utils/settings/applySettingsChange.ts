@@ -14,21 +14,13 @@ import type { SettingSource } from './constants.js'
 import { getInitialSettings } from './settings.js'
 
 /**
- * Apply a settings change to app state. Re-reads settings from disk,
- * reloads permissions and hooks, and pushes the new state.
+ * 将设置变更应用到应用状态。从磁盘重新读取设置，重新加载权限和钩子，并推送新状态。
  *
- * Used by both the interactive path (AppState.tsx via useSettingsChange) and
- * the headless/SDK path (print.ts direct subscribe) so that managed-settings
- * / policy changes are fully applied in both modes.
+ * 交互路径（AppState.tsx 通过 useSettingsChange）和无头/SDK 路径（print.ts 直接订阅）均使用此函数，以便托管设置/策略变更在两种模式下都能完全应用。
  *
- * The settings cache is reset by the notifier (changeDetector.fanOut) before
- * listeners are iterated, so getInitialSettings() here reads fresh disk
- * state. Previously this function reset the cache itself, which — combined
- * with useSettingsChange's own reset — caused N disk reloads per notification
- * for N subscribers.
+ * 在迭代监听器之前，设置缓存由通知器（changeDetector.fanOut）重置，因此此处的 getInitialSettings() 读取到的是最新的磁盘状态。之前此函数会自行重置缓存，这——结合 useSettingsChange 自身的重置——会导致每个订阅者在每次通知时产生 N 次磁盘重载。
  *
- * Side-effects like clearing auth caches and applying env vars are handled by
- * `onChangeAppState` which fires when `settings` changes in state.
+ * 像清除身份验证缓存和应用环境变量这样的副作用由 `onChangeAppState` 处理，它在状态中的 `settings` 发生变化时触发。
  */
 export function applySettingsChange(
   source: SettingSource,
@@ -61,10 +53,7 @@ export function applySettingsChange(
 
     newContext = transitionPlanAutoMode(newContext)
 
-    // Sync effortLevel from settings to top-level AppState when it changes
-    // (e.g. via applyFlagSettings from IDE). Only propagate if the setting
-    // itself changed — otherwise unrelated settings churn (e.g. tips dismissal
-    // on startup) would clobber a --effort CLI flag value held in AppState.
+    // 当 settings 中的 effortLevel 发生变化时（例如通过 IDE 的 applyFlagSettings），将其同步到顶层 AppState。仅当设置本身发生改变时才传播——否则，无关的设置变更（如启动时关闭提示）会覆盖 AppState 中保存的 --effort CLI 标志值。
     const prevEffort = prev.settings.effortLevel
     const newEffort = newSettings.effortLevel
     const effortChanged = prevEffort !== newEffort
@@ -73,11 +62,7 @@ export function applySettingsChange(
       ...prev,
       settings: newSettings,
       toolPermissionContext: newContext,
-      // Only propagate a defined new value — when the disk key is absent
-      // (e.g. /effort max writes undefined; --effort CLI flag),
-      // prev.settings.effortLevel can be stale (internal writes suppress the
-      // watcher that would resync AppState.settings), so effortChanged would
-      // be true and we'd wipe a session-scoped value held in effortValue.
+      // 仅传播一个明确的定义新值——当磁盘键缺失时（例如 /effort max 写入 undefined；--effort CLI 标志），prev.settings.effortLevel 可能已过时（内部写入会抑制用于重新同步 AppState.settings 的监视器），因此 effortChanged 将为 true，我们会擦除 effortValue 中保存的会话作用域值。
       ...(effortChanged && newEffort !== undefined
         ? { effortValue: newEffort }
         : {}),

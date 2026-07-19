@@ -10,6 +10,7 @@ export type ApiCredentialSources = {
   hasApiKeyHelper: boolean
 }
 
+/** 获取 get Api Credential Configuration Error 对应的数据或状态。 */
 export function getApiCredentialConfigurationError({
   provider,
   hasApiKey,
@@ -26,6 +27,7 @@ export function getApiCredentialConfigurationError({
   )
 }
 
+/** 获取 get Current Api Credential Configuration Error 对应的数据或状态。 */
 export function getCurrentApiCredentialConfigurationError(): string | null {
   return getApiCredentialConfigurationError({
     provider: getAPIProvider(),

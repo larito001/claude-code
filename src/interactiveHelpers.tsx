@@ -3,7 +3,6 @@ import { appendFileSync } from 'fs';
 import React from 'react';
 import { gracefulShutdown, gracefulShutdownSync } from 'src/utils/gracefulShutdown.js';
 import { type ChannelEntry, getAllowedChannels, setAllowedChannels, setHasDevChannels, setSessionTrustAccepted, setStatsStore } from './bootstrap/state.js';
-import type { Command } from './commands.js';
 import { createStatsStore, type StatsStore } from './context/stats.js';
 import { getSystemContext } from './context.js';
 import { initializeTelemetryAfterTrust } from './entrypoints/init.js';
@@ -100,7 +99,7 @@ export async function renderAndRun(root: Root, element: React.ReactNode): Promis
   await gracefulShutdown(0);
 }
 /** 执行 show Setup Screens 对应的业务处理。 */
-export async function showSetupScreens(root: Root, permissionMode: PermissionMode, allowDangerouslySkipPermissions: boolean, commands?: Command[], devChannels?: ChannelEntry[]): Promise<void> {
+export async function showSetupScreens(root: Root, permissionMode: PermissionMode, allowDangerouslySkipPermissions: boolean, devChannels?: ChannelEntry[]): Promise<void> {
   if (
     process.env.NODE_ENV === 'test' ||
     isEnvTruthy(process.env.CLAUDE_CODE_SKIP_ONBOARDING)
@@ -135,7 +134,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       const {
         TrustDialog
       } = await import('./components/TrustDialog/TrustDialog.js');
-      await showSetupDialog(root, done => <TrustDialog commands={commands} onDone={done} />);
+      await showSetupDialog(root, done => <TrustDialog onDone={done} />);
     }
 
     // 表示信任已针对此会话得到验证。

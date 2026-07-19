@@ -1,52 +1,49 @@
 /**
-/**
- * Shared constants and path builders for MDM settings modules.
+ * MDM 设置模块的共享常量和路径构建器。
  *
- * This module has ZERO heavy imports (only `os`) — safe to use from mdmRawRead.ts.
- * Both mdmRawRead.ts and mdmSettings.ts import from here to avoid duplication.
+ * 此模块没有重量级导入（仅 `os`）——可安全地从 mdmRawRead.ts 中使用。
+ * mdmRawRead.ts 和 mdmSettings.ts 都从此处导入以避免重复。
  */
 
 import { userInfo } from 'os'
 
-/** macOS preference domain for Claude Code MDM profiles. */
+/** Claude Code MDM 配置文件的 macOS 偏好设置域。 */
 export const MACOS_PREFERENCE_DOMAIN = 'com.anthropic.claudecode'
 
 /**
- * Windows registry key paths for Claude Code MDM policies.
+ * Claude Code MDM 策略的 Windows 注册表键路径。
  *
- * These keys live under SOFTWARE\Policies which is on the WOW64 shared key
- * list — both 32-bit and 64-bit processes see the same values without
- * redirection. Do not move these to SOFTWARE\ClaudeCode, as SOFTWARE is
- * redirected and 32-bit processes would silently read from WOW6432Node.
- * See: https://learn.microsoft.com/en-us/windows/win32/winprog64/shared-registry-keys
+ * 这些键位于 SOFTWARE\Policies 下，该路径位于 WOW64 共享键列表中——32 位和 64 位进程无需重定向即可看到相同的值。
+ * 不要将这些键移动到 SOFTWARE\ClaudeCode，因为 SOFTWARE 是重定向的，32 位进程将静默地从 WOW6432Node 读取。
+ * 参见：https://learn.microsoft.com/en-us/windows/win32/winprog64/shared-registry-keys
  */
 export const WINDOWS_REGISTRY_KEY_PATH_HKLM =
   'HKLM\\SOFTWARE\\Policies\\ClaudeCode'
 export const WINDOWS_REGISTRY_KEY_PATH_HKCU =
   'HKCU\\SOFTWARE\\Policies\\ClaudeCode'
 
-/** Windows registry value name containing the JSON settings blob. */
+/** 包含 JSON 设置 blob 的 Windows 注册表值名称。 */
 export const WINDOWS_REGISTRY_VALUE_NAME = 'Settings'
 
-/** Path to macOS plutil binary. */
+/** macOS plutil 二进制文件的路径。 */
 export const PLUTIL_PATH = '/usr/bin/plutil'
 
-/** Arguments for plutil to convert plist to JSON on stdout (append plist path). */
+/** 用于 plutil 的参数，将 plist 转换为 JSON 并输出到标准输出（需要附加 plist 路径）。 */
 export const PLUTIL_ARGS_PREFIX = ['-convert', 'json', '-o', '-', '--'] as const
 
-/** Subprocess timeout in milliseconds. */
+/** 子进程超时时间（毫秒）。 */
 export const MDM_SUBPROCESS_TIMEOUT_MS = 5000
 
 /**
- * Build the list of macOS plist paths in priority order (highest first).
- * Includes system-managed device and per-user policy locations.
+ * 按优先级顺序（最高优先）构建 macOS plist 路径列表。
+ * 包括系统管理的设备和每用户策略位置。
  */
 export function getMacOSPlistPaths(): Array<{ path: string; label: string }> {
   let username = ''
   try {
     username = userInfo().username
   } catch {
-    // ignore
+    // 忽略
   }
 
   const paths: Array<{ path: string; label: string }> = []

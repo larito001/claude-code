@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react'
-import { getIsNonInteractiveSession } from '../bootstrap/state.js'
 import { verifyApiKey } from '../services/api/claude.js'
 import { getAnthropicApiKeyWithSource, getApiKeyFromApiKeyHelper } from '../utils/auth.js'
 
@@ -12,19 +11,20 @@ export type VerificationStatus =
 
 export type ApiKeyVerificationResult = {
   status: VerificationStatus
+  /** 执行 reverify 对应的业务处理。 */
   reverify: () => Promise<void>
   error: Error | null
 }
 
+/** 管理 use Api Key Verification 对应的数据或状态。 */
 export function useApiKeyVerification(): ApiKeyVerificationResult {
+  /** 执行 [status, set Status] 对应的业务处理。 */
   const [status, setStatus] = useState<VerificationStatus>(() => {
-    // Use skipRetrievingKeyFromApiKeyHelper to avoid executing apiKeyHelper
-    // before trust dialog is shown (security: prevents RCE via settings.json)
+    // 使用 skipRetrievingKeyFromApiKeyHelper 来避免在信任对话框显示前执行 apiKeyHelper（安全：防止通过 settings.json 进行 RCE）
     const { key, source } = getAnthropicApiKeyWithSource({
       skipRetrievingKeyFromApiKeyHelper: true,
     })
-    // If apiKeyHelper is configured, we have a key source even though we
-    // haven't executed it yet - return 'loading' to indicate we'll verify later
+    // 如果 apiKeyHelper 已配置，即使我们尚未执行它，我们也有一个密钥源 - 返回 'loading' 表示后续会验证
     if (key || source === 'apiKeyHelper') {
       return 'loading'
     }
@@ -32,10 +32,10 @@ export function useApiKeyVerification(): ApiKeyVerificationResult {
   })
   const [error, setError] = useState<Error | null>(null)
 
+  /** 校验 verify 对应的数据或状态。 */
   const verify = useCallback(async (): Promise<void> => {
-    // Warm the apiKeyHelper cache (no-op if not configured), then read from
-    // all sources. getAnthropicApiKeyWithSource() reads the now-warm cache.
-    await getApiKeyFromApiKeyHelper(getIsNonInteractiveSession())
+    // 预热 apiKeyHelper 缓存（如果未配置则无操作），然后从所有源读取。getAnthropicApiKeyWithSource() 读取现已温暖的缓存。
+    await getApiKeyFromApiKeyHelper()
     const { key: apiKey, source } = getAnthropicApiKeyWithSource()
     if (!apiKey) {
       if (source === 'apiKeyHelper') {
@@ -54,9 +54,7 @@ export function useApiKeyVerification(): ApiKeyVerificationResult {
       setStatus(newStatus)
       return
     } catch (error) {
-      // This happens when there an error response from the API but it's not an invalid API key error
-      // In this case, we still mark the API key as invalid - but we also log the error so we can
-      // display it to the user to be more helpful
+      // 当 API 返回错误响应但不是无效 API 密钥错误时发生。在这种情况下，我们仍然将 API 密钥标记为无效 - 但同时记录错误，以便向用户显示更友好的信息
       setError(error as Error)
       const newStatus = 'error'
       setStatus(newStatus)

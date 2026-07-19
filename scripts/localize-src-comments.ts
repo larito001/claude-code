@@ -85,6 +85,36 @@ function isDirective(content: string): boolean {
   )
 }
 
+/** 判断注释中是否仍有未翻译的英文自然语言行。 */
+function containsUntranslatedEnglish(content: string): boolean {
+  let inCodeFence = false
+  for (const rawLine of content.split(/\r?\n/gu)) {
+    const line = rawLine.trim()
+    if (line.startsWith('```')) {
+      inCodeFence = !inCodeFence
+      continue
+    }
+    if (inCodeFence || !ENGLISH_WORD_PATTERN.test(line) || CJK_PATTERN.test(line)) {
+      continue
+    }
+    if (isDirective(line)) continue
+
+    const prose = line
+      .replace(/`[^`]*`/gu, '')
+      .replace(/https?:\/\/\S+/giu, '')
+      .replace(/^@(?:param|returns?|throws?|typeParam)\b(?:\s+\S+)?\s*/iu, '')
+      .trim()
+    if (!ENGLISH_WORD_PATTERN.test(prose)) continue
+
+    const words = prose.match(/[A-Za-z]{3,}/gu) ?? []
+    if (words.length > 0 && words.every(word => word === word.toUpperCase())) {
+      continue
+    }
+    return true
+  }
+  return false
+}
+
 function lineIndent(source: string, position: number): string {
   const lineStart = Math.max(source.lastIndexOf('\n', position - 1) + 1, 0)
   const prefix = source.slice(lineStart, position)
@@ -100,16 +130,25 @@ function collectCommentBlocks(source: string, scriptKind: ts.ScriptKind): Commen
     scriptKind,
   )
   const commentRanges = new Map<string, ts.CommentRange>()
+  function addRanges(items: ts.CommentRange[] | undefined): void {
+    for (const range of items ?? []) commentRanges.set(`${range.pos}:${range.end}`, range)
+  }
   function collect(node: ts.Node): void {
-    for (const range of ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []) {
-      commentRanges.set(`${range.pos}:${range.end}`, range)
-    }
-    for (const range of ts.getTrailingCommentRanges(source, node.getEnd()) ?? []) {
-      commentRanges.set(`${range.pos}:${range.end}`, range)
-    }
+    addRanges(ts.getLeadingCommentRanges(source, node.getFullStart()))
+    addRanges(ts.getTrailingCommentRanges(source, node.getEnd()))
     ts.forEachChild(node, collect)
   }
   collect(sourceFile)
+
+  // 空代码块中的注释没有相邻 AST 节点；从每一行开头补充扫描。
+  let lineStart = 0
+  while (lineStart < source.length) {
+    addRanges(ts.getLeadingCommentRanges(source, lineStart))
+    addRanges(ts.getTrailingCommentRanges(source, lineStart))
+    const nextLine = source.indexOf('\n', lineStart)
+    if (nextLine < 0) break
+    lineStart = nextLine + 1
+  }
   const ranges = [...commentRanges.values()]
     .toSorted((left, right) => left.pos - right.pos)
     .map(range => ({
@@ -137,11 +176,7 @@ function collectCommentBlocks(source: string, scriptKind: ts.ScriptKind): Commen
 
   return grouped.flatMap((range, id) => {
     const content = normalizeComment(range.raw)
-    if (
-      !ENGLISH_WORD_PATTERN.test(content) ||
-      CJK_PATTERN.test(content) ||
-      isDirective(content)
-    ) {
+    if (!containsUntranslatedEnglish(content) || isDirective(content)) {
       return []
     }
     return [

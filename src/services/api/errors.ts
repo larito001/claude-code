@@ -119,6 +119,8 @@ export const INVALID_API_KEY_ERROR_MESSAGE =
   'Missing API key · Set DEEPSEEK_API_KEY in .env and restart'
 export const INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL =
   'Invalid API key · Update DEEPSEEK_API_KEY in .env'
+export const INVALID_API_KEY_ERROR_MESSAGE_HELPER =
+  'Invalid API key returned by apiKeyHelper · Update the command in settings'
 export const ORG_DISABLED_ERROR_MESSAGE_ENV_KEY =
   'The configured API key belongs to a disabled organization · Update the key in .env'
 export const REPEATED_529_ERROR_MESSAGE = 'Repeated 529 Overloaded errors'
@@ -300,9 +302,9 @@ function logToolUseToolResultMismatch(
       }
     }
 
-    // Log to local feature configuration
+    // 记录到本地功能配置
   } catch (_) {
-    // Ignore errors in debug logging
+    // 在调试日志中忽略错误
   }
 }
 
@@ -586,13 +588,14 @@ export function getAssistantMessageFromError(
   ) {
     // 检查API密钥是否来自外部来源
     const { source } = getAnthropicApiKeyWithSource()
-    const isExternalSource = source === 'ANTHROPIC_API_KEY'
-
     return createAssistantAPIErrorMessage({
       error: 'authentication_failed',
-      content: isExternalSource
-        ? INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL
-        : INVALID_API_KEY_ERROR_MESSAGE,
+      content:
+        source === 'apiKeyHelper'
+          ? INVALID_API_KEY_ERROR_MESSAGE_HELPER
+          : source === 'ANTHROPIC_API_KEY'
+            ? INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL
+            : INVALID_API_KEY_ERROR_MESSAGE,
     })
   }
 

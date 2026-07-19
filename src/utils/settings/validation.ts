@@ -9,8 +9,8 @@ import { SettingsSchema } from './types.js'
 import { getValidationTip } from './validationTips.js'
 
 /**
- * Helper type guards for specific Zod v4 issue types
- * In v4, issue types have different structures than v3
+ * 针对特定 Zod v4 问题类型的辅助类型守卫
+ * 在 v4 中，问题类型与 v3 具有不同的结构
  */
 function isInvalidTypeIssue(issue: ZodIssue): issue is ZodIssue & {
   code: 'invalid_type'
@@ -20,6 +20,7 @@ function isInvalidTypeIssue(issue: ZodIssue): issue is ZodIssue & {
   return issue.code === 'invalid_type'
 }
 
+/** 判断是否满足 is Invalid Value Issue 对应的数据或状态。 */
 function isInvalidValueIssue(issue: ZodIssue): issue is ZodIssue & {
   code: 'invalid_value'
   values: unknown[]
@@ -28,12 +29,14 @@ function isInvalidValueIssue(issue: ZodIssue): issue is ZodIssue & {
   return issue.code === 'invalid_value'
 }
 
+/** 判断是否满足 is Unrecognized Keys Issue 对应的数据或状态。 */
 function isUnrecognizedKeysIssue(
   issue: ZodIssue,
 ): issue is ZodIssue & { code: 'unrecognized_keys'; keys: string[] } {
   return issue.code === 'unrecognized_keys'
 }
 
+/** 判断是否满足 is Too Small Issue 对应的数据或状态。 */
 function isTooSmallIssue(issue: ZodIssue): issue is ZodIssue & {
   code: 'too_small'
   minimum: number | bigint
@@ -42,31 +45,31 @@ function isTooSmallIssue(issue: ZodIssue): issue is ZodIssue & {
   return issue.code === 'too_small'
 }
 
-/** Field path in dot notation (e.g., "permissions.defaultMode", "env.DEBUG") */
+/** 点号表示法的字段路径（例如 "permissions.defaultMode", "env.DEBUG"） */
 export type FieldPath = string
 
 export type ValidationError = {
-  /** Relative file path */
+  /** 相对文件路径 */
   file?: string
-  /** Field path in dot notation */
+  /** 点号表示法的字段路径 */
   path: FieldPath
-  /** Human-readable error message */
+  /** 人类可读的错误消息 */
   message: string
-  /** Expected value or type */
+  /** 期望的值或类型 */
   expected?: string
-  /** The actual invalid value that was provided */
+  /** 实际提供的无效值 */
   invalidValue?: unknown
-  /** Suggestion for fixing the error */
+  /** 修复错误的建议 */
   suggestion?: string
-  /** Link to relevant documentation */
+  /** 相关文档链接 */
   docLink?: string
-  /** MCP-specific metadata - only present for MCP configuration errors */
+  /** 特定于 MCP 的元数据 - 仅存在于 MCP 配置错误中 */
   mcpErrorMetadata?: {
-    /** Which configuration scope this error came from */
+    /** 此错误来自哪个配置作用域 */
     scope: ConfigScope
-    /** The server name if error is specific to a server */
+    /** 如果错误特定于某个服务器，则为服务器名称 */
     serverName?: string
-    /** Severity of the error */
+    /** 错误的严重性 */
     severity?: 'fatal' | 'warning'
   }
 }
@@ -76,12 +79,8 @@ export type SettingsWithErrors = {
   errors: ValidationError[]
 }
 
-/**
- * Format a Zod validation error into human-readable validation errors
- */
-/**
- * Get the type string for an unknown value (for error messages)
- */
+/** 将 Zod 验证错误格式化为人类可读的验证错误 */
+/** 获取未知值的类型字符串（用于错误消息） */
 function getReceivedType(value: unknown): string {
   if (value === null) return 'null'
   if (value === undefined) return 'undefined'
@@ -89,11 +88,13 @@ function getReceivedType(value: unknown): string {
   return typeof value
 }
 
+/** 执行 extract Received From Message 对应的业务处理。 */
 function extractReceivedFromMessage(msg: string): string | undefined {
   const match = msg.match(/received (\w+)/)
   return match ? match[1] : undefined
 }
 
+/** 格式化 format Zod Error 对应的数据或状态。 */
 export function formatZodError(
   error: ZodError,
   filePath: string,
@@ -173,8 +174,8 @@ export function formatZodError(
 }
 
 /**
- * Validates that settings file content conforms to the SettingsSchema.
- * This is used during file edits to ensure the resulting file is valid.
+ * 验证设置文件内容是否符合 SettingsSchema。
+ * 在文件编辑期间使用，以确保生成的文件有效。
  */
 export function validateSettingsFileContent(content: string):
   | {
@@ -186,17 +187,17 @@ export function validateSettingsFileContent(content: string):
       fullSchema: string
     } {
   try {
-    // Parse the JSON first
+    // 首先解析 JSON
     const jsonData = jsonParse(content)
 
-    // Validate against SettingsSchema in strict mode
+    // 使用严格模式针对 SettingsSchema 进行验证
     const result = SettingsSchema().strict().safeParse(jsonData)
 
     if (result.success) {
       return { isValid: true }
     }
 
-    // Format the validation error in a helpful way
+    // 以有帮助的方式格式化验证错误
     const errors = formatZodError(result.error, 'settings')
     const errorMessage =
       'Settings validation failed:\n' +
@@ -217,9 +218,9 @@ export function validateSettingsFileContent(content: string):
 }
 
 /**
- * Filters invalid permission rules from raw parsed JSON data before schema validation.
- * This prevents one bad rule from poisoning the entire settings file.
- * Returns warnings for each filtered rule.
+ * 在模式验证之前，从原始解析的 JSON 数据中过滤无效的权限规则。
+ * 这可以防止一个坏规则污染整个设置文件。
+ * 返回每个已过滤规则的警告。
  */
 export function filterInvalidPermissionRules(
   data: unknown,

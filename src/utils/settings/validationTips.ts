@@ -1,6 +1,6 @@
 import type { ZodIssueCode } from 'zod/v4'
 
-// v4 ZodIssueCode is a value, not a type - use typeof to get the type
+// v4 ZodIssueCode 是一个值，不是类型——请使用 typeof 获取其类型
 type ZodIssueCodeType = (typeof ZodIssueCode)[keyof typeof ZodIssueCode]
 
 export type ValidationTip = {
@@ -19,6 +19,7 @@ export type TipContext = {
 }
 
 type TipMatcher = {
+  /** 判断是否满足 matches 对应的数据或状态。 */
   matches: (context: TipContext) => boolean
   tip: ValidationTip
 }
@@ -27,6 +28,7 @@ const DOCUMENTATION_BASE = 'https://code.claude.com/docs/en'
 
 const TIP_MATCHERS: TipMatcher[] = [
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.path === 'permissions.defaultMode' && ctx.code === 'invalid_value',
     tip: {
@@ -36,6 +38,7 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.path === 'apiKeyHelper' && ctx.code === 'invalid_type',
     tip: {
@@ -44,6 +47,7 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.path === 'cleanupPeriodDays' &&
       ctx.code === 'too_small' &&
@@ -54,6 +58,7 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.path.startsWith('env.') && ctx.code === 'invalid_type',
     tip: {
@@ -63,6 +68,7 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       (ctx.path === 'permissions.allow' || ctx.path === 'permissions.deny') &&
       ctx.code === 'invalid_type' &&
@@ -73,19 +79,21 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.path.includes('hooks') && ctx.code === 'invalid_type',
     tip: {
       suggestion:
-        // gh-31187 / CC-282: prior example showed {"matcher": {"tools": ["BashTool"]}}
-        // — an object format that never existed in the schema (matcher is z.string(),
-        // always has been). Users copied the tip's example and got the same validation
-        // error again. See matchesPattern() in hooks.ts: matcher is exact-match,
-        // pipe-separated ("Edit|Write"), or regex. Empty/"*" matches all.
+        // gh-31187 / CC-282: 之前的示例显示了 {"matcher": {"tools": ["BashTool"]}}
+        // — 一种在 schema 中从未存在过的对象格式（matcher 是 z.string()，
+        // 一直如此）。用户复制了提示中的示例，再次遇到相同的验证错误。
+        // 请参阅 hooks.ts 中的 matchesPattern()：matcher 是精确匹配、
+        // 管道分隔（"Edit|Write"）或正则表达式。空字符串或 "*" 匹配所有。
         'Hooks use a matcher + hooks array. The matcher is a string: a tool name ("Bash"), pipe-separated list ("Edit|Write"), or empty to match all. Example: {"PostToolUse": [{"matcher": "Edit|Write", "hooks": [{"type": "command", "command": "echo Done"}]}]}',
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.code === 'invalid_type' && ctx.expected === 'boolean',
     tip: {
@@ -94,6 +102,7 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean => ctx.code === 'unrecognized_keys',
     tip: {
       suggestion:
@@ -102,6 +111,7 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.code === 'invalid_value' && ctx.enumValues !== undefined,
     tip: {
@@ -109,6 +119,7 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.code === 'invalid_type' &&
       ctx.expected === 'object' &&
@@ -120,6 +131,7 @@ const TIP_MATCHERS: TipMatcher[] = [
     },
   },
   {
+    /** 判断是否满足 matches 对应的数据或状态。 */
     matches: (ctx): boolean =>
       ctx.path === 'permissions.additionalDirectories' &&
       ctx.code === 'invalid_type',
@@ -137,7 +149,9 @@ const PATH_DOC_LINKS: Record<string, string> = {
   hooks: `${DOCUMENTATION_BASE}/hooks`,
 }
 
+/** 获取 get Validation Tip 对应的数据或状态。 */
 export function getValidationTip(context: TipContext): ValidationTip | null {
+  /** 执行 matcher 对应的业务处理。 */
   const matcher = TIP_MATCHERS.find(m => m.matches(context))
 
   if (!matcher) return null
@@ -152,7 +166,7 @@ export function getValidationTip(context: TipContext): ValidationTip | null {
     tip.suggestion = `Valid values: ${context.enumValues.map(v => `"${v}"`).join(', ')}`
   }
 
-  // Add documentation link based on path prefix
+  // 基于路径前缀添加文档链接
   if (!tip.docLink && context.path) {
     const pathPrefix = context.path.split('.')[0]
     if (pathPrefix) {

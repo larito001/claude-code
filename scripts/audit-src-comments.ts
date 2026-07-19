@@ -209,30 +209,65 @@ function isToolDirective(comment: string): boolean {
   )
 }
 
+/** 判断注释中是否仍有未翻译的英文自然语言行。 */
+function containsUntranslatedEnglish(comment: string): boolean {
+  let inCodeFence = false
+  for (const rawLine of normalizeComment(comment).split(/\r?\n/gu)) {
+    const line = rawLine.trim()
+    if (line.startsWith('```')) {
+      inCodeFence = !inCodeFence
+      continue
+    }
+    if (inCodeFence || !ENGLISH_WORD_PATTERN.test(line) || CJK_PATTERN.test(line)) {
+      continue
+    }
+    if (isToolDirective(line)) continue
+
+    const prose = line
+      .replace(/`[^`]*`/gu, '')
+      .replace(/https?:\/\/\S+/giu, '')
+      .replace(/^@(?:param|returns?|throws?|typeParam)\b(?:\s+\S+)?\s*/iu, '')
+      .trim()
+    if (!ENGLISH_WORD_PATTERN.test(prose)) continue
+
+    const words = prose.match(/[A-Za-z]{3,}/gu) ?? []
+    if (words.length > 0 && words.every(word => word === word.toUpperCase())) {
+      continue
+    }
+    return true
+  }
+  return false
+}
+
 function auditEnglishComments(
   result: AuditResult,
   sourceFile: ts.SourceFile,
   sourceText: string,
 ): void {
   const ranges = new Map<string, ts.CommentRange>()
+  function addRanges(items: ts.CommentRange[] | undefined): void {
+    for (const range of items ?? []) ranges.set(`${range.pos}:${range.end}`, range)
+  }
   function collect(node: ts.Node): void {
-    for (const range of ts.getLeadingCommentRanges(sourceText, node.getFullStart()) ?? []) {
-      ranges.set(`${range.pos}:${range.end}`, range)
-    }
-    for (const range of ts.getTrailingCommentRanges(sourceText, node.getEnd()) ?? []) {
-      ranges.set(`${range.pos}:${range.end}`, range)
-    }
+    addRanges(ts.getLeadingCommentRanges(sourceText, node.getFullStart()))
+    addRanges(ts.getTrailingCommentRanges(sourceText, node.getEnd()))
     ts.forEachChild(node, collect)
   }
   collect(sourceFile)
 
+  // 空代码块中的注释没有相邻 AST 节点；从每一行开头补充扫描。
+  let lineStart = 0
+  while (lineStart < sourceText.length) {
+    addRanges(ts.getLeadingCommentRanges(sourceText, lineStart))
+    addRanges(ts.getTrailingCommentRanges(sourceText, lineStart))
+    const nextLine = sourceText.indexOf('\n', lineStart)
+    if (nextLine < 0) break
+    lineStart = nextLine + 1
+  }
+
   for (const range of [...ranges.values()].toSorted((left, right) => left.pos - right.pos)) {
     const comment = sourceText.slice(range.pos, range.end)
-    if (
-      !ENGLISH_WORD_PATTERN.test(comment) ||
-      CJK_PATTERN.test(comment) ||
-      isToolDirective(comment)
-    ) {
+    if (!containsUntranslatedEnglish(comment) || isToolDirective(comment)) {
       continue
     }
     result.englishComments.push({

@@ -11,7 +11,7 @@ import { MarketplaceSourceSchema } from '../plugins/schemas.js'
 import { CLAUDE_CODE_SETTINGS_SCHEMA_URL } from './constants.js'
 import { PermissionRuleSchema } from './permissionValidation.js'
 
-// Re-export hook schemas and types from centralized location for backward compatibility
+// 从集中位置重新导出钩子模式和类型以实现向后兼容
 export {
   type AgentHook,
   type BashCommandHook,
@@ -25,20 +25,16 @@ export {
   type PromptHook,
 } from '../../schemas/hooks.js'
 
-// Also import for use within this file
+// 同时导入以在此文件内使用
 import { type HookCommand, HooksSchema } from '../../schemas/hooks.js'
 import { count } from '../array.js'
 
-/**
- * Schema for environment variables
- */
+/** 环境变量的模式 */
 export const EnvironmentVariablesSchema = lazySchema(() =>
   z.record(z.string(), z.coerce.string()),
 )
 
-/**
- * Schema for permissions section
- */
+/** 权限部分的模式 */
 export const PermissionsSchema = lazySchema(() =>
   z
     .object({
@@ -85,8 +81,8 @@ export const PermissionsSchema = lazySchema(() =>
 )
 
 /**
- * Schema for extra marketplaces defined in repository settings
- * Same as KnownMarketplace but without lastUpdated (which is managed automatically)
+ * 在仓库设置中定义的额外市场模式
+ * 与 KnownMarketplace 相同，但无 lastUpdated（该字段自动管理）
  */
 export const ExtraKnownMarketplaceSchema = lazySchema(() =>
   z.object({
@@ -109,8 +105,8 @@ export const ExtraKnownMarketplaceSchema = lazySchema(() =>
 )
 
 /**
- * Schema for allowed MCP server entry in enterprise allowlist.
- * Supports matching by serverName, serverCommand, or serverUrl (mutually exclusive).
+ * 企业允许列表中允许的 MCP 服务器条目的模式。
+ * 支持按 serverName、serverCommand 或 serverUrl 匹配（互斥）。
  */
 export const AllowedMcpServerEntrySchema = lazySchema(() =>
   z
@@ -136,7 +132,7 @@ export const AllowedMcpServerEntrySchema = lazySchema(() =>
         .describe(
           'URL pattern with wildcard support (e.g., "https://*.example.com/*") for allowed remote MCP servers',
         ),
-      // Future extensibility: allowedTransports, requiredArgs, maxInstances, etc.
+      // 未来可扩展性：allowedTransports、requiredArgs、maxInstances 等。
     })
     .refine(
       data => {
@@ -158,8 +154,8 @@ export const AllowedMcpServerEntrySchema = lazySchema(() =>
 )
 
 /**
- * Schema for denied MCP server entry in enterprise denylist.
- * Supports matching by serverName, serverCommand, or serverUrl (mutually exclusive).
+ * 企业拒绝列表中拒绝的 MCP 服务器条目的模式。
+ * 支持按 serverName、serverCommand 或 serverUrl 匹配（互斥）。
  */
 export const DeniedMcpServerEntrySchema = lazySchema(() =>
   z
@@ -185,7 +181,7 @@ export const DeniedMcpServerEntrySchema = lazySchema(() =>
         .describe(
           'URL pattern with wildcard support (e.g., "https://*.example.com/*") for blocked remote MCP servers',
         ),
-      // Future extensibility: reason, blockedSince, etc.
+      // 未来可扩展性：reason、blockedSince 等。
     })
     .refine(
       data => {
@@ -207,43 +203,42 @@ export const DeniedMcpServerEntrySchema = lazySchema(() =>
 )
 
 /**
- * Unified schema for settings files
+ * 设置文件的统一模式
  *
- * ⚠️ BACKWARD COMPATIBILITY NOTICE ⚠️
+ * ⚠️ 向后兼容性通知 ⚠️
  *
- * This schema defines the structure of user settings files (.claude/settings.json).
- * We support backward-compatible changes! Here's how:
+ * 此模式定义用户设置文件 (.claude/settings.json) 的结构。
+ * 我们支持向后兼容的更改！方法如下：
  *
- * ✅ ALLOWED CHANGES:
- * - Adding new optional fields (always use .optional())
- * - Adding new enum values (keeping existing ones)
- * - Adding new properties to objects
- * - Making validation more permissive
- * - Using union types for gradual migration (e.g., z.union([oldType, newType]))
+ * ✅ 允许的更改：
+ * - 添加新的可选字段（始终使用 .optional()）
+ * - 添加新的枚举值（保留现有值）
+ * - 为对象添加新属性
+ * - 放宽验证限制
+ * - 使用联合类型进行渐进迁移（例如 z.union([oldType, newType])）
  *
- * ❌ BREAKING CHANGES TO AVOID:
- * - Removing fields (mark as deprecated instead)
- * - Removing enum values
- * - Making optional fields required
- * - Making types more restrictive
- * - Renaming fields without keeping the old name
+ * ❌ 应避免的破坏性更改：
+ * - 移除字段（应标记为已弃用）
+ * - 移除枚举值
+ * - 将可选字段改为必填
+ * - 使类型更严格
+ * - 重命名字段而不保留旧名称
  *
- * TO ENSURE BACKWARD COMPATIBILITY:
- * 1. Run: npm run test:file -- test/utils/settings/backward-compatibility.test.ts
- * 2. If tests fail, you've introduced a breaking change
- * 3. When adding new fields, add a test to BACKWARD_COMPATIBILITY_CONFIGS
+ * 为确保向后兼容性：
+ * 1. 运行：npm run test:file -- test/utils/settings/backward-compatibility.test.ts
+ * 2. 如果测试失败，说明引入了破坏性更改
+ * 3. 添加新字段时，在 BACKWARD_COMPATIBILITY_CONFIGS 中添加测试
  *
- * The settings system handles backward compatibility automatically:
- * - When updating settings, invalid fields are preserved in the file (see settings.ts lines 233-249)
- * - Type coercion via z.coerce (e.g., env vars convert numbers to strings)
- * - .passthrough() preserves unknown fields in permissions object
- * - Invalid settings are simply not used, but remain in the file to be fixed by the user
+ * 设置系统自动处理向后兼容性：
+ * - 更新设置时，无效字段保留在文件中（参见 settings.ts 第 233-249 行）
+ * - 通过 z.coerce 进行类型转换（例如环境变量将数字转为字符串）
+ * - .passthrough() 保留 permissions 对象中的未知字段
+ * - 无效设置仅不被使用，但保留在文件中供用户修复
  */
 
 /**
- * Surfaces lockable by `strictPluginOnlyCustomization`. Exported so the
- * schema preprocess (below) and the runtime helper (pluginOnlyPolicy.ts)
- * share one source of truth.
+ * 可由 `strictPluginOnlyCustomization` 锁定的配置项。导出以便
+ * 下面的模式预处理和运行时助手 (pluginOnlyPolicy.ts) 共享同一事实来源。
  */
 export const CUSTOMIZATION_SURFACES = [
   'skills',
@@ -252,6 +247,7 @@ export const CUSTOMIZATION_SURFACES = [
   'mcp',
 ] as const
 
+/** 渲染 Settings Schema 组件。 */
 export const SettingsSchema = lazySchema(() =>
   z
     .object({
@@ -277,10 +273,10 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Command to refresh GCP authentication (e.g., gcloud auth application-default login)',
         ),
-      // Gated so the SDK generator (which runs without CLAUDE_CODE_ENABLE_XAA)
-      // doesn't surface this in GlobalClaudeSettings. Read via getXaaIdpSettings().
-      // .passthrough() on the outer object keeps an existing settings.json key
-      // alive across env-var-off sessions — it's just not schema-validated then.
+      // 受保护，使得 SDK 生成器（未设置 CLAUDE_CODE_ENABLE_XAA 时运行）
+      // 不会在 GlobalClaudeSettings 中暴露此项。通过 getXaaIdpSettings() 读取。
+      // 外部对象上的 .passthrough() 在环境变量关闭的会话中保持已有的 settings.json 键
+      // 存活——只是此时不进行模式验证。
       ...(isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_XAA)
         ? {
             xaaIdp: z
@@ -333,7 +329,7 @@ export const SettingsSchema = lazySchema(() =>
       env: EnvironmentVariablesSchema()
         .optional()
         .describe('Environment variables to set for Claude Code sessions'),
-      // Attribution for commits and PRs
+      // 提交和拉取请求的归属信息
       attribution: z
         .object({
           commit: z
@@ -376,7 +372,7 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe('Override the default model used by Claude Code'),
-      // Enterprise allowlist of models
+      // 企业模型允许列表
       availableModels: z
         .array(z.string())
         .optional()
@@ -396,24 +392,24 @@ export const SettingsSchema = lazySchema(() =>
             'model ID (e.g. a Bedrock inference profile ARN). Typically set in managed settings by ' +
             'enterprise administrators.',
         ),
-      // Whether to automatically approve all MCP servers in the project
+      // 是否自动批准项目中的所有 MCP 服务器
       enableAllProjectMcpServers: z
         .boolean()
         .optional()
         .describe(
           'Whether to automatically approve all MCP servers in the project',
         ),
-      // List of approved MCP servers from .mcp.json
+      // 来自 .mcp.json 的已批准 MCP 服务器列表
       enabledMcpjsonServers: z
         .array(z.string())
         .optional()
         .describe('List of approved MCP servers from .mcp.json'),
-      // List of rejected MCP servers from .mcp.json
+      // 来自 .mcp.json 的已拒绝 MCP 服务器列表
       disabledMcpjsonServers: z
         .array(z.string())
         .optional()
         .describe('List of rejected MCP servers from .mcp.json'),
-      // Enterprise allowlist of MCP servers
+      // 企业 MCP 服务器允许列表
       allowedMcpServers: z
         .array(AllowedMcpServerEntrySchema())
         .optional()
@@ -423,7 +419,7 @@ export const SettingsSchema = lazySchema(() =>
             'If undefined, all servers are allowed. If empty array, no servers are allowed. ' +
             'Denylist takes precedence - if a server is on both lists, it is denied.',
         ),
-      // Enterprise denylist of MCP servers
+      // 企业 MCP 服务器拒绝列表
       deniedMcpServers: z
         .array(DeniedMcpServerEntrySchema())
         .optional()
@@ -455,12 +451,12 @@ export const SettingsSchema = lazySchema(() =>
         })
         .optional()
         .describe('Git worktree configuration for --worktree flag.'),
-      // Whether to disable all hooks and statusLine
+      // 是否禁用所有钩子和 statusLine
       disableAllHooks: z
         .boolean()
         .optional()
         .describe('Disable all hooks and statusLine execution'),
-      // Which shell backs input-box `!` (see docs/design/ps-shell-selection.md §4.2)
+      // 作为输入框 `!` 后端的 shell（参见 docs/design/ps-shell-selection.md §4.2）
       defaultShell: z
         .enum(['bash', 'powershell'])
         .optional()
@@ -468,7 +464,7 @@ export const SettingsSchema = lazySchema(() =>
           'Default shell for input-box ! commands. ' +
             "Defaults to 'bash' on all platforms (no Windows auto-flip).",
         ),
-      // Only run hooks defined in managed settings (managed-settings.json)
+      // 仅运行托管设置 (managed-settings.json) 中定义的钩子
       allowManagedHooksOnly: z
         .boolean()
         .optional()
@@ -476,7 +472,7 @@ export const SettingsSchema = lazySchema(() =>
           'When true (and set in managed settings), only hooks from managed settings run. ' +
             'User, project, and local hooks are ignored.',
         ),
-      // Allowlist of URL patterns HTTP hooks may target (follows allowedMcpServers precedent)
+      // HTTP 钩子可访问的 URL 模式允许列表（遵循 allowedMcpServers 先例）
       allowedHttpHookUrls: z
         .array(z.string())
         .optional()
@@ -487,7 +483,7 @@ export const SettingsSchema = lazySchema(() =>
             'If undefined, all URLs are allowed. If empty array, no HTTP hooks are allowed. ' +
             'Arrays merge across settings sources (same semantics as allowedMcpServers).',
         ),
-      // Allowlist of env var names HTTP hooks may interpolate into headers
+      // HTTP 钩子可插入到标头中的环境变量名称允许列表
       httpHookAllowedEnvVars: z
         .array(z.string())
         .optional()
@@ -497,7 +493,7 @@ export const SettingsSchema = lazySchema(() =>
             'If undefined, no restriction is applied. ' +
             'Arrays merge across settings sources (same semantics as allowedMcpServers).',
         ),
-      // Only use permission rules defined in managed settings (managed-settings.json)
+      // 仅使用托管设置 (managed-settings.json) 中定义的权限规则
       allowManagedPermissionRulesOnly: z
         .boolean()
         .optional()
@@ -505,7 +501,7 @@ export const SettingsSchema = lazySchema(() =>
           'When true (and set in managed settings), only permission rules (allow/deny/ask) from managed settings are respected. ' +
             'User, project, local, and CLI argument permission rules are ignored.',
         ),
-      // Only read MCP allowlist policy from managed settings
+      // 仅从托管设置读取 MCP 允许列表策略
       allowManagedMcpServersOnly: z
         .boolean()
         .optional()
@@ -514,15 +510,10 @@ export const SettingsSchema = lazySchema(() =>
             'deniedMcpServers still merges from all sources, so users can deny servers for themselves. ' +
             'Users can still add their own MCP servers, but only the admin-defined allowlist applies.',
         ),
-      // Force customizations through plugins only (LinkedIn ask via GTM)
+      // 仅通过插件强制自定义（LinkedIn通过GTM请求）
       strictPluginOnlyCustomization: z
         .preprocess(
-          // Forwards-compat: drop unknown surface names so a future enum
-          // value (e.g. 'commands') doesn't fail safeParse and null out the
-          // ENTIRE managed-settings file (settings.ts:101). ["skills",
-          // "commands"] on an old client → ["skills"] → locks what it knows,
-          // ignores what it doesn't. Degrades to less-locked, never to
-          // everything-unlocked.
+          // 向前兼容：丢弃未知的表面名称，这样未来的枚举值（如'commands'）不会导致safeParse失败并清空整个managed-settings文件（settings.ts:101）。旧客户端上的["skills","commands"]变为["skills"]→锁定已知项，忽略未知项。降级为较少锁定，绝不会变为完全解锁。
           v =>
             Array.isArray(v)
               ? v.filter(x =>
@@ -532,11 +523,7 @@ export const SettingsSchema = lazySchema(() =>
           z.union([z.boolean(), z.array(z.enum(CUSTOMIZATION_SURFACES))]),
         )
         .optional()
-        // Non-array invalid values ("skills" string, {object}) pass through
-        // the preprocess unchanged and would fail the union → null the whole
-        // managed-settings file. .catch drops the field to undefined instead.
-        // Degrades to unlocked-for-this-field, never to everything-broken.
-        // Doctor flags the raw value.
+        // 非数组的无效值（如 "skills" 字符串、{object}）会原样通过预处理，并导致联合类型失败 → 整个 managed-settings 文件变为 null。.catch 将该字段降级为 undefined 而非整体崩溃。降级为“此字段未锁定”，而绝不会变成“全部损坏”。Doctor 会标记原始值。
         .catch(undefined)
         .describe(
           'When set in managed settings, blocks non-plugin customization sources for the listed surfaces. ' +
@@ -546,7 +533,7 @@ export const SettingsSchema = lazySchema(() =>
             'Composes with strictKnownMarketplaces for end-to-end admin control — plugins gated by ' +
             'marketplace allowlist, everything else blocked here.',
         ),
-      // Status line for custom status line display
+      // 自定义状态行显示的状态行
       statusLine: z
         .object({
           type: z.literal('command'),
@@ -555,7 +542,7 @@ export const SettingsSchema = lazySchema(() =>
         })
         .optional()
         .describe('Custom status line display configuration'),
-      // Enabled plugins using marketplace-first format
+      // 使用市场优先格式启用的插件
       enabledPlugins: z
         .record(
           z.string(),
@@ -565,19 +552,11 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Enabled plugins using plugin-id@marketplace-id format. Example: { "formatter@anthropic-tools": true }. Also supports extended format with version constraints.',
         ),
-      // Extra marketplaces for this repository (usually for project settings)
+      // 此仓库的额外市场（通常用于项目设置）
       extraKnownMarketplaces: z
         .record(z.string(), ExtraKnownMarketplaceSchema())
         .check(ctx => {
-          // For settings sources, key must equal source.name. diffMarketplaces
-          // looks up materialized state by dict key; addMarketplaceSource stores
-          // under marketplace.name (= source.name for settings). A mismatch means
-          // the reconciler never converges — every session: key-lookup misses →
-          // 'missing' → source-idempotency returns alreadyMaterialized but
-          // installed++ anyway → pointless cache clears. For github/git/url the
-          // name comes from a fetched marketplace.json (mismatch is expected and
-          // benign); for settings, both key and name are user-authored in the
-          // same JSON object.
+          // 对于设置源，键必须等于source.name。diffMarketplaces通过字典键查找物化状态；addMarketplaceSource存储在marketplace.name下（对于设置，等于source.name）。不匹配意味着协调器永不收敛——每个会话：键查找未命中→'missing'→源幂等性返回alreadyMaterialized但仍在增加installed++→无意义的缓存清除。对于github/git/url，名称来自获取的marketplace.json（不匹配是预期的且无害）；对于设置，键和名称都是用户在同一JSON对象中编写的。
           for (const [key, entry] of Object.entries(ctx.value)) {
             if (
               entry.source.source === 'settings' &&
@@ -598,8 +577,8 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Additional marketplaces to make available for this repository. Typically used in repository .claude/settings.json to ensure team members have required plugin sources.',
         ),
-      // Enterprise strict list of allowed marketplace sources (policy settings only)
-      // When set, ONLY these exact sources can be added. Check happens BEFORE download.
+      // 企业允许的市场来源严格列表（仅策略设置）
+      // 设置后，只能添加这些确切的来源。检查发生在下载之前。
       strictKnownMarketplaces: z
         .array(MarketplaceSourceSchema())
         .optional()
@@ -610,8 +589,8 @@ export const SettingsSchema = lazySchema(() =>
             'Note: this is a policy gate only — it does NOT register marketplaces. ' +
             'To pre-register allowed marketplaces for users, also set extraKnownMarketplaces.',
         ),
-      // Enterprise blocklist of marketplace sources (policy settings only)
-      // When set, these exact sources are blocked. Check happens BEFORE download.
+      // 企业禁止的市场来源列表（仅策略设置）
+      // 设置后，这些确切的来源被阻止。检查发生在下载之前。
       blockedMarketplaces: z
         .array(MarketplaceSourceSchema())
         .optional()
@@ -812,14 +791,7 @@ export const SettingsSchema = lazySchema(() =>
               ),
           }
         : {}),
-      // Teams/Enterprise opt-IN for channel notifications. Default OFF.
-      // MCP servers that declare the claude/channel capability can push
-      // inbound messages into the conversation; for managed orgs this only
-      // works when explicitly enabled. Which servers can connect at all is
-      // still governed by allowedMcpServers/deniedMcpServers. Not
-      // feature-spread: MCP_CHANNELS is external:true, and the spread
-      // wrecks type inference for allowedChannelPlugins (the .passthrough()
-      // catch-all gives {} instead of the array type).
+      // Teams/Enterprise 选择加入渠道通知。默认关闭。声明了claude/channel能力的MCP服务器可以将入站消息推送到对话中；对于托管组织，仅在显式启用时有效。哪些服务器可以连接仍然由allowedMcpServers/deniedMcpServers控制。未进行特性传播：MCP_CHANNELS是external:true，传播破坏了allowedChannelPlugins的类型推断（.passthrough()的catch-all给出{}而不是数组类型）。
       channelsEnabled: z
         .boolean()
         .optional()
@@ -828,10 +800,7 @@ export const SettingsSchema = lazySchema(() =>
             'claude/channel capability pushing inbound messages). Default off. ' +
             'Set true to allow; users then select servers via --channels.',
         ),
-      // Org-level channel plugin allowlist. When set, REPLACES the
-      // Anthropic ledger — admin owns the trust decision. Undefined means
-      // fall back to the ledger. Plugin-only entry shape (same as the
-      // ledger); server-kind entries still need the dev flag.
+      // 组织级渠道插件允许列表。设置后，替换Anthropic ledger——管理员拥有信任决策。未定义则回退到ledger。仅插件条目形状（与ledger相同）；服务器类条目仍需要开发标志。
       allowedChannelPlugins: z
         .array(
           z.object({
@@ -987,22 +956,16 @@ export const SettingsSchema = lazySchema(() =>
     .passthrough(),
 )
 
-/**
- * Internal type for plugin hooks - includes plugin context for execution.
- * Not a Zod schema since it's not user-facing (plugins provide native hooks).
- */
+/** 插件钩子的内部类型 - 包括用于执行的插件上下文。不是Zod模式，因为它不面向用户（插件提供原生钩子）。 */
 export type PluginHookMatcher = {
   matcher?: string
   hooks: HookCommand[]
   pluginRoot: string
   pluginName: string
-  pluginId: string // format: "pluginName@marketplaceName"
+  pluginId: string // 格式："pluginName@marketplaceName"
 }
 
-/**
- * Internal type for skill hooks - includes skill context for execution.
- * Not a Zod schema since it's not user-facing (skills provide native hooks).
- */
+/** 技能钩子的内部类型 - 包括用于执行的技能上下文。不是Zod模式，因为它不面向用户（技能提供原生钩子）。 */
 export type SkillHookMatcher = {
   matcher?: string
   hooks: HookCommand[]
@@ -1018,44 +981,34 @@ export type DeniedMcpServerEntry = z.infer<
 >
 export type SettingsJson = z.infer<ReturnType<typeof SettingsSchema>>
 
-/**
- * Type guard for MCP server entry with serverName
- */
+/** 带有serverName的MCP服务器条目的类型保护 */
 export function isMcpServerNameEntry(
   entry: AllowedMcpServerEntry | DeniedMcpServerEntry,
 ): entry is { serverName: string } {
   return 'serverName' in entry && entry.serverName !== undefined
 }
 
-/**
- * Type guard for MCP server entry with serverCommand
- */
+/** 带有serverCommand的MCP服务器条目的类型保护 */
 export function isMcpServerCommandEntry(
   entry: AllowedMcpServerEntry | DeniedMcpServerEntry,
 ): entry is { serverCommand: string[] } {
   return 'serverCommand' in entry && entry.serverCommand !== undefined
 }
 
-/**
- * Type guard for MCP server entry with serverUrl
- */
+/** 带有serverUrl的MCP服务器条目的类型保护 */
 export function isMcpServerUrlEntry(
   entry: AllowedMcpServerEntry | DeniedMcpServerEntry,
 ): entry is { serverUrl: string } {
   return 'serverUrl' in entry && entry.serverUrl !== undefined
 }
 
-/**
- * User configuration values for MCPB MCP servers
- */
+/** MCPB MCP服务器的用户配置值 */
 export type UserConfigValues = Record<
   string,
   string | number | boolean | string[]
 >
 
-/**
- * Plugin configuration stored in settings.json
- */
+/** 存储在settings.json中的插件配置 */
 export type PluginConfig = {
   mcpServers?: {
     [serverName: string]: UserConfigValues

@@ -1,21 +1,20 @@
 /**
- * MDM (Mobile Device Management) profile enforcement for Claude Code managed settings.
+ * MDM（移动设备管理）配置文件强制应用于Claude Code托管设置。
  *
- * Reads enterprise settings from OS-level MDM configuration:
- * - macOS: `com.anthropic.claudecode` preference domain
- *   (MDM profiles at /Library/Managed Preferences/ only — not user-writable ~/Library/Preferences/)
- * - Windows: `HKLM\SOFTWARE\Policies\ClaudeCode` (admin-only)
- *   and `HKCU\SOFTWARE\Policies\ClaudeCode` (user-writable, lowest priority)
- * - Linux: No MDM equivalent (uses /etc/claude-code/managed-settings.json instead)
+ * 从操作系统级MDM配置读取企业设置：
+ * - macOS：`com.anthropic.claudecode` 偏好域
+ *   （仅位于 /Library/Managed Preferences/ 的MDM配置文件——不是用户可写的 ~/Library/Preferences/）
+ * - Windows：`HKLM\SOFTWARE\Policies\ClaudeCode`（仅管理员）
+ *   和 `HKCU\SOFTWARE\Policies\ClaudeCode`（用户可写，优先级最低）
+ * - Linux：无MDM等效机制（改用 /etc/claude-code/managed-settings.json）
  *
- * Policy settings use "first source wins" — the highest-priority source that exists
- * provides all policy settings. Priority (highest to lowest):
+ * 策略设置采用“最先来源获胜”——存在的最高优先级来源提供所有策略设置。优先级（从高到低）：
  *   remote → HKLM/plist → managed-settings.json → HKCU
  *
- * Architecture:
- *   constants.ts — shared constants and plist path builder (zero heavy imports)
- *   rawRead.ts   — subprocess I/O only (zero heavy imports, fires at main.tsx evaluation)
- *   settings.ts  — parsing, caching, first-source-wins logic (this file)
+ * 架构：
+ *   constants.ts — 共享常量和plist路径构建器（零重量导入）
+ *   rawRead.ts   — 仅子进程I/O（零重量导入，在main.tsx评估时触发）
+ *   settings.ts  — 解析、缓存、最先来源获胜逻辑（此文件）
  */
 
 import { join } from 'path'
@@ -47,7 +46,7 @@ import {
 } from './rawRead.js'
 
 // ---------------------------------------------------------------------------
-// Types and cache
+// 类型与缓存
 // ---------------------------------------------------------------------------
 
 type MdmResult = { settings: SettingsJson; errors: ValidationError[] }
@@ -57,21 +56,17 @@ let hkcuCache: MdmResult | null = null
 let mdmLoadPromise: Promise<void> | null = null
 
 // ---------------------------------------------------------------------------
-// Startup load — fires early, awaited before first settings read
+// 启动加载——尽早触发，在首次设置读取前等待
 // ---------------------------------------------------------------------------
 
-/**
- * Kick off async MDM/HKCU reads. Call this as early as possible in
- * startup so the subprocess runs in parallel with module loading.
- */
+/** 启动异步MDM/HKCU读取。尽可能在启动初期调用此函数，以便子进程与模块加载并行运行。 */
 export function startMdmSettingsLoad(): void {
   if (mdmLoadPromise) return
   mdmLoadPromise = (async () => {
     profileCheckpoint('mdm_load_start')
     const startTime = Date.now()
 
-    // Use the startup raw read if cli.tsx fired it, otherwise fire a fresh one.
-    // Both paths produce the same RawReadResult; consumeRawReadResult parses it.
+    // 如果cli.tsx已触发启动原始读取，则使用该结果；否则触发新的读取。两种路径产生相同的RawReadResult；consumeRawReadResult会解析它。
     const rawPromise = getMdmRawReadPromise() ?? fireRawRead()
     const { mdm, hkcu } = consumeRawReadResult(await rawPromise)
     mdmCache = mdm
@@ -91,16 +86,13 @@ export function startMdmSettingsLoad(): void {
           error_count: mdm.errors.length,
         })
       } catch {
-        // Diagnostic logging is best-effort
+        // 诊断日志记录尽力而为
       }
     }
   })()
 }
 
-/**
- * Await the in-flight MDM load. Call this before the first settings read.
- * If startMdmSettingsLoad() was called early enough, this resolves immediately.
- */
+/** 等待正在进行的MDM加载。在首次设置读取前调用此函数。如果startMdmSettingsLoad()足够早地被调用，此函数将立即解析。 */
 export async function ensureMdmSettingsLoaded(): Promise<void> {
   if (!mdmLoadPromise) {
     startMdmSettingsLoad()
@@ -109,59 +101,52 @@ export async function ensureMdmSettingsLoaded(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Sync cache readers — used by the settings pipeline (loadSettingsFromDisk)
+// 同步缓存读取器——由设置管道（loadSettingsFromDisk）使用
 // ---------------------------------------------------------------------------
 
 /**
- * Read admin-controlled MDM settings from the session cache.
+ * 从会话缓存中读取管理员控制的MDM设置。
  *
- * Returns settings from admin-only sources:
- * - macOS: /Library/Managed Preferences/ (requires root)
- * - Windows: HKLM registry (requires admin)
+ * 返回仅管理员来源的设置：
+ * - macOS：/Library/Managed Preferences/（需要root权限）
+ * - Windows：HKLM注册表（需要管理员权限）
  *
- * Does NOT include HKCU (user-writable) — use getHkcuSettings() for that.
+ * 不包括HKCU（用户可写）——请使用getHkcuSettings()获取。
  */
 export function getMdmSettings(): MdmResult {
   return mdmCache ?? EMPTY_RESULT
 }
 
-/**
- * Read HKCU registry settings (user-writable, lowest policy priority).
- * Only relevant on Windows — returns empty on other platforms.
- */
+/** 读取HKCU注册表设置（用户可写，最低策略优先级）。仅Windows相关——在其他平台上返回空值。 */
 export function getHkcuSettings(): MdmResult {
   return hkcuCache ?? EMPTY_RESULT
 }
 
 // ---------------------------------------------------------------------------
-// Cache management
+// 缓存管理
 // ---------------------------------------------------------------------------
 
-/**
- * Clear the MDM and HKCU settings caches, forcing a fresh read on next load.
- */
+/** 清除MDM和HKCU设置缓存，强制在下一次加载时重新读取。 */
 export function clearMdmSettingsCache(): void {
   mdmCache = null
   hkcuCache = null
   mdmLoadPromise = null
 }
 
-/**
- * Update the session caches directly. Used by the change detector poll.
- */
+/** 直接更新会话缓存。由变更检测轮询使用。 */
 export function setMdmSettingsCache(mdm: MdmResult, hkcu: MdmResult): void {
   mdmCache = mdm
   hkcuCache = hkcu
 }
 
 // ---------------------------------------------------------------------------
-// Refresh — fires a fresh raw read, parses, returns results.
-// Used by the 30-minute poll in changeDetector.ts.
+// 刷新——触发新的原始读取，解析，返回结果。
+// 由changeDetector.ts中的30分钟轮询使用。
 // ---------------------------------------------------------------------------
 
 /**
- * Fire a fresh MDM subprocess read and parse the results.
- * Does NOT update the cache — caller decides whether to apply.
+ * 触发新的MDM子进程读取并解析结果。
+ * 不更新缓存——调用者决定是否应用。
  */
 export async function refreshMdmSettings(): Promise<{
   mdm: MdmResult
@@ -172,13 +157,12 @@ export async function refreshMdmSettings(): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Parsing — converts raw subprocess output to validated MdmResult
+// 解析——将原始子进程输出转换为已验证的MdmResult
 // ---------------------------------------------------------------------------
 
 /**
- * Parse JSON command output (plutil stdout or registry JSON value) into SettingsJson.
- * Filters invalid permission rules before schema validation so one bad rule
- * doesn't cause the entire MDM settings to be rejected.
+ * 将JSON命令输出（plutil stdout或注册表JSON值）解析为SettingsJson。
+ * 在模式验证之前过滤无效的权限规则，这样一条坏规则不会导致整个MDM设置被拒绝。
  */
 export function parseCommandOutputAsSettings(
   stdout: string,
@@ -199,10 +183,10 @@ export function parseCommandOutputAsSettings(
 }
 
 /**
- * Parse reg query stdout to extract a registry string value.
- * Matches both REG_SZ and REG_EXPAND_SZ, case-insensitive.
+ * 解析reg query stdout以提取注册表字符串值。
+ * 匹配REG_SZ和REG_EXPAND_SZ，不区分大小写。
  *
- * Expected format:
+ * 预期格式：
  *     Settings    REG_SZ    {"json":"value"}
  */
 export function parseRegQueryStdout(
@@ -221,15 +205,12 @@ export function parseRegQueryStdout(
   return null
 }
 
-/**
- * Convert raw subprocess output into parsed MDM and HKCU results,
- * applying the first-source-wins policy.
- */
+/** 将原始子进程输出转换为解析后的MDM和HKCU结果，应用最先来源获胜策略。 */
 function consumeRawReadResult(raw: RawReadResult): {
   mdm: MdmResult
   hkcu: MdmResult
 } {
-  // macOS: plist result (first source wins — already filtered in mdmRawRead)
+  // macOS：plist结果（最先来源获胜——已在mdmRawRead中过滤）
   if (raw.plistStdouts && raw.plistStdouts.length > 0) {
     const { stdout, label } = raw.plistStdouts[0]!
     const result = parseCommandOutputAsSettings(stdout, label)
@@ -238,7 +219,7 @@ function consumeRawReadResult(raw: RawReadResult): {
     }
   }
 
-  // Windows: HKLM result
+  // Windows：HKLM结果
   if (raw.hklmStdout) {
     const jsonString = parseRegQueryStdout(raw.hklmStdout)
     if (jsonString) {
@@ -252,12 +233,12 @@ function consumeRawReadResult(raw: RawReadResult): {
     }
   }
 
-  // No admin MDM — check managed-settings.json before using HKCU
+  // 没有管理员MDM——在使用HKCU之前检查managed-settings.json
   if (hasManagedSettingsFile()) {
     return { mdm: EMPTY_RESULT, hkcu: EMPTY_RESULT }
   }
 
-  // Fall through to HKCU (already read in parallel)
+  // 回退到HKCU（已在并行中读取）
   if (raw.hkcuStdout) {
     const jsonString = parseRegQueryStdout(raw.hkcuStdout)
     if (jsonString) {
@@ -273,9 +254,7 @@ function consumeRawReadResult(raw: RawReadResult): {
 }
 
 /**
- * Check if file-based managed settings (managed-settings.json or any
- * managed-settings.d/*.json) exist and have content. Cheap sync check
- * used to skip HKCU when a higher-priority file-based source exists.
+ * 检查基于文件的托管设置（managed-settings.json或任何managed-settings.d/*.json）是否存在且有内容。用于在存在更高优先级的基于文件的来源时跳过HKCU的廉价同步检查。
  */
 function hasManagedSettingsFile(): boolean {
   try {
@@ -286,7 +265,7 @@ function hasManagedSettingsFile(): boolean {
       return true
     }
   } catch {
-    // fall through to drop-in check
+    // 降级到drop-in检查
   }
   try {
     const dropInDir = getManagedSettingsDropInDir()
@@ -306,11 +285,11 @@ function hasManagedSettingsFile(): boolean {
           return true
         }
       } catch {
-        // skip unreadable/malformed file
+        // 跳过不可读/格式错误的文件
       }
     }
   } catch {
-    // drop-in dir doesn't exist
+    // drop-in目录不存在
   }
   return false
 }

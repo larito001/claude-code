@@ -275,7 +275,7 @@ export async function setup(
   })
   initSinks()
 
-  void prefetchApiKeyFromApiKeyHelperIfSafe(getIsNonInteractiveSession()) // 安全预取——仅在信任已确认时执行
+  prefetchApiKeyFromApiKeyHelperIfSafe() // 安全预取——仅在信任已确认时执行
   profileCheckpoint('setup_after_prefetch')
 
   if (!isBareMode()) {

@@ -3,33 +3,33 @@ import { isClaudeSettingsPath } from '../permissions/filesystem.js'
 import { validateSettingsFileContent } from './validation.js'
 
 /**
- * Validates settings file edits to ensure the result conforms to SettingsSchema.
- * This is used by FileEditTool to avoid code duplication.
+ * 验证设置文件编辑，确保结果符合SettingsSchema。
+ * 这被FileEditTool用于避免代码重复。
  *
- * @param filePath - The file path being edited
- * @param originalContent - The original file content before edits
- * @param getUpdatedContent - A closure that returns the content after applying edits
- * @returns Validation result with error details if validation fails
+ * @param filePath - 被编辑的文件路径
+ * @param originalContent - 编辑前的原始文件内容
+ * @param getUpdatedContent - 返回应用编辑后内容的闭包
+ * @returns 验证结果，如果验证失败则包含错误详情
  */
 export function validateInputForSettingsFileEdit(
   filePath: string,
   originalContent: string,
   getUpdatedContent: () => string,
 ): Extract<ValidationResult, { result: false }> | null {
-  // Only validate Claude settings files
+  // 仅验证Claude设置文件
   if (!isClaudeSettingsPath(filePath)) {
     return null
   }
 
-  // Check if the current file (before edit) conforms to the schema
+  // 检查当前文件（编辑前）是否符合schema
   const beforeValidation = validateSettingsFileContent(originalContent)
 
   if (!beforeValidation.isValid) {
-    // If the before version is invalid, allow the edit (don't block it)
+    // 如果编辑前版本无效，允许编辑（不阻止）
     return null
   }
 
-  // If the before version is valid, ensure the after version is also valid
+  // 如果编辑前版本有效，确保编辑后版本也有效
   const updatedContent = getUpdatedContent()
   const afterValidation = validateSettingsFileContent(updatedContent)
 

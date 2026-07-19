@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto'
 import type { GoogleAuth } from 'google-auth-library'
 import {
   getAnthropicApiKey,
+  getApiKeyFromApiKeyHelper,
   refreshAndGetAwsCredentials,
   refreshGcpCredentialsIfNeeded,
 } from 'src/utils/auth.js'
@@ -290,8 +291,12 @@ export async function getAnthropicClient({
     return new AnthropicVertex(vertexArgs) as unknown as Anthropic
   }
 
+  const resolvedApiKey =
+    apiKey ??
+    getAnthropicApiKey() ??
+    (await getApiKeyFromApiKeyHelper())
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
-    apiKey: apiKey || getAnthropicApiKey(),
+    apiKey: resolvedApiKey,
     ...ARGS,
     ...(isDebugToStdErr() && { logger: createStderrLogger() }),
   }
@@ -354,7 +359,7 @@ function buildFetch(
         `[API REQUEST] ${new URL(url).pathname}${id ? ` ${CLIENT_REQUEST_ID_HEADER}=${id}` : ''} source=${source ?? 'unknown'}`,
       )
     } catch {
-      // never let logging crash the fetch
+      // 绝不要让日志记录导致 fetch 崩溃
     }
     return inner(input, { ...init, headers })
   }

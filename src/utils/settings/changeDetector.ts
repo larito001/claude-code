@@ -23,40 +23,22 @@ import {
 import { getSettingsFilePathForSource } from './settings.js'
 import { resetSettingsCache } from './settingsCache.js'
 
-/**
- * Time in milliseconds to wait for file writes to stabilize before processing.
- * This helps avoid processing partial writes or rapid successive changes.
- */
+/** 等待文件写入稳定后再处理的时间（毫秒）。这有助于避免处理部分写入或快速连续更改。 */
 const FILE_STABILITY_THRESHOLD_MS = 1000
 
-/**
- * Polling interval in milliseconds for checking file stability.
- * Used by chokidar's awaitWriteFinish option.
- * Must be lower than FILE_STABILITY_THRESHOLD_MS.
- */
+/** 检查文件稳定性的轮询间隔（毫秒）。由chokidar的 awaitWriteFinish 选项使用。必须低于 FILE_STABILITY_THRESHOLD_MS。 */
 const FILE_STABILITY_POLL_INTERVAL_MS = 500
 
-/**
- * Time window in milliseconds to consider a file change as internal.
- * If a file change occurs within this window after markInternalWrite() is called,
- * it's assumed to be from Claude Code itself and won't trigger a notification.
- */
+/** 将文件更改视为内部操作的时间窗口（毫秒）。如果在调用 markInternalWrite() 后的此窗口内发生文件更改，则假定来自 Claude Code 本身，不会触发通知。 */
 const INTERNAL_WRITE_WINDOW_MS = 5000
 
-/**
- * Poll interval for MDM settings (registry/plist) changes.
- * These can't be watched via filesystem events, so we poll periodically.
- */
-const MDM_POLL_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes
+/** MDM 设置（注册表/plist）更改的轮询间隔。这些无法通过文件系统事件监听，因此我们定期轮询。 */
+const MDM_POLL_INTERVAL_MS = 30 * 60 * 1000 // 30分钟
 
 /**
- * Grace period in milliseconds before processing a settings file deletion.
- * Handles the common delete-and-recreate pattern during auto-updates or when
- * another session starts up. If an `add` or `change` event fires within this
- * window (file was recreated), the deletion is cancelled and treated as a change.
+ * 处理设置文件删除前的宽限期（毫秒）。处理自动更新或另一会话启动时常见的删除-重建模式。如果在此窗口内触发了 `add` 或 `change` 事件（文件已重建），则取消删除并将其视为更改。
  *
- * Must exceed chokidar's awaitWriteFinish delay (stabilityThreshold + pollInterval)
- * so the grace window outlasts the write stability check on the recreated file.
+ * 必须超过 chokidar 的 awaitWriteFinish 延迟（stabilityThreshold + pollInterval），以便宽限期超过重建文件上的写入稳定性检查。
  */
 const DELETION_GRACE_MS =
   FILE_STABILITY_THRESHOLD_MS + FILE_STABILITY_POLL_INTERVAL_MS + 200
@@ -69,7 +51,7 @@ let disposed = false
 const pendingDeletions = new Map<string, ReturnType<typeof setTimeout>>()
 const settingsChanged = createSignal<[source: SettingSource]>()
 
-// Test overrides for timing constants
+// 时间常数的测试覆盖
 let testOverrides: {
   stabilityThreshold?: number
   pollInterval?: number
@@ -77,21 +59,19 @@ let testOverrides: {
   deletionGrace?: number
 } | null = null
 
-/**
- * Initialize file watching
- */
+/** 初始化文件监视 */
 export async function initialize(): Promise<void> {
   if (initialized || disposed) return
   initialized = true
 
-  // Start MDM poll for registry/plist changes (independent of filesystem watching)
+  // 启动 MDM 轮询，监测注册表/plist 更改（独立于文件系统监视）
   startMdmPoll()
 
-  // Register cleanup to properly dispose during graceful shutdown
+  // 注册清理，以便在优雅关闭期间正确释放资源
   registerCleanup(dispose)
 
   const { dirs, settingsFiles, dropInDir } = await getWatchTargets()
-  if (disposed) return // dispose() ran during the await
+  if (disposed) return // dispose() 在等待期间运行
   if (dirs.length === 0) return
 
   logForDebugging(
@@ -108,21 +88,18 @@ export async function initialize(): Promise<void> {
       pollInterval:
         testOverrides?.pollInterval ?? FILE_STABILITY_POLL_INTERVAL_MS,
     },
+    /** 执行 ignored 对应的业务处理。 */
     ignored: (path, stats) => {
-      // Ignore special file types (sockets, FIFOs, devices) - they cannot be watched
-      // and will error with EOPNOTSUPP on macOS.
+      // 忽略特殊文件类型（套接字、FIFO、设备）——它们无法被监视，在 macOS 上会报错 EOPNOTSUPP。
       if (stats && !stats.isFile() && !stats.isDirectory()) return true
-      // Ignore .git directories
+      // 忽略 .git 目录
       if (path.split(platformPath.sep).some(dir => dir === '.git')) return true
-      // Allow directories (chokidar needs them for directory-level watching)
-      // and paths without stats (chokidar's initial check before stat)
+      // 允许目录（chokidar 需要它们进行目录级监视）和没有状态信息的路径（chokidar 在 stat 前的初始检查）
       if (!stats || stats.isDirectory()) return false
-      // Only watch known settings files, ignore everything else in the directory
-      // Note: chokidar normalizes paths to forward slashes on Windows, so we
-      // normalize back to native format for comparison
+      // 仅监视已知的设置文件，忽略目录中的其他所有内容。注意：chokidar 在 Windows 上将路径规范化为正斜杠，因此我们将其规范回原生格式以进行比较。
       const normalized = platformPath.normalize(path)
       if (settingsFiles.has(normalized)) return false
-      // Also accept .json files inside the managed-settings.d/ drop-in directory
+      // 也接受 managed-settings.d/ 拖放目录中的 .json 文件
       if (
         dropInDir &&
         normalized.startsWith(dropInDir + platformPath.sep) &&
@@ -132,7 +109,7 @@ export async function initialize(): Promise<void> {
       }
       return true
     },
-    // Additional options for stability
+    // 稳定性的附加选项
     ignorePermissionErrors: true,
     usePolling: false, // Use native file system events
     atomic: true, // Handle atomic writes better
@@ -144,10 +121,7 @@ export async function initialize(): Promise<void> {
 }
 
 /**
- * Clean up file watcher. Returns a promise that resolves when chokidar's
- * close() settles — callers that need the watcher fully stopped before
- * removing the watched directory (e.g. test teardown) must await this.
- * Fire-and-forget is still valid where timing doesn't matter.
+ * 清理文件监视器。返回一个 promise，当 chokidar 的 close() 完成时解析——需要在移除监视目录之前完全停止监视器的调用者（例如测试拆卸）必须 await 此 promise。在时序无关紧要的情况下，fire-and-forget 仍然有效。
  */
 export function dispose(): Promise<void> {
   disposed = true
@@ -165,30 +139,21 @@ export function dispose(): Promise<void> {
   return w ? w.close() : Promise.resolve()
 }
 
-/**
- * Subscribe to settings changes
- */
+/** 订阅设置更改 */
 export const subscribe = settingsChanged.subscribe
 
-/**
- * Collect settings file paths and their deduplicated parent directories to watch.
- * Returns all potential settings file paths for watched directories, not just those
- * that exist at init time, so that newly-created files are also detected.
- */
+/** 收集设置文件路径及其去重的父目录以进行监视。返回监视目录的所有潜在设置文件路径，不仅仅是初始化时存在的那些，以便新创建的文件也能被检测到。 */
 async function getWatchTargets(): Promise<{
   dirs: string[]
   settingsFiles: Set<string>
   dropInDir: string | null
 }> {
-  // Map from directory to all potential settings files in that directory
+  // 从目录到该目录中所有潜在设置文件的映射
   const dirToSettingsFiles = new Map<string, Set<string>>()
   const dirsWithExistingFiles = new Set<string>()
 
   for (const source of SETTING_SOURCES) {
-    // Skip flagSettings - they're provided via CLI and won't change during the session.
-    // Additionally, they may be temp files in $TMPDIR which can contain special files
-    // (FIFOs, sockets) that cause the file watcher to hang or error.
-    // See: https://github.com/anthropics/claude-code/issues/16469
+    // 跳过 flagSettings——它们通过 CLI 提供，在会话期间不会更改。此外，它们可能是 $TMPDIR 中的临时文件，该目录可能包含导致文件监视器挂起或错误的特殊文件（FIFO、套接字）。参见：https://github.com/anthropics/claude-code/issues/16469
     if (source === 'flagSettings') {
       continue
     }
@@ -199,25 +164,25 @@ async function getWatchTargets(): Promise<{
 
     const dir = platformPath.dirname(path)
 
-    // Track all potential settings files in each directory
+    // 跟踪每个目录中的所有潜在设置文件
     if (!dirToSettingsFiles.has(dir)) {
       dirToSettingsFiles.set(dir, new Set())
     }
     dirToSettingsFiles.get(dir)!.add(path)
 
-    // Check if file exists - only watch directories that have at least one existing file
+    // 检查文件是否存在——仅监视至少包含一个现有文件的目录
     try {
       const stats = await stat(path)
       if (stats.isFile()) {
         dirsWithExistingFiles.add(dir)
       }
     } catch {
-      // File doesn't exist, that's fine
+      // 文件不存在，没问题
     }
   }
 
-  // For watched directories, include ALL potential settings file paths
-  // This ensures files created after init are also detected
+  // 对于被监视的目录，包含所有潜在的设置文件路径
+  // 这确保初始化后创建的文件也能被检测到
   const settingsFiles = new Set<string>()
   for (const dir of dirsWithExistingFiles) {
     const filesInDir = dirToSettingsFiles.get(dir)
@@ -228,10 +193,9 @@ async function getWatchTargets(): Promise<{
     }
   }
 
-  // Also watch the managed-settings.d/ drop-in directory for policy fragments.
-  // We add it as a separate watched directory so chokidar's depth:0 watches
-  // its immediate children (the .json files). Any .json file inside it maps
-  // to the 'policySettings' source.
+  // 同时监视 managed-settings.d/ 放置目录中的策略片段
+  // 我们将其添加为单独的监视目录，以便 chokidar 的 depth:0 监视其直接子文件（.json 文件）
+  // 其中的任何 .json 文件都映射到 'policySettings' 源
   let dropInDir: string | null = null
   const managedDropIn = getManagedSettingsDropInDir()
   try {
@@ -241,12 +205,13 @@ async function getWatchTargets(): Promise<{
       dropInDir = managedDropIn
     }
   } catch {
-    // Drop-in directory doesn't exist, that's fine
+    // 投放目录不存在，没问题
   }
 
   return { dirs: [...dirsWithExistingFiles], settingsFiles, dropInDir }
 }
 
+/** 设置并保存 setting Source To Config Change Source 对应的数据或状态。 */
 function settingSourceToConfigChangeSource(
   source: SettingSource,
 ): ConfigChangeSource {
@@ -263,12 +228,12 @@ function settingSourceToConfigChangeSource(
   }
 }
 
+/** 处理 handle Change 对应的数据或状态。 */
 function handleChange(path: string): void {
   const source = getSourceForPath(path)
   if (!source) return
 
-  // If a deletion was pending for this path (delete-and-recreate pattern),
-  // cancel the deletion — we'll process this as a change instead.
+  // 如果此路径有挂起的删除（删除并重新创建模式），则取消删除——我们将将其视为更改处理
   const pendingTimer = pendingDeletions.get(path)
   if (pendingTimer) {
     clearTimeout(pendingTimer)
@@ -278,15 +243,14 @@ function handleChange(path: string): void {
     )
   }
 
-  // Check if this was an internal write
+  // 检查这是否为内部写入
   if (consumeInternalWrite(path, INTERNAL_WRITE_WINDOW_MS)) {
     return
   }
 
   logForDebugging(`Detected change to ${path}`)
 
-  // Fire ConfigChange hook first — if blocked (exit code 2 or decision: 'block'),
-  // skip applying the change to the session
+  // 首先触发 ConfigChange 钩子——如果被阻塞（退出码 2 或 decision: 'block'），则跳过将会话应用于更改
   void executeConfigChangeHooks(
     settingSourceToConfigChangeSource(source),
     path,
@@ -299,15 +263,12 @@ function handleChange(path: string): void {
   })
 }
 
-/**
- * Handle a file being re-added (e.g. after a delete-and-recreate). Cancels any
- * pending deletion grace timer and treats the event as a change.
- */
+/** 处理文件被重新添加（例如在删除并重新创建之后）。取消任何挂起的删除宽限期计时器，并将事件视为更改 */
 function handleAdd(path: string): void {
   const source = getSourceForPath(path)
   if (!source) return
 
-  // Cancel any pending deletion — the file is back
+  // 取消任何挂起的删除——文件已恢复
   const pendingTimer = pendingDeletions.get(path)
   if (pendingTimer) {
     clearTimeout(pendingTimer)
@@ -315,30 +276,26 @@ function handleAdd(path: string): void {
     logForDebugging(`Cancelled pending deletion of ${path} — file was re-added`)
   }
 
-  // Treat as a change (re-read settings)
+  // 视为更改（重新读取设置）
   handleChange(path)
 }
 
-/**
- * Handle a file being deleted. Uses a grace period to absorb delete-and-recreate
- * patterns (e.g. another process or session replacing the file). If the file is
- * recreated within the grace period (detected via 'add' or 'change' event),
- * the deletion is cancelled and treated as a normal change instead.
- */
+/** 处理文件被删除。使用宽限期来吸收删除并重新创建模式（例如另一个进程或会话替换文件）。如果在宽限期内重新创建了文件（通过 'add' 或 'change' 事件检测到），则取消删除并视为普通的更改 */
 function handleDelete(path: string): void {
   const source = getSourceForPath(path)
   if (!source) return
 
   logForDebugging(`Detected deletion of ${path}`)
 
-  // If there's already a pending deletion for this path, let it run
+  // 如果此路径已有挂起的删除，则让其继续执行
   if (pendingDeletions.has(path)) return
 
+  /** 执行 timer 对应的业务处理。 */
   const timer = setTimeout(
     (p, src) => {
       pendingDeletions.delete(p)
 
-      // Fire ConfigChange hook first — if blocked, skip applying the deletion
+      // 首先触发 ConfigChange 钩子——如果被阻塞，则跳过应用删除
       void executeConfigChangeHooks(
         settingSourceToConfigChangeSource(src),
         p,
@@ -357,11 +314,12 @@ function handleDelete(path: string): void {
   pendingDeletions.set(path, timer)
 }
 
+/** 获取 get Source For Path 对应的数据或状态。 */
 function getSourceForPath(path: string): SettingSource | undefined {
-  // Normalize path because chokidar uses forward slashes on Windows
+  // 规范化路径，因为 chokidar 在 Windows 上使用正斜杠
   const normalizedPath = platformPath.normalize(path)
 
-  // Check if the path is inside the managed-settings.d/ drop-in directory
+  // 检查路径是否在 managed-settings.d/ 放置目录内
   const dropInDir = getManagedSettingsDropInDir()
   if (normalizedPath.startsWith(dropInDir + platformPath.sep)) {
     return 'policySettings'
@@ -372,12 +330,9 @@ function getSourceForPath(path: string): SettingSource | undefined {
   )
 }
 
-/**
- * Start polling for MDM settings changes (registry/plist).
- * Takes a snapshot of current MDM settings and compares on each tick.
- */
+/** 开始轮询 MDM 设置更改（注册表/plist）。获取当前 MDM 设置的快照，并在每个周期进行比较 */
 function startMdmPoll(): void {
-  // Capture initial snapshot (includes both admin MDM and user-writable HKCU)
+  // 捕获初始快照（包括管理员 MDM 和用户可写的 HKCU）
   const initial = getMdmSettings()
   const initialHkcu = getHkcuSettings()
   lastMdmSnapshot = jsonStringify({
@@ -400,7 +355,7 @@ function startMdmPoll(): void {
 
         if (currentSnapshot !== lastMdmSnapshot) {
           lastMdmSnapshot = currentSnapshot
-          // Update the cache so sync readers pick up new values
+          // 更新缓存，以便同步读取器获取新值
           setMdmSettingsCache(current, currentHkcu)
           logForDebugging('Detected MDM settings change via poll')
           fanOut('policySettings')
@@ -411,50 +366,32 @@ function startMdmPoll(): void {
     })()
   }, testOverrides?.mdmPollInterval ?? MDM_POLL_INTERVAL_MS)
 
-  // Don't let the timer keep the process alive
+  // 不要让计时器使进程保持活动状态
   mdmPollTimer.unref()
 }
 
 /**
- * Reset the settings cache, then notify all listeners.
+ * 重置设置缓存，然后通知所有监听器。
  *
- * The cache reset MUST happen here (single producer), not in each listener
- * (N consumers). Previously, listeners like useSettingsChange and
- * applySettingsChange reset defensively because some notification paths
- * (file-watch at :289/340, MDM poll at :385) did not reset before iterating
- * listeners. That defense caused N-way thrashing when N listeners were
- * subscribed: each listener cleared the cache, re-read from disk (populating
- * it), then the next listener cleared it again — N full disk reloads per
- * notification. Profile showed 5 loadSettingsFromDisk calls in 12ms when
- * remote managed settings resolved at startup.
+ * 缓存重置必须在此处进行（单一生产者），而不是在每个监听器（N个消费者）中进行。以前，像 useSettingsChange 和 applySettingsChange 这样的监听器会防御性地重置，因为某些通知路径（文件监视在 :289/340，MDM 轮询在 :385）在遍历监听器之前没有重置。这种防御性导致当订阅了N个监听器时会产生N-way颠簸：每个监听器清除缓存，从磁盘重新读取（填充缓存），然后下一个监听器再次清除它——每个通知进行N次完整的磁盘重载。性能分析显示，当远程托管设置在启动时解析时，在12ms内调用了5次 loadSettingsFromDisk。
  *
- * With the reset centralized here, one notification = one disk reload: the
- * first listener to call getSettingsWithErrors() pays the miss and
- * repopulates; all subsequent listeners hit the cache.
+ * 通过将重置集中在此处，一个通知 = 一次磁盘重载：第一个调用 getSettingsWithErrors() 的监听器承担缓存未命中并重新填充；所有后续监听器命中缓存。
  */
 function fanOut(source: SettingSource): void {
   resetSettingsCache()
   settingsChanged.emit(source)
 }
 
-/**
- * Manually notify listeners of a settings change.
- * Used for programmatic settings changes (e.g., remote managed settings refresh)
- * that don't involve file system changes.
- */
+/** 手动通知监听器设置更改。用于程序化设置更改（例如远程托管设置刷新），这些更改不涉及文件系统更改 */
 export function notifyChange(source: SettingSource): void {
   logForDebugging(`Programmatic settings change notification for ${source}`)
   fanOut(source)
 }
 
 /**
- * Reset internal state for testing purposes only.
- * This allows re-initialization after dispose().
- * Optionally accepts timing overrides for faster test execution.
+ * 仅用于测试目的重置内部状态。允许在 dispose() 后重新初始化。可选接受计时覆盖以实现更快的测试执行。
  *
- * Closes the watcher and returns the close promise so preload's afterEach
- * can await it BEFORE nuking perTestSettingsDir. Without this, chokidar's
- * pending awaitWriteFinish poll fires on the deleted dir → ENOENT (#25253).
+ * 关闭监视器并返回关闭 promise，以便 preload 的 afterEach 可以在清除 perTestSettingsDir 之前等待它。否则，chokidar 挂起的 awaitWriteFinish 轮询会在已删除的目录上触发 → ENOENT (#25253)
  */
 export function resetForTesting(overrides?: {
   stabilityThreshold?: number

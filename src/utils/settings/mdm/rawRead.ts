@@ -1,12 +1,11 @@
 /**
- * Minimal module for firing MDM subprocess reads without blocking the event loop.
- * Has minimal imports — only child_process, fs, and mdmConstants (which only imports os).
+ * 用于在不阻塞事件循环的情况下触发 MDM 子进程读取的最小模块。导入最少——仅有 child_process、fs 和 mdmConstants（后者仅导入 os）。
  *
- * Two usage patterns:
- * 1. Startup: startMdmRawRead() fires at main.tsx module evaluation, results consumed later via getMdmRawReadPromise()
- * 2. Poll/fallback: fireRawRead() creates a fresh read on demand (used by changeDetector and SDK entrypoint)
+ * 两种使用模式：
+ * 1. 启动时：startMdmRawRead() 在 main.tsx 模块评估时触发，结果稍后通过 getMdmRawReadPromise() 消费
+ * 2. 轮询/回退：fireRawRead() 按需创建新的读取（由 changeDetector 和 SDK 入口点使用）
  *
- * Raw stdout is consumed by mdmSettings.ts via consumeRawReadResult().
+ * 原始标准输出由 mdmSettings.ts 通过 consumeRawReadResult() 消费。
  */
 
 import { execFile } from 'child_process'
@@ -29,6 +28,7 @@ export type RawReadResult = {
 
 let rawReadPromise: Promise<RawReadResult> | null = null
 
+/** 执行 exec File Promise 对应的业务处理。 */
 function execFilePromise(
   cmd: string,
   args: string[],
@@ -47,10 +47,10 @@ function execFilePromise(
 }
 
 /**
- * Fire fresh subprocess reads for MDM settings and return raw stdout.
- * On macOS: spawns plutil for each plist path in parallel, picks first winner.
- * On Windows: spawns reg query for HKLM and HKCU in parallel.
- * On Linux: returns empty (no MDM equivalent).
+ * 为 MDM 设置触发新的子进程读取并返回原始标准输出。
+ * 在 macOS 上：并行对每个 plist 路径启动 plutil，选取第一个获胜者。
+ * 在 Windows 上：并行对 HKLM 和 HKCU 启动 reg query。
+ * 在 Linux 上：返回空（无 MDM 等效项）。
  */
 export function fireRawRead(): Promise<RawReadResult> {
   return (async (): Promise<RawReadResult> => {
@@ -59,12 +59,8 @@ export function fireRawRead(): Promise<RawReadResult> {
 
       const allResults = await Promise.all(
         plistPaths.map(async ({ path, label }) => {
-          // Fast-path: skip the plutil subprocess if the plist file does not
-          // exist. Spawning plutil takes ~5ms even for an immediate ENOENT,
-          // and non-MDM machines never have these files.
-          // Uses synchronous existsSync to preserve the spawn-during-imports
-          // invariant: execFilePromise must be the first await so plutil
-          // spawns before the event loop polls (see main.tsx:3-4).
+          // 快速路径：如果 plist 文件不存在，则跳过 plutil 子进程。启动 plutil 即使立即返回 ENOENT 也需要约 5ms，且非 MDM 机器上永远不会有这些文件。
+          // 使用同步 existsSync 以保持导入期间生成的不可变性：execFilePromise 必须是第一个 await，以便 plutil 在事件循环轮询之前启动（参见 main.tsx:3-4）。
           if (!existsSync(path)) {
             return { stdout: '', label, ok: false }
           }
@@ -76,7 +72,7 @@ export function fireRawRead(): Promise<RawReadResult> {
         }),
       )
 
-      // First source wins (array is in priority order)
+      // 第一个源获胜（数组按优先级排序）
       const winner = allResults.find(r => r.ok)
       return {
         plistStdouts: winner
@@ -113,18 +109,13 @@ export function fireRawRead(): Promise<RawReadResult> {
   })()
 }
 
-/**
- * Fire raw subprocess reads once for startup. Called at main.tsx module evaluation.
- * Results are consumed via getMdmRawReadPromise().
- */
+/** 在启动时触发一次原始子进程读取。在 main.tsx 模块评估时调用。结果通过 getMdmRawReadPromise() 消费。 */
 export function startMdmRawRead(): void {
   if (rawReadPromise) return
   rawReadPromise = fireRawRead()
 }
 
-/**
- * Get the startup promise. Returns null if startMdmRawRead() wasn't called.
- */
+/** 获取启动 promise。如果未调用 startMdmRawRead() 则返回 null。 */
 export function getMdmRawReadPromise(): Promise<RawReadResult> | null {
   return rawReadPromise
 }

@@ -2,8 +2,7 @@ import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import { join } from 'path'
 
-// Memoized: 150+ callers, many on hot paths. Keyed off CLAUDE_CONFIG_DIR so
-// tests that change the env var get a fresh value without explicit cache.clear.
+// 已记忆化：150+ 调用者，很多在热路径上。以 CLAUDE_CONFIG_DIR 为键，这样更改环境变量的测试无需显式 cache.clear 就能获得新值。
 export const getClaudeConfigHomeDir = memoize(
   (): string => {
     return (
@@ -13,14 +12,12 @@ export const getClaudeConfigHomeDir = memoize(
   () => process.env.CLAUDE_CONFIG_DIR,
 )
 
+/** 获取 get Teams Dir 对应的数据或状态。 */
 export function getTeamsDir(): string {
   return join(getClaudeConfigHomeDir(), 'teams')
 }
 
-/**
- * Check if NODE_OPTIONS contains a specific flag.
- * Splits on whitespace and checks for exact match to avoid false positives.
- */
+/** 检查 NODE_OPTIONS 是否包含特定标志。按空白分割并精确匹配以避免误报。 */
 export function hasNodeOption(flag: string): boolean {
   const nodeOptions = process.env.NODE_OPTIONS
   if (!nodeOptions) {
@@ -29,6 +26,7 @@ export function hasNodeOption(flag: string): boolean {
   return nodeOptions.split(/\s+/).includes(flag)
 }
 
+/** 判断是否满足 is Env Truthy 对应的数据或状态。 */
 export function isEnvTruthy(envVar: string | boolean | undefined): boolean {
   if (!envVar) return false
   if (typeof envVar === 'boolean') return envVar
@@ -36,6 +34,7 @@ export function isEnvTruthy(envVar: string | boolean | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes(normalizedValue)
 }
 
+/** 判断是否满足 is Env Defined Falsy 对应的数据或状态。 */
 export function isEnvDefinedFalsy(
   envVar: string | boolean | undefined,
 ): boolean {
@@ -47,15 +46,9 @@ export function isEnvDefinedFalsy(
 }
 
 /**
- * --bare / CLAUDE_CODE_SIMPLE — skip hooks, LSP, plugin sync, skill dir-walk,
- * attribution, background prefetches, and ALL keychain/credential reads.
- * Auth is strictly ANTHROPIC_API_KEY env or apiKeyHelper from --settings.
- * Explicit CLI flags (--plugin-dir, --add-dir, --mcp-config) still honored.
- * ~30 gates across the codebase.
+ * --bare / CLAUDE_CODE_SIMPLE — 跳过 hooks、LSP、插件同步、skill 目录遍历、属性赋值、后台预取以及所有 keychain/证书读取。身份验证严格使用 ANTHROPIC_API_KEY 环境变量或来自 --settings 的 apiKeyHelper。显式 CLI 标志（--plugin-dir、--add-dir、--mcp-config）仍然有效。代码库中约 30 处开关。
  *
- * Checks argv directly (in addition to the env var) because several gates
- * run before main.tsx's action handler sets CLAUDE_CODE_SIMPLE=1 from --bare
- * — notably startKeychainPrefetch() at main.tsx top-level.
+ * 直接检查 argv（除了环境变量外），因为多个开关在 main.tsx 的 action handler 根据 --bare 设置 CLAUDE_CODE_SIMPLE=1 之前运行——特别是 main.tsx 顶层执行的 startKeychainPrefetch()。
  */
 export function isBareMode(): boolean {
   return (
@@ -65,16 +58,16 @@ export function isBareMode(): boolean {
 }
 
 /**
- * Parses an array of environment variable strings into a key-value object
- * @param envVars Array of strings in KEY=VALUE format
- * @returns Object with key-value pairs
+ * 将环境变量字符串数组解析为键值对象
+ * @param envVars 形式为 KEY=VALUE 的字符串数组
+ * @returns 包含键值对的对象
  */
 export function parseEnvVars(
   rawEnvArgs: string[] | undefined,
 ): Record<string, string> {
   const parsedEnv: Record<string, string> = {}
 
-  // Parse individual env vars
+  // 解析单个环境变量
   if (rawEnvArgs) {
     for (const envStr of rawEnvArgs) {
       const [key, ...valueParts] = envStr.split('=')
@@ -90,34 +83,28 @@ export function parseEnvVars(
 }
 
 /**
- * Get the AWS region with fallback to default
- * Matches the Anthropic Bedrock SDK's region behavior
+ * 获取 AWS 区域，回退到默认值
+ * 匹配 Anthropic Bedrock SDK 的区域行为
  */
 export function getAWSRegion(): string {
   return process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1'
 }
 
-/**
- * Get the default Vertex AI region
- */
+/** 获取默认的 Vertex AI 区域 */
 export function getDefaultVertexRegion(): string {
   return process.env.CLOUD_ML_REGION || 'us-east5'
 }
 
 /**
- * Check if bash commands should maintain project working directory (reset to original after each command)
- * @returns true if CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR is set to a truthy value
+ * 检查 bash 命令是否应维护项目工作目录（每条命令后重置为原始目录）
+ * @returns 如果 CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR 设置为真值则返回 true
  */
 export function shouldMaintainProjectWorkingDir(): boolean {
   return isEnvTruthy(process.env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR)
 }
 
-// @[MODEL LAUNCH]: Add a Vertex region override env var for the new model.
-/**
- * Model prefix → env var for Vertex region overrides.
- * Order matters: more specific prefixes must come before less specific ones
- * (e.g., 'claude-opus-4-1' before 'claude-opus-4').
- */
+// @[MODEL LAUNCH]: 为新模型添加一个用于 Vertex 区域覆盖的环境变量。
+/** 模型前缀 → 用于 Vertex 区域覆盖的环境变量。顺序重要：更具体的前缀必须放在较不具体的前面（例如 'claude-opus-4-1' 在 'claude-opus-4' 之前）。 */
 const VERTEX_REGION_OVERRIDES: ReadonlyArray<[string, string]> = [
   ['claude-haiku-4-5', 'VERTEX_REGION_CLAUDE_HAIKU_4_5'],
   ['claude-3-5-haiku', 'VERTEX_REGION_CLAUDE_3_5_HAIKU'],
@@ -130,14 +117,12 @@ const VERTEX_REGION_OVERRIDES: ReadonlyArray<[string, string]> = [
   ['claude-sonnet-4', 'VERTEX_REGION_CLAUDE_4_0_SONNET'],
 ]
 
-/**
- * Get the Vertex AI region for a specific model.
- * Different models may be available in different regions.
- */
+/** 获取特定模型的 Vertex AI 区域。不同模型可能在不同区域可用。 */
 export function getVertexRegionForModel(
   model: string | undefined,
 ): string | undefined {
   if (model) {
+    /** 执行 match 对应的业务处理。 */
     const match = VERTEX_REGION_OVERRIDES.find(([prefix]) =>
       model.startsWith(prefix),
     )

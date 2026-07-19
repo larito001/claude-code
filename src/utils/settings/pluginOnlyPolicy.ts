@@ -4,17 +4,7 @@ import type { CUSTOMIZATION_SURFACES } from './types.js'
 export type CustomizationSurface = (typeof CUSTOMIZATION_SURFACES)[number]
 
 /**
- * Check whether a customization surface is locked to plugin-only sources
- * by the managed `strictPluginOnlyCustomization` policy.
- *
- * "Locked" means user-level (~/.claude/*) and project-level (.claude/*)
- * sources are skipped for that surface. Managed (policySettings) and
- * plugin-provided sources always load regardless — the policy is admin-set,
- * so managed sources are already admin-controlled, and plugins are gated
- * separately via `strictKnownMarketplaces`.
- *
- * `true` locks all four surfaces; array form locks only those listed.
- * Absent/undefined → nothing locked (the default).
+ * 检查一个定制表面是否被管理的 strictPluginOnlyCustomization 策略锁定为仅限插件源。"锁定"意味着该表面跳过用户级别(~/.claude/*)和项目级别(.claude/*)的源。托管(policySettings)和插件提供的源始终加载——策略是管理员设置的，所以托管源已经是管理员控制的，插件通过 strictKnownMarketplaces 单独门控。true 锁定所有四个表面；数组形式仅锁定列出的那些。缺失/未定义 → 没有锁定（默认）。
  */
 export function isRestrictedToPluginOnly(
   surface: CustomizationSurface,
@@ -27,15 +17,7 @@ export function isRestrictedToPluginOnly(
 }
 
 /**
- * Sources that bypass strictPluginOnlyCustomization. Admin-trusted because:
- *   plugin — gated separately by strictKnownMarketplaces
- *   policySettings — from managed settings, admin-controlled by definition
- *   built-in / builtin / bundled — ship with the CLI, not user-authored
- *
- * Everything else (userSettings, projectSettings, localSettings, flagSettings,
- * mcp, undefined) is user-controlled and blocked when the relevant surface
- * is locked. Covers both AgentDefinition.source ('built-in' with hyphen) and
- * Command.source ('builtin' no hyphen, plus 'bundled').
+ * 绕过 strictPluginOnlyCustomization 的源。管理员信任因为：plugin — 由 strictKnownMarketplaces 单独门控；policySettings — 来自托管设置，由定义管理员控制；内置/内建/捆绑 — 随 CLI 提供，不是用户编写的。其他所有（userSettings, projectSettings, localSettings, flagSettings, mcp, undefined）是用户控制的，当相关表面被锁定时被阻止。涵盖 AgentDefinition.source（带连字符的 'built-in'）和 Command.source（不带连字符的 'builtin'，加上 'bundled'）。
  */
 const ADMIN_TRUSTED_SOURCES: ReadonlySet<string> = new Set([
   'plugin',
@@ -46,14 +28,7 @@ const ADMIN_TRUSTED_SOURCES: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Whether a customization's source is admin-trusted under
- * strictPluginOnlyCustomization. Use this to gate frontmatter-hook
- * registration and similar per-item checks where the item carries a
- * source tag but the surface's filesystem loader already ran.
- *
- * Pattern at call sites:
- *   const allowed = !isRestrictedToPluginOnly(surface) || isSourceAdminTrusted(item.source)
- *   if (item.hooks && allowed) { register(...) }
+ * 定制源是否在 strictPluginOnlyCustomization 下被管理员信任。在 Frontmatter 钩子注册和类似的逐项检查中使用，这些检查项带有源标签但表面的文件系统加载器已经运行。调用点的模式：const allowed = !isRestrictedToPluginOnly(surface) || isSourceAdminTrusted(item.source); if (item.hooks && allowed) { register(...) }
  */
 export function isSourceAdminTrusted(source: string | undefined): boolean {
   return source !== undefined && ADMIN_TRUSTED_SOURCES.has(source)

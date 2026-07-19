@@ -1268,7 +1268,7 @@ async function run(): Promise<CommanderCommand> {
       // 现在记录启动时间，在任何阻塞对话框渲染之前。从 REPL 首次渲染（旧位置）记录日志包含了用户停留在信任/OAuth/引导/恢复选择器上的时间——p99 约为 70 秒，主要由等待对话框的时间主导，而不是代码路径启动时间。
       logForDebugging('[STARTUP] Running showSetupScreens()...');
       const setupScreensStart = Date.now();
-      await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, commands, devChannels);
+      await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, devChannels);
       logForDebugging(`[STARTUP] showSetupScreens() completed in ${Date.now() - setupScreensStart}ms`);
 
     }

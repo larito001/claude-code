@@ -1,18 +1,18 @@
 /**
- * Tool validation configuration
+ * 工具验证配置
  *
- * Most tools need NO configuration - basic validation works automatically.
- * Only add your tool here if it has special pattern requirements.
+ * 大多数工具无需配置——基础验证自动生效。
+ * 仅当工具具有特殊模式要求时，才在此处添加。
  */
 
 export type ToolValidationConfig = {
-  /** Tools that accept file glob patterns (e.g., *.ts, src/**) */
+  /** 接受文件glob模式（如 *.ts, src/**）的工具 */
   filePatternTools: string[]
 
-  /** Tools that accept bash wildcard patterns (* anywhere) and legacy :* prefix syntax */
+  /** 接受bash通配符模式（*可出现在任意位置）及旧版 :* 前缀语法的工具 */
   bashPrefixTools: string[]
 
-  /** Custom validation rules for specific tools */
+  /** 针对特定工具的自定义验证规则 */
   customValidation: {
     [toolName: string]: (content: string) => {
       valid: boolean
@@ -24,7 +24,7 @@ export type ToolValidationConfig = {
 }
 
 export const TOOL_VALIDATION_CONFIG: ToolValidationConfig = {
-  // File pattern tools (accept *.ts, src/**, etc.)
+  // 文件模式工具（接受 *.ts, src/** 等）
   filePatternTools: [
     'Read',
     'Write',
@@ -34,12 +34,12 @@ export const TOOL_VALIDATION_CONFIG: ToolValidationConfig = {
     'NotebookEdit',
   ],
 
-  // Bash wildcard tools (accept * anywhere, and legacy command:* syntax)
+  // Bash通配符工具（接受任意位置的*，以及旧的 command:* 语法）
   bashPrefixTools: ['Bash'],
 
-  // Custom validation (only if needed)
+  // 自定义验证（仅在需要时）
   customValidation: {
-    // WebSearch doesn't support wildcards or complex patterns
+    // WebSearch 不支持通配符或复杂模式
     WebSearch: content => {
       if (content.includes('*') || content.includes('?')) {
         return {
@@ -52,9 +52,9 @@ export const TOOL_VALIDATION_CONFIG: ToolValidationConfig = {
       return { valid: true }
     },
 
-    // WebFetch uses domain: prefix for hostname-based permissions
+    // WebFetch 使用 domain: 前缀进行基于主机名的权限控制
     WebFetch: content => {
-      // Check if it's trying to use a URL format
+      // 检查是否尝试使用URL格式
       if (content.includes('://') || content.startsWith('http')) {
         return {
           valid: false,
@@ -67,7 +67,7 @@ export const TOOL_VALIDATION_CONFIG: ToolValidationConfig = {
         }
       }
 
-      // Must start with domain: prefix
+      // 必须以 domain: 前缀开头
       if (!content.startsWith('domain:')) {
         return {
           valid: false,
@@ -80,24 +80,24 @@ export const TOOL_VALIDATION_CONFIG: ToolValidationConfig = {
         }
       }
 
-      // Allow wildcards in domain patterns
-      // Valid: domain:*.example.com, domain:example.*, etc.
+      // 允许在域名模式中使用通配符
+      // 有效示例：domain:*.example.com、domain:example.* 等
       return { valid: true }
     },
   },
 }
 
-// Helper to check if a tool uses file patterns
+// 检查工具是否使用文件模式的辅助函数
 export function isFilePatternTool(toolName: string): boolean {
   return TOOL_VALIDATION_CONFIG.filePatternTools.includes(toolName)
 }
 
-// Helper to check if a tool uses bash prefix patterns
+// 检查工具是否使用bash前缀模式的辅助函数
 export function isBashPrefixTool(toolName: string): boolean {
   return TOOL_VALIDATION_CONFIG.bashPrefixTools.includes(toolName)
 }
 
-// Helper to get custom validation for a tool
+// 获取工具自定义验证的辅助函数
 export function getCustomValidation(toolName: string) {
   return TOOL_VALIDATION_CONFIG.customValidation[toolName]
 }
