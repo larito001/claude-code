@@ -53,6 +53,7 @@ import type {
   SkillToolProgress,
   TaskOutputProgress,
   ToolProgressData,
+  WebSearchProgress,
 } from './types/tools.js'
 import type { FileStateCache } from './utils/fileStateCache.js'
 import type { DenialTrackingState } from './utils/permissions/denialTracking.js'
@@ -66,6 +67,7 @@ export type {
   MCPProgress,
   SkillToolProgress,
   TaskOutputProgress,
+  WebSearchProgress,
 }
 
 import type { SpinnerMode } from './components/Spinner.js'

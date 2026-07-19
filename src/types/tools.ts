@@ -7,3 +7,4 @@ export type SdkWorkflowProgress = ToolProgressData
 export type ShellProgress = ToolProgressData
 export type SkillToolProgress = ToolProgressData
 export type TaskOutputProgress = ToolProgressData
+export type WebSearchProgress = ToolProgressData

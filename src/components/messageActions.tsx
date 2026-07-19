@@ -99,6 +99,10 @@ const PRIMARY_INPUT: Record<string, PrimaryInput> = {
     label: 'url',
     extract: str('url')
   },
+  WebSearch: {
+    label: 'query',
+    extract: str('query')
+  },
   Task: {
     label: 'prompt',
     extract: str('prompt')

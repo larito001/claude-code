@@ -14,6 +14,7 @@ import { clearBundledSkills, getBundledSkills } from '../src/skills/bundledSkill
 import { initBundledSkills } from '../src/skills/bundled/index.js'
 import { getAllBaseTools } from '../src/tools.js'
 import { getBuiltInAgents } from '../src/tools/AgentTool/builtInAgents.js'
+import { ASYNC_AGENT_ALLOWED_TOOLS } from '../src/constants/tools.js'
 import { initBackgroundHousekeepingServices } from '../src/utils/backgroundHousekeeping.js'
 import { getApiCredentialConfigurationError } from '../src/utils/apiCredentialValidation.js'
 import { getFastModeUnavailableReason } from '../src/utils/fastMode.js'
@@ -28,6 +29,7 @@ import {
   toExternalPermissionMode,
 } from '../src/utils/permissions/PermissionMode.js'
 import { PluginManifestSchema } from '../src/utils/plugins/schemas.js'
+import { TOOL_VALIDATION_CONFIG } from '../src/utils/settings/toolValidationConfig.js'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -94,6 +96,14 @@ for (const toolName of [
 if (process.platform === 'win32') {
   assert(baseToolNames.has('PowerShell'), 'Core tool is missing: PowerShell')
 }
+assert(
+  ASYNC_AGENT_ALLOWED_TOOLS.has('WebSearch'),
+  'Async agents cannot use WebSearch',
+)
+const validateWebSearch = TOOL_VALIDATION_CONFIG.customValidation.WebSearch
+assert(validateWebSearch, 'WebSearch permission validation is missing')
+assert(validateWebSearch('current prices').valid, 'Valid WebSearch rule was rejected')
+assert(!validateWebSearch('price*').valid, 'WebSearch wildcard rule was accepted')
 
 const commandNames = builtInCommandNames()
 for (const commandName of [
