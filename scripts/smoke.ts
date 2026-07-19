@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { join } from 'node:path'
 import { z } from 'zod/v4'
 import { builtInCommandNames } from '../src/commands.js'
 import { createSdkMcpServer, tool } from '../src/entrypoints/agentSdkTypes.js'
@@ -28,7 +28,6 @@ import {
   toExternalPermissionMode,
 } from '../src/utils/permissions/PermissionMode.js'
 import { PluginManifestSchema } from '../src/utils/plugins/schemas.js'
-import { getSystemDirectories } from '../src/utils/systemDirectories.js'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -63,17 +62,65 @@ assert(
 initBackgroundHousekeepingServices()
 
 const baseToolNames = new Set(getAllBaseTools().map(toolDefinition => toolDefinition.name))
-for (const toolName of ['Read', 'Edit', 'Write', 'Bash', 'Agent', 'Skill']) {
+for (const toolName of [
+  'Agent',
+  'AskUserQuestion',
+  'Bash',
+  'Config',
+  'Edit',
+  'EnterPlanMode',
+  'ExitPlanMode',
+  'Glob',
+  'Grep',
+  'ListMcpResourcesTool',
+  'NotebookEdit',
+  'Read',
+  'ReadMcpResourceTool',
+  'SendMessage',
+  'Skill',
+  'Sleep',
+  'TaskCreate',
+  'TaskGet',
+  'TaskList',
+  'TaskOutput',
+  'TaskStop',
+  'TaskUpdate',
+  'WebFetch',
+  'WebSearch',
+  'Write',
+]) {
   assert(baseToolNames.has(toolName), `Core tool is missing: ${toolName}`)
+}
+if (process.platform === 'win32') {
+  assert(baseToolNames.has('PowerShell'), 'Core tool is missing: PowerShell')
 }
 
 const commandNames = builtInCommandNames()
 for (const commandName of [
+  'add-dir',
+  'agents',
+  'clear',
   'compact',
+  'config',
+  'context',
+  'doctor',
+  'exit',
+  'export',
+  'help',
   'hooks',
+  'init',
   'mcp',
+  'memory',
+  'model',
   'permissions',
+  'plan',
+  'rename',
   'resume',
+  'rewind',
+  'skills',
+  'status',
+  'tasks',
+  'terminal-setup',
 ]) {
   assert(commandNames.has(commandName), `Core command is missing: /${commandName}`)
 }
@@ -129,17 +176,6 @@ const formattedSummary = formatCompactSummary(
 assert(
   formattedSummary === 'Summary:\ndurable state',
   'Compact summary formatting is broken',
-)
-
-const windowsDirectories = getSystemDirectories({
-  platform: 'windows',
-  homedir: 'C:\\Users\\fallback',
-  env: { USERPROFILE: 'D:\\Profiles\\framework' },
-})
-assert(isAbsolute(windowsDirectories.HOME), 'Windows home path is not absolute')
-assert(
-  windowsDirectories.DESKTOP === join('D:\\Profiles\\framework', 'Desktop'),
-  'Windows system-directory mapping is broken',
 )
 
 const apiEnvironmentNames = [

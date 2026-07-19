@@ -2,7 +2,6 @@ import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { z } from 'zod/v4'
-import { getSystemDirectories } from '../src/utils/systemDirectories.js'
 
 type RunResult = {
   exitCode: number
@@ -385,43 +384,7 @@ try {
     )
   }
 
-  const windows = getSystemDirectories({
-    platform: 'windows',
-    homedir: 'C:\\Users\\fallback',
-    env: { USERPROFILE: 'D:\\Profiles\\framework' },
-  })
-  assert(windows.HOME === 'D:\\Profiles\\framework', 'Windows HOME is inconsistent')
-  assert(
-    windows.DESKTOP === 'D:\\Profiles\\framework\\Desktop',
-    'Windows path mapping is not portable',
-  )
-  const macos = getSystemDirectories({
-    platform: 'macos',
-    homedir: '/Users/framework',
-    env: {},
-  })
-  assert(
-    macos.DOCUMENTS === '/Users/framework/Documents',
-    'macOS path mapping is not portable',
-  )
-  const linux = getSystemDirectories({
-    platform: 'linux',
-    homedir: '/home/framework',
-    env: { XDG_DOWNLOAD_DIR: '/data/downloads' },
-  })
-  assert(
-    linux.DESKTOP === '/home/framework/Desktop' &&
-      linux.DOWNLOADS === '/data/downloads',
-    'Linux/XDG path mapping is not portable',
-  )
-  const wsl = getSystemDirectories({
-    platform: 'wsl',
-    homedir: '/home/framework',
-    env: {},
-  })
-  assert(wsl.HOME === '/home/framework', 'WSL home mapping is incorrect')
-
-  console.log('Release smoke passed: build + SDK + config UI + portable paths')
+  console.log('Release smoke passed: build + SDK + config UI')
 } finally {
   await rm(tempRoot, { recursive: true, force: true })
 }

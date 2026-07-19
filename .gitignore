@@ -5,6 +5,7 @@ bun.lock
 bun.lockb
 .DS_Store
 .idea/
+.claude-code-core-framework/settings.local.json
 .bun/
 .bun-cache*/
 .env

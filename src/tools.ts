@@ -8,6 +8,7 @@ import { FileWriteTool } from './tools/FileWriteTool/FileWriteTool.js'
 import { GlobTool } from './tools/GlobTool/GlobTool.js'
 import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
 import { WebFetchTool } from './tools/WebFetchTool/WebFetchTool.js'
+import { WebSearchTool } from './tools/WebSearchTool/WebSearchTool.js'
 import { TaskStopTool } from './tools/TaskStopTool/TaskStopTool.js'
 import { SleepTool } from './tools/SleepTool/SleepTool.js'
 // 仅在可选功能启用时加载计划任务工具。
@@ -124,6 +125,7 @@ export function getAllBaseTools(): Tools {
     FileWriteTool,
     NotebookEditTool,
     WebFetchTool,
+    WebSearchTool,
     TaskStopTool,
     SleepTool,
     AskUserQuestionTool,
