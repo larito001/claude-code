@@ -1,33 +1,30 @@
-/**
- * HTTP utility constants and helpers
- */
+/** HTTP 请求常量与辅助方法。 */
 
 import { getAnthropicApiKey } from './auth.js'
+import { getRuntimeVersion } from './runtimeVersion.js'
 import { getClaudeCodeUserAgent } from './userAgent.js'
 import { getWorkload } from './workloadContext.js'
 
-// WARNING: We rely on `claude-cli` in the user agent for log filtering.
-// Please do NOT change this without making sure that logging also gets updated!
+// 警告：日志过滤依赖 User-Agent 中的 `claude-cli`，修改时必须同步日志规则。
+/** 生成模型 API 请求使用的 User-Agent。 */
 export function getUserAgent(): string {
   const agentSdkVersion = process.env.CLAUDE_AGENT_SDK_VERSION
     ? `, agent-sdk/${process.env.CLAUDE_AGENT_SDK_VERSION}`
     : ''
-  // SDK consumers can identify their app/library via CLAUDE_AGENT_SDK_CLIENT_APP
-  // e.g., "my-app/1.0.0" or "my-library/2.1"
+  // SDK 使用方可通过 CLAUDE_AGENT_SDK_CLIENT_APP 标识应用或库，
+  // 例如 "my-app/1.0.0" 或 "my-library/2.1"。
   const clientApp = process.env.CLAUDE_AGENT_SDK_CLIENT_APP
     ? `, client-app/${process.env.CLAUDE_AGENT_SDK_CLIENT_APP}`
     : ''
-  // Turn-/process-scoped workload tag for cron-initiated requests. This is
-  // first-party observability metadata; proxies may strip custom HTTP headers.
-  // QoS routing uses cc_workload
-  // in the billing-header attribution block instead (see constants/system.ts).
-  // getAnthropicClient (client.ts:98) calls this per-request inside withRetry,
-  // so the read picks up the same setWorkload() value as getAttributionHeader.
+  // 定时任务发起的请求使用轮次/进程级工作负载标签。代理可能移除自定义 HTTP
+  // 标头，因此这仅用于第一方可观测性；QoS 路由改用计费归因块中的 cc_workload。
+  // getAnthropicClient 会逐请求调用本方法，以读取与归因标头一致的工作负载状态。
   const workload = getWorkload()
   const workloadSuffix = workload ? `, workload/${workload}` : ''
-  return `claude-cli/${MACRO.VERSION} (${process.env.CLAUDE_CODE_ENTRYPOINT ?? 'cli'}${agentSdkVersion}${clientApp}${workloadSuffix})`
+  return `claude-cli/${getRuntimeVersion()} (${process.env.CLAUDE_CODE_ENTRYPOINT ?? 'cli'}${agentSdkVersion}${clientApp}${workloadSuffix})`
 }
 
+/** 生成 MCP 连接使用的 User-Agent。 */
 export function getMCPUserAgent(): string {
   const parts: string[] = []
   if (process.env.CLAUDE_CODE_ENTRYPOINT) {
@@ -40,12 +37,12 @@ export function getMCPUserAgent(): string {
     parts.push(`client-app/${process.env.CLAUDE_AGENT_SDK_CLIENT_APP}`)
   }
   const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : ''
-  return `claude-code/${MACRO.VERSION}${suffix}`
+  return `claude-code/${getRuntimeVersion()}${suffix}`
 }
 
-// User-Agent for WebFetch requests to arbitrary sites. `Claude-User` is
-// Anthropic's publicly documented agent for user-initiated fetches (what site
-// operators match in robots.txt); the claude-code suffix identifies local CLI traffic.
+// WebFetch 访问任意网站时使用的 User-Agent。`Claude-User` 是公开声明的
+// 用户发起型抓取代理名称，站点可在 robots.txt 中匹配；后缀用于标识本地 CLI 流量。
+/** 生成 WebFetch 请求使用的 User-Agent。 */
 export function getWebFetchUserAgent(): string {
   return `Claude-User (${getClaudeCodeUserAgent()})`
 }
@@ -55,10 +52,7 @@ export type AuthHeaders = {
   error?: string
 }
 
-/**
- * Get authentication headers for API requests
- * Returns API key headers for Anthropic API requests.
- */
+/** 获取 API Key 认证标头；未配置密钥时返回可操作的错误信息。 */
 export function getAuthHeaders(): AuthHeaders {
   const apiKey = getAnthropicApiKey()
   if (!apiKey) {
@@ -74,6 +68,7 @@ export function getAuthHeaders(): AuthHeaders {
   }
 }
 
+/** 在已由调用方处理认证的请求外包裹统一异步接口。 */
 export async function withAuthRequest<T>(
   request: () => Promise<T>,
 ): Promise<T> {

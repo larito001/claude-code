@@ -1,7 +1,7 @@
 /**
- * Model deprecation utilities
+ * 模型弃用工具
  *
- * Contains information about deprecated models and their retirement dates.
+ * 包含关于已弃用模型及其退役日期的信息。
  */
 
 import { type APIProvider, getAPIProvider } from './providers.js'
@@ -19,16 +19,16 @@ type NotDeprecatedInfo = {
 type DeprecationInfo = DeprecatedModelInfo | NotDeprecatedInfo
 
 type DeprecationEntry = {
-  /** Human-readable model name */
+  /** 人类可读的模型名称 */
   modelName: string
-  /** Retirement dates by provider (null = not deprecated for that provider) */
+  /** 按提供商的退役日期（null = 该提供商未弃用） */
   retirementDates: Record<APIProvider, string | null>
 }
 
 /**
- * Deprecated models and their retirement dates by provider.
- * Keys are substrings to match in model IDs (case-insensitive).
- * To add a new deprecated model, add an entry to this object.
+ * 已弃用的模型及其按提供商的退役日期。
+ * 键是与模型ID匹配的子字符串（不区分大小写）。
+ * 要添加新的已弃用模型，请向此对象添加一个条目。
  */
 const DEPRECATED_MODELS: Record<string, DeprecationEntry> = {
   'claude-3-opus': {
@@ -60,9 +60,7 @@ const DEPRECATED_MODELS: Record<string, DeprecationEntry> = {
   },
 }
 
-/**
- * Check if a model is deprecated and get its deprecation info
- */
+/** 检查模型是否已弃用并获取其弃用信息 */
 function getDeprecatedModelInfo(modelId: string): DeprecationInfo {
   const lowercaseModelId = modelId.toLowerCase()
   const provider = getAPIProvider()
@@ -82,9 +80,7 @@ function getDeprecatedModelInfo(modelId: string): DeprecationInfo {
   return { isDeprecated: false }
 }
 
-/**
- * Get a deprecation warning message for a model, or null if not deprecated
- */
+/** 获取模型的弃用警告消息，如果未弃用则返回null */
 export function getModelDeprecationWarning(
   modelId: string | null,
 ): string | null {

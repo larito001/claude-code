@@ -19,10 +19,12 @@ export type ModelShortName = string
 export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
+/** 获取 get Small Fast Model 对应的数据或状态。 */
 export function getSmallFastModel(): ModelName {
   return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
 }
 
+/** 判断是否满足 is Non Custom Opus Model 对应的数据或状态。 */
 export function isNonCustomOpusModel(model: ModelName): boolean {
   return (
     model === getModelStrings().opus40 ||
@@ -83,6 +85,7 @@ export function getMainLoopModel(): ModelName {
   return getDefaultMainLoopModel()
 }
 
+/** 获取 get Best Model 对应的数据或状态。 */
 export function getBestModel(): ModelName {
   return getDefaultOpusModel()
 }
@@ -152,9 +155,9 @@ export function getRuntimeMainLoopModel(params: {
   return mainLoopModel
 }
 
-/** Return the default main-loop model for the active API provider. */
+/** 返回活动API提供商的默认主循环模型。 */
 export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
-  // API-key and cloud providers use their configured Sonnet model by default.
+  // API密钥和云提供商默认使用其配置的Sonnet模型。
   return getDefaultSonnetModel()
 }
 
@@ -241,6 +244,7 @@ export function getCanonicalName(fullModelName: ModelName): ModelShortName {
   return firstPartyNameToCanonical(resolveOverriddenModel(fullModelName))
 }
 
+/** 执行 render Default Model Setting 对应的业务处理。 */
 export function renderDefaultModelSetting(
   setting: ModelName | ModelAlias,
 ): string {
@@ -250,6 +254,7 @@ export function renderDefaultModelSetting(
   return renderModelName(parseUserSpecifiedModel(setting))
 }
 
+/** 获取 get Opus46 Pricing Suffix 对应的数据或状态。 */
 export function getOpus46PricingSuffix(fastMode: boolean): string {
   if (getAPIProvider() !== 'firstParty') return ''
   const pricing = formatModelPricing(getOpus46CostTier(fastMode))
@@ -257,6 +262,7 @@ export function getOpus46PricingSuffix(fastMode: boolean): string {
   return ` ·${fastModeIndicator} ${pricing}`
 }
 
+/** 判断是否满足 is Opus1m Merge Enabled 对应的数据或状态。 */
 export function isOpus1mMergeEnabled(): boolean {
   if (is1mContextDisabled() || getAPIProvider() !== 'firstParty') {
     return false
@@ -264,6 +270,7 @@ export function isOpus1mMergeEnabled(): boolean {
   return true
 }
 
+/** 执行 render Model Setting 对应的业务处理。 */
 export function renderModelSetting(setting: ModelName | ModelAlias): string {
   if (setting === 'opusplan') {
     return 'Opus Plan'
@@ -274,11 +281,8 @@ export function renderModelSetting(setting: ModelName | ModelAlias): string {
   return renderModelName(setting)
 }
 
-// @[MODEL LAUNCH]: Add display name cases for the new model (base + [1m] variant if applicable).
-/**
- * Returns a human-readable display name for known public models, or null
- * if the model is not recognized as a public model.
- */
+// @[MODEL LAUNCH]: 为新模型添加显示名称条目（基础版 + [1m] 变体，如果适用）。
+/** 返回已知公共模型的人类可读显示名称，如果模型未被识别为公共模型则返回null。 */
 export function getPublicModelDisplayName(model: ModelName): string | null {
   switch (model) {
     case getModelStrings().opus46:
@@ -316,6 +320,7 @@ export function getPublicModelDisplayName(model: ModelName): string | null {
   }
 }
 
+/** 执行 render Model Name 对应的业务处理。 */
 export function renderModelName(model: ModelName): string {
   const publicName = getPublicModelDisplayName(model)
   if (publicName) {
@@ -325,12 +330,11 @@ export function renderModelName(model: ModelName): string {
 }
 
 /**
- * Returns a safe author name for public display (e.g., in git commit trailers).
- * Returns "Claude {ModelName}" for publicly known models, or "Claude ({model})"
- * for unknown/internal models so the exact model name is preserved.
+ * 返回用于公共显示的可靠作者名称（例如，在git提交尾注中）。
+ * 对于已知公共模型返回"Claude {ModelName}"，对于未知/内部模型返回"Claude ({model})"，以保留确切的模型名称。
  *
- * @param model The full model name
- * @returns "Claude {ModelName}" for public models, or "Claude ({model})" for non-public models
+ * @param model 完整模型名称
+ * @returns 对于公共模型返回"Claude {ModelName}"，对于非公共模型返回"Claude ({model})"
  */
 export function getPublicModelName(model: ModelName): string {
   const publicName = getPublicModelDisplayName(model)
@@ -341,16 +345,13 @@ export function getPublicModelName(model: ModelName): string {
 }
 
 /**
- * Returns a full model name for use in this session, possibly after resolving
- * a model alias.
+ * 返回在此会话中使用的完整模型名称，可能在解析模型别名之后。
  *
- * This function intentionally does not support version numbers to align with
- * the model switcher.
+ * 此函数有意不支持版本号，以与模型切换器保持一致。
  *
- * Supports [1m] suffix on any model alias (e.g., haiku[1m], sonnet[1m]) to enable
- * 1M context window without requiring each variant to be in MODEL_ALIASES.
+ * 支持在任何模型别名上添加[1m]后缀（例如haiku[1m]、sonnet[1m]），以启用1M上下文窗口，而无需每个变体都包含在MODEL_ALIASES中。
  *
- * @param modelInput The model alias or name provided by the user.
+ * @param modelInput 用户提供的模型别名或名称。
  */
 export function parseUserSpecifiedModel(
   modelInput: ModelName | ModelAlias,
@@ -366,7 +367,7 @@ export function parseUserSpecifiedModel(
   if (isModelAlias(modelString)) {
     switch (modelString) {
       case 'opusplan':
-        return getDefaultSonnetModel() + (has1mTag ? '[1m]' : '') // Sonnet is default, Opus in plan mode
+        return getDefaultSonnetModel() + (has1mTag ? '[1m]' : '') // Sonnet是默认值，Opus在计划模式下
       case 'sonnet':
         return getDefaultSonnetModel() + (has1mTag ? '[1m]' : '')
       case 'haiku':
@@ -379,11 +380,7 @@ export function parseUserSpecifiedModel(
     }
   }
 
-  // Opus 4/4.1 are no longer available on the first-party API (same as
-  // legacy aliases) — silently remap to the current Opus default. The 'opus'
-  // alias already resolves to 4.6, so the only users on these explicit
-  // strings pinned them in settings/env/--model/SDK before 4.5 launched.
-  // 3P providers may not yet have 4.6 capacity, so pass through unchanged.
+  // Opus 4/4.1 在第一方API上不再可用（与旧别名相同）——静默重新映射到当前的Opus默认值。'opus'别名已解析为4.6，因此只有那些在4.5发布前将这些显式字符串固定在设置/env/--model/SDK中的用户才会受影响。第三方提供商可能尚未具备4.6能力，因此保持不变。
   if (
     getAPIProvider() === 'firstParty' &&
     isLegacyOpusFirstParty(modelString) &&
@@ -392,8 +389,8 @@ export function parseUserSpecifiedModel(
     return getDefaultOpusModel() + (has1mTag ? '[1m]' : '')
   }
 
-  // Preserve original case for custom model names (e.g., Azure Foundry deployment IDs)
-  // Only strip [1m] suffix if present, maintaining case of the base model
+  // 保留自定义模型名称的原始大小写（例如Azure Foundry部署ID）
+  // 仅剥离存在的[1m]后缀，保持基础模型的大小写
   if (has1mTag) {
     return modelInputTrimmed.replace(/\[1m\]$/i, '').trim() + '[1m]'
   }
@@ -401,19 +398,11 @@ export function parseUserSpecifiedModel(
 }
 
 /**
- * Resolves a skill's `model:` frontmatter against the current model, carrying
- * the `[1m]` suffix over when the target family supports it.
+ * 将技能的`model:`前置元数据根据当前模型进行解析，当目标系列支持时，携带`[1m]`后缀。
  *
- * A skill author writing `model: opus` means "use opus-class reasoning" — not
- * "downgrade to 200K". If the user is on opus[1m] at 230K tokens and invokes a
- * skill with `model: opus`, passing the bare alias through drops the effective
- * context window from 1M to 200K, which trips autocompact at 23% apparent usage
- * and surfaces "Context limit reached" even though nothing overflowed.
+ * 技能作者编写`model: opus`意味着“使用opus类推理”——而不是“降级到200K”。如果用户当前在230K token的opus[1m]上，并调用了一个`model: opus`的技能，传递原始别名会将有效上下文窗口从1M降低到200K，这会在23%的表观使用率下触发自动压缩，并显示“上下文限制已到达”，尽管没有溢出。
  *
- * We only carry [1m] when the target actually supports it (sonnet/opus). A skill
- * with `model: haiku` on a 1M session still downgrades — haiku has no 1M variant,
- * so the autocompact that follows is correct. Skills that already specify [1m]
- * are left untouched.
+ * 我们仅在目标实际支持[1m]时（sonnet/opus）才携带。在1M会话中带有`model: haiku`的技能仍然会降级——haiku没有1M变体，因此后续的自动压缩是正确的。已经明确指定了[1m]的技能保持不变。
  */
 export function resolveSkillModelOverride(
   skillModel: string,
@@ -422,8 +411,7 @@ export function resolveSkillModelOverride(
   if (has1mContext(skillModel) || !has1mContext(currentModel)) {
     return skillModel
   }
-  // modelSupports1M matches on canonical IDs ('claude-opus-4-6', 'claude-sonnet-4');
-  // a bare 'opus' alias falls through getCanonicalName unmatched. Resolve first.
+  // modelSupports1M 匹配规范ID（'claude-opus-4-6'、'claude-sonnet-4'）；裸的'opus'别名在getCanonicalName中未匹配。先解析。
   if (modelSupports1M(parseUserSpecifiedModel(skillModel))) {
     return skillModel + '[1m]'
   }
@@ -437,17 +425,17 @@ const LEGACY_OPUS_FIRSTPARTY = [
   'claude-opus-4-1',
 ]
 
+/** 判断是否满足 is Legacy Opus First Party 对应的数据或状态。 */
 function isLegacyOpusFirstParty(model: string): boolean {
   return LEGACY_OPUS_FIRSTPARTY.includes(model)
 }
 
-/**
- * Opt-out for the legacy Opus 4.0/4.1 → current Opus remap.
- */
+/** 选择退出旧版 Opus 4.0/4.1 → 当前 Opus 的重新映射。 */
 export function isLegacyModelRemapEnabled(): boolean {
   return !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP)
 }
 
+/** 执行 model Display String 对应的业务处理。 */
 export function modelDisplayString(model: ModelSetting): string {
   if (model === null) {
     return `Default (${getDefaultMainLoopModel()})`
@@ -456,10 +444,10 @@ export function modelDisplayString(model: ModelSetting): string {
   return model === resolvedModel ? resolvedModel : `${model} (${resolvedModel})`
 }
 
-// @[MODEL LAUNCH]: Add a marketing name mapping for the new model below.
+// @[MODEL LAUNCH]: 为下面的新模型添加一个市场名称映射。
 export function getMarketingNameForModel(modelId: string): string | undefined {
   if (getAPIProvider() === 'foundry') {
-    // deployment ID is user-defined in Foundry, so it may have no relation to the actual model
+    // 部署ID在Foundry中由用户定义，因此可能与实际模型无关。
     return undefined
   }
 
@@ -503,6 +491,7 @@ export function getMarketingNameForModel(modelId: string): string | undefined {
   return undefined
 }
 
+/** 规范化 normalize Model String For API 对应的数据或状态。 */
 export function normalizeModelStringForAPI(model: string): string {
   return model.replace(/\[(1|2)m\]/gi, '')
 }

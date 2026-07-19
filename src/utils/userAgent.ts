@@ -1,10 +1,12 @@
 /**
- * User-Agent string helpers.
+ * User-Agent 字符串辅助方法。
  *
- * Kept dependency-free so SDK-bundled code (bridge, cli/transports) can
- * import without pulling in auth.ts and its transitive dependency tree.
+ * 仅依赖轻量版本读取器，使 SDK 打包代码无需引入 auth.ts 及其传递依赖。
  */
 
+import { getRuntimeVersion } from './runtimeVersion.js'
+
+/** 生成标准 Claude Code User-Agent。 */
 export function getClaudeCodeUserAgent(): string {
-  return `claude-code/${MACRO.VERSION}`
+  return `claude-code/${getRuntimeVersion()}`
 }

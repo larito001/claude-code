@@ -13,7 +13,7 @@ import { isEssentialTrafficOnly } from '../privacyLevel.js'
 import { jsonStringify } from '../slowOperations.js'
 import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from './providers.js'
 
-// .strip() — don't persist internal-only fields (mycro_deployments etc.) to disk
+// .strip() — 不要将仅内部使用的字段（如 mycro_deployments 等）持久化到磁盘
 const ModelCapabilitySchema = lazySchema(() =>
   z
     .object({
@@ -24,6 +24,7 @@ const ModelCapabilitySchema = lazySchema(() =>
     .strip(),
 )
 
+/** 渲染 Cache File Schema 组件。 */
 const CacheFileSchema = lazySchema(() =>
   z.object({
     models: z.array(ModelCapabilitySchema()),
@@ -33,28 +34,31 @@ const CacheFileSchema = lazySchema(() =>
 
 export type ModelCapability = z.infer<ReturnType<typeof ModelCapabilitySchema>>
 
+/** 获取 get Cache Dir 对应的数据或状态。 */
 function getCacheDir(): string {
   return join(getClaudeConfigHomeDir(), 'cache')
 }
 
+/** 获取 get Cache Path 对应的数据或状态。 */
 function getCachePath(): string {
   return join(getCacheDir(), 'model-capabilities.json')
 }
 
+/** 判断是否满足 is Model Capabilities Eligible 对应的数据或状态。 */
 function isModelCapabilitiesEligible(): boolean {
   if (getAPIProvider() !== 'firstParty') return false
   if (!isFirstPartyAnthropicBaseUrl()) return false
   return true
 }
 
-// Longest-id-first so substring match prefers most specific; secondary key for stable isEqual
+// 最长ID优先，以便子字符串匹配更倾向最具体的；次要键用于稳定的 isEqual
 function sortForMatching(models: ModelCapability[]): ModelCapability[] {
   return [...models].sort(
     (a, b) => b.id.length - a.id.length || a.id.localeCompare(b.id),
   )
 }
 
-// Keyed on cache path so tests that set CLAUDE_CONFIG_DIR get a fresh read
+// 以缓存路径为键，以便设置 CLAUDE_CONFIG_DIR 的测试能够重新读取
 const loadCache = memoize(
   (path: string): ModelCapability[] | null => {
     try {
@@ -69,16 +73,19 @@ const loadCache = memoize(
   path => path,
 )
 
+/** 获取 get Model Capability 对应的数据或状态。 */
 export function getModelCapability(model: string): ModelCapability | undefined {
   if (!isModelCapabilitiesEligible()) return undefined
   const cached = loadCache(getCachePath())
   if (!cached || cached.length === 0) return undefined
   const m = model.toLowerCase()
+  /** 执行 exact 对应的业务处理。 */
   const exact = cached.find(c => c.id.toLowerCase() === m)
   if (exact) return exact
   return cached.find(c => m.includes(c.id.toLowerCase()))
 }
 
+/** 更新 refresh Model Capabilities 对应的数据或状态。 */
 export async function refreshModelCapabilities(): Promise<void> {
   if (!isModelCapabilitiesEligible()) return
   if (isEssentialTrafficOnly()) return

@@ -15,9 +15,10 @@ import { extractConnectionErrorDetails } from './errorUtils.js'
 export type { NonNullableUsage }
 export { EMPTY_USAGE }
 
-// Strategy used for global prompt caching
+// 全局提示缓存的策略
 export type GlobalCacheStrategy = 'tool_based' | 'system_prompt' | 'none'
 
+/** 获取 get Error Message 对应的数据或状态。 */
 function getErrorMessage(error: unknown): string {
   if (error instanceof APIError) {
     const body = error.error as { error?: { message?: string } } | undefined
@@ -26,6 +27,7 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** 输出或发送 log API Error 对应的数据或状态。 */
 export function logAPIError({
   error,
   model,
@@ -39,15 +41,15 @@ export function logAPIError({
   model: string
   durationMs: number
   attempt: number
-  /** Client-generated ID sent as x-client-request-id header (survives timeouts) */
+  /** 客户端生成的 ID，通过 x-client-request-id 标头发送（可跨超时） */
   clientRequestId?: string
-  /** The span from startLLMRequestSpan - pass this to correctly match responses to requests */
+  /** 来自 startLLMRequestSpan 的跨度 —— 传递此值以正确匹配请求与响应 */
   llmSpan?: Span
   fastMode?: boolean
 }): void {
   const errStr = getErrorMessage(error)
   const status = error instanceof APIError ? String(error.status) : undefined
-  // Log detailed connection error info to debug logs (visible via --debug)
+  // 将详细的连接错误信息记录到调试日志（可通过 --debug 查看）
   const connectionDetails = extractConnectionErrorDetails(error)
   if (connectionDetails) {
     const sslLabel = connectionDetails.isSSLError ? ' (SSL error)' : ''
@@ -66,7 +68,7 @@ export function logAPIError({
 
   logError(error as Error)
 
-  // Log API error event for OTLP
+  // 记录 API 错误事件到 OTLP
   void logOTelEvent('api_error', {
     model: model,
     error: errStr,
@@ -85,6 +87,7 @@ export function logAPIError({
 
 }
 
+/** 输出或发送 log API Success And Duration 对应的数据或状态。 */
 export function logAPISuccessAndDuration({
   model,
   start,
@@ -105,11 +108,11 @@ export function logAPISuccessAndDuration({
   usage: NonNullableUsage
   attempt: number
   costUSD: number
-  /** The span from startLLMRequestSpan - pass this to correctly match responses to requests */
+  /** 来自 startLLMRequestSpan 的跨度 —— 传递此值以正确匹配请求与响应 */
   llmSpan?: Span
-  /** Time spent in pre-request setup before the successful attempt */
+  /** 成功尝试之前的请求前设置所花费的时间 */
   requestSetupMs?: number
-  /** Timestamps (Date.now()) of each attempt start — used for retry sub-spans in Perfetto */
+  /** 每次尝试开始的时间戳（Date.now()）—— 用于 Perfetto 中的重试子跨度 */
   attemptStartTimes?: number[]
   fastMode?: boolean
 }): void {
@@ -117,7 +120,7 @@ export function logAPISuccessAndDuration({
   const durationMsIncludingRetries = Date.now() - startIncludingRetries
   addToTotalDurationState(durationMsIncludingRetries, durationMs)
   setLastApiCompletionTimestamp(Date.now())
-  // Log API request event for OTLP
+  // 记录 API 请求事件到 OTLP
   void logOTelEvent('api_request', {
     model,
     input_tokens: String(usage.input_tokens),

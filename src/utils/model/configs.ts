@@ -3,8 +3,7 @@ import type { APIProvider } from './providers.js'
 
 export type ModelConfig = Record<APIProvider, ModelName>
 
-// @[MODEL LAUNCH]: Add a new CLAUDE_*_CONFIG constant here. Double check the correct model strings
-// here since the pattern may change.
+// @[MODEL LAUNCH]: 在此添加新的 CLAUDE_*_CONFIG 常量。请仔细检查正确的模型字符串，因为模式可能会变化。
 
 export const CLAUDE_3_7_SONNET_CONFIG = {
   firstParty: 'claude-3-7-sonnet-20250219',
@@ -83,7 +82,7 @@ export const CLAUDE_SONNET_4_6_CONFIG = {
   foundry: 'claude-sonnet-4-6',
 } as const satisfies ModelConfig
 
-// @[MODEL LAUNCH]: Register the new config here.
+// @[MODEL LAUNCH]: 在此注册新的配置。
 export const ALL_MODEL_CONFIGS = {
   haiku35: CLAUDE_3_5_HAIKU_CONFIG,
   haiku45: CLAUDE_HAIKU_4_5_CONFIG,
@@ -100,16 +99,16 @@ export const ALL_MODEL_CONFIGS = {
 
 export type ModelKey = keyof typeof ALL_MODEL_CONFIGS
 
-/** Union of all canonical first-party model IDs, e.g. 'claude-opus-4-6' | 'claude-sonnet-4-5-20250929' | … */
+/** 所有规范的第一方模型 ID 的联合类型，例如 'claude-opus-4-6' | 'claude-sonnet-4-5-20250929' | … */
 export type CanonicalModelId =
   (typeof ALL_MODEL_CONFIGS)[ModelKey]['firstParty']
 
-/** Runtime list of canonical model IDs — used by comprehensiveness tests. */
+/** 运行时规范模型 ID 列表 — 用于全面性测试。 */
 export const CANONICAL_MODEL_IDS = Object.values(ALL_MODEL_CONFIGS).map(
   c => c.firstParty,
 ) as [CanonicalModelId, ...CanonicalModelId[]]
 
-/** Map canonical ID → internal short key. Used to apply settings-based modelOverrides. */
+/** 将规范 ID 映射到内部短键。用于应用基于设置的 modelOverrides。 */
 export const CANONICAL_ID_TO_KEY: Record<CanonicalModelId, ModelKey> =
   Object.fromEntries(
     (Object.entries(ALL_MODEL_CONFIGS) as [ModelKey, ModelConfig][]).map(

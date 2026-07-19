@@ -88,7 +88,14 @@ function getDocumentationRanges(
   node: ts.Node,
 ): ts.CommentRange[] {
   const ranges = ts.getLeadingCommentRanges(sourceText, node.getFullStart()) ?? []
-  return ranges.filter(range => sourceText.slice(range.end, node.getStart()).trim() === '')
+  const adjacent: ts.CommentRange[] = []
+  let cursor = node.getStart()
+  for (const range of ranges.toReversed()) {
+    if (sourceText.slice(range.end, cursor).trim() !== '') break
+    adjacent.unshift(range)
+    cursor = range.pos
+  }
+  return adjacent
 }
 
 function hasChineseDocumentation(sourceText: string, node: ts.Node): boolean {

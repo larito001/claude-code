@@ -1,10 +1,10 @@
 import { checkOpus1mAccess, checkSonnet1mAccess } from './check1mAccess.js'
 import { getUserSpecifiedModelSetting } from './model.js'
 
-// @[MODEL LAUNCH]: Add a branch for the new model if it supports a 1M context upgrade path.
+// @[MODEL LAUNCH]: 如果新模型支持1M上下文升级路径，则为该模型添加一个分支。
 /**
- * Get available model upgrade for more context
- * Returns null if no upgrade available or user already has max context
+ * 获取可用模型升级以获得更多上下文
+ * 如果没有可用的升级或用户已达到最大上下文，则返回null
  */
 function getAvailableUpgrade(): {
   alias: string
@@ -29,9 +29,7 @@ function getAvailableUpgrade(): {
   return null
 }
 
-/**
- * Get upgrade message for different contexts
- */
+/** 获取不同上下文的升级消息 */
 export function getUpgradeMessage(context: 'warning' | 'tip'): string | null {
   const upgrade = getAvailableUpgrade()
   if (!upgrade) return null

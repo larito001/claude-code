@@ -2,6 +2,7 @@ import { isEnvTruthy } from '../envUtils.js'
 
 export type APIProvider = 'firstParty' | 'bedrock' | 'vertex' | 'foundry'
 
+/** 获取 get API Provider 对应的数据或状态。 */
 export function getAPIProvider(): APIProvider {
   return isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)
     ? 'bedrock'

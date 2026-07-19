@@ -18,21 +18,17 @@ export type AgentModelOption = {
   description: string
 }
 
-/**
- * Get the default subagent model. Returns 'inherit' so subagents inherit
- * the model from the parent thread.
- */
+/** 获取默认子代理模型。返回'inherit'，这样子代理继承父线程的模型。 */
 export function getDefaultSubagentModel(): string {
   return 'inherit'
 }
 
 /**
- * Get the effective model string for an agent.
+ * 获取代理的有效模型字符串。
  *
- * For Bedrock, if the parent model uses a cross-region inference prefix (e.g., "eu.", "us."),
- * that prefix is inherited by subagents using alias models (e.g., "sonnet", "haiku", "opus").
- * This ensures subagents use the same region as the parent, which is necessary when
- * IAM permissions are scoped to specific cross-region inference profiles.
+ * 对于Bedrock，如果父模型使用跨区域推理前缀（例如"eu."、"us."），
+ * 该前缀将被使用别名模型（例如"sonnet"、"haiku"、"opus"）的子代理继承。
+ * 这确保子代理与父模型使用相同区域，当IAM权限限定于特定跨区域推理配置文件时是必要的。
  */
 export function getAgentModel(
   agentModel: string | undefined,
@@ -44,17 +40,16 @@ export function getAgentModel(
     return parseUserSpecifiedModel(process.env.CLAUDE_CODE_SUBAGENT_MODEL)
   }
 
-  // Extract Bedrock region prefix from parent model to inherit for subagents.
-  // This ensures subagents use the same cross-region inference profile (e.g., "eu.", "us.")
-  // as the parent, which is required when IAM permissions only allow specific regions.
+  // 从父模型中提取Bedrock区域前缀以供子代理继承。
+  // 这确保子代理使用与父模型相同的跨区域推理配置文件（例如"eu."、"us."），
+  // 当IAM权限仅允许特定区域时是必需的。
   const parentRegionPrefix = getBedrockRegionPrefix(parentModel)
 
-  // Helper to apply parent region prefix for Bedrock models.
-  // `originalSpec` is the raw model string before resolution (alias or full ID).
-  // If the user explicitly specified a full model ID that already carries its own
-  // region prefix (e.g., "eu.anthropic.…"), we preserve it instead of overwriting
-  // with the parent's prefix. This prevents silent data-residency violations when
-  // an agent config intentionally pins to a different region than the parent.
+  // 辅助函数，用于为Bedrock模型应用父区域前缀。
+  // `originalSpec`是解析前的原始模型字符串（别名或完整ID）。
+  // 如果用户明确指定了已经带有自身区域前缀（例如"eu.anthropic.…"）的完整模型ID，
+  // 我们将保留它，而不是用父模型前缀覆盖。这防止了当代理配置有意固定到与父模型不同区域时
+  // 发生静默的数据驻留违规。
   const applyParentRegionPrefix = (
     resolvedModel: string,
     originalSpec: string,
@@ -66,7 +61,7 @@ export function getAgentModel(
     return resolvedModel
   }
 
-  // Prioritize tool-specified model if provided
+  // 如果提供了工具指定的模型，则优先使用
   if (toolSpecifiedModel) {
     if (aliasMatchesParentTier(toolSpecifiedModel, parentModel)) {
       return parentModel
@@ -78,8 +73,8 @@ export function getAgentModel(
   const agentModelWithExp = agentModel ?? getDefaultSubagentModel()
 
   if (agentModelWithExp === 'inherit') {
-    // Apply runtime model resolution for inherit to get the effective model
-    // This ensures agents using 'inherit' get opusplan→Opus resolution in plan mode
+    // 对'inherit'应用运行时模型解析以获取有效模型
+    // 这确保使用'inherit'的代理在计划模式下获得opusplan→Opus解析
     return getRuntimeMainLoopModel({
       permissionMode: permissionMode ?? 'default',
       mainLoopModel: parentModel,
@@ -95,17 +90,15 @@ export function getAgentModel(
 }
 
 /**
- * Check if a bare family alias (opus/sonnet/haiku) matches the parent model's
- * tier. When it does, the subagent inherits the parent's exact model string
- * instead of resolving the alias to a provider default.
+ * 检查裸系列别名（opus/sonnet/haiku）是否匹配父模型的层级。
+ * 如果匹配，子代理将继承父模型的确切模型字符串，而不是将别名解析为提供者默认值。
  *
- * Prevents surprising downgrades: a Vertex user on Opus 4.6 (via /model) who
- * spawns a subagent with `model: opus` should get Opus 4.6, not whatever
- * getDefaultOpusModel() returns for 3P.
- * See https://github.com/anthropics/claude-code/issues/30815.
+ * 防止令人惊讶的降级：一个在Opus 4.6上的Vertex用户（通过/model）
+ * 使用`model: opus`生成子代理时，应该获得Opus 4.6，而不是getDefaultOpusModel()为3P返回的任何值。
+ * 参见 https://github.com/anthropics/claude-code/issues/30815。
  *
- * Only bare family aliases match. `opus[1m]`, `best`, `opusplan` fall through
- * since they carry semantics beyond "same tier as parent".
+ * 仅裸系列别名匹配。`opus[1m]`、`best`、`opusplan`会通过，
+ * 因为它们带有超出“与父模型相同层级”的语义。
  */
 function aliasMatchesParentTier(alias: string, parentModel: string): boolean {
   const canonical = getCanonicalName(parentModel)
@@ -121,16 +114,15 @@ function aliasMatchesParentTier(alias: string, parentModel: string): boolean {
   }
 }
 
+/** 获取 get Agent Model Display 对应的数据或状态。 */
 export function getAgentModelDisplay(model: string | undefined): string {
-  // When model is omitted, getDefaultSubagentModel() returns 'inherit' at runtime
+  // 当省略model时，getDefaultSubagentModel()在运行时返回'inherit'
   if (!model) return 'Inherit from parent (default)'
   if (model === 'inherit') return 'Inherit from parent'
   return capitalize(model)
 }
 
-/**
- * Get available model options for agents
- */
+/** 获取代理可用的模型选项 */
 export function getAgentModelOptions(): AgentModelOption[] {
   return [
     {

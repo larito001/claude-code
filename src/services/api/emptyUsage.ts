@@ -1,9 +1,7 @@
 import type { NonNullableUsage } from '@anthropic-ai/claude-agent-sdk'
 
 /**
- * Zero-initialized usage object. Extracted from logging.ts so that
- * callers can import it without transitively pulling in
- * api/errors.ts → utils/messages.ts → BashTool.tsx → the world.
+ * 零初始化的用法对象。从 logging.ts 中提取，以便调用方无需通过导入链 api/errors.ts → utils/messages.ts → BashTool.tsx → 整个世界即可引入它。
  */
 export const EMPTY_USAGE: Readonly<NonNullableUsage> = {
   input_tokens: 0,

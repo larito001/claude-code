@@ -29,6 +29,7 @@ import { getFeatureValue } from '../featureConfig.js'
 import { REPEATED_529_ERROR_MESSAGE } from './errors.js'
 import { extractConnectionErrorDetails } from './errorUtils.js'
 
+/** 停止或关闭 abort Error 对应的数据或状态。 */
 const abortError = () => new APIUserAbortError()
 
 const DEFAULT_MAX_RETRIES = 10
@@ -36,11 +37,7 @@ const FLOOR_OUTPUT_TOKENS = 3000
 const MAX_529_RETRIES = 3
 export const BASE_DELAY_MS = 500
 
-// Foreground query sources where the user IS blocking on the result — these
-// retry on 529. Everything else (summaries, titles, suggestions, classifiers)
-// bails immediately: during a capacity cascade each retry is 3-10× gateway
-// amplification, and the user never sees those fail anyway. New sources
-// default to no-retry — add here only if the user is waiting on the result.
+// 用户正在阻塞等待结果的前台查询源——这些源会在529错误时重试。其他所有内容（摘要、标题、建议、分类器）会立即放弃：在容量级联期间，每次重试会导致3-10倍的网关放大，而且用户无论如何也不会看到那些失败。新源默认不重试——仅当用户在等待结果时才添加此处。
 const FOREGROUND_529_RETRY_SOURCES = new Set<QuerySource>([
   'repl_main_thread',
   'repl_main_thread:outputStyle:custom',
@@ -55,41 +52,39 @@ const FOREGROUND_529_RETRY_SOURCES = new Set<QuerySource>([
   'hook_prompt',
   'verification_agent',
   'side_question',
-  // Security classifiers — must complete for auto-mode correctness.
-  // yoloClassifier.ts uses 'auto_mode' (not 'yolo_classifier' — that's
-  // type-only). The Bash classifier remains independently feature-gated.
+  // 安全分类器——必须完成以确保自动模式的正确性。yoloClassifier.ts使用'auto_mode'（而不是'yolo_classifier'——那只是类型）。Bash分类器保持独立的功能门控。
   'auto_mode',
   ...(feature('BASH_CLASSIFIER') ? (['bash_classifier'] as const) : []),
 ])
 
+/** 判断是否满足 should Retry529 对应的数据或状态。 */
 function shouldRetry529(querySource: QuerySource | undefined): boolean {
-  // undefined → retry (conservative for untagged call paths)
+  // undefined → 重试（对于未标记的调用路径采用保守策略）
   return (
     querySource === undefined || FOREGROUND_529_RETRY_SOURCES.has(querySource)
   )
 }
 
-// CLAUDE_CODE_UNATTENDED_RETRY: opt-in behavior for unattended sessions. Retries 429/529
-// indefinitely with higher backoff and periodic keep-alive yields so the host
-// environment does not mark the session idle mid-wait.
-// Keep-alive currently uses SystemAPIErrorMessage yields; a dedicated host
-// keep-alive channel can replace this without changing retry semantics.
+// CLAUDE_CODE_UNATTENDED_RETRY：无人值守会话的选择加入行为。无限重试429/529，采用更高的退避和周期性的保活让步，以便主机环境不会在等待期间将会话标记为空闲。保活目前使用SystemAPIErrorMessage让步；专用的主机保活通道可以替换它而不改变重试语义。
 const PERSISTENT_MAX_BACKOFF_MS = 5 * 60 * 1000
 const PERSISTENT_RESET_CAP_MS = 6 * 60 * 60 * 1000
 const HEARTBEAT_INTERVAL_MS = 30_000
 
+/** 判断是否满足 is Persistent Retry Enabled 对应的数据或状态。 */
 function isPersistentRetryEnabled(): boolean {
   return feature('UNATTENDED_RETRY')
     ? isEnvTruthy(process.env.CLAUDE_CODE_UNATTENDED_RETRY)
     : false
 }
 
+/** 判断是否满足 is Transient Capacity Error 对应的数据或状态。 */
 function isTransientCapacityError(error: unknown): boolean {
   return (
     is529Error(error) || (error instanceof APIError && error.status === 429)
   )
 }
 
+/** 判断是否满足 is Stale Connection Error 对应的数据或状态。 */
 function isStaleConnectionError(error: unknown): boolean {
   if (!(error instanceof APIConnectionError)) {
     return false
@@ -113,16 +108,12 @@ interface RetryOptions {
   fastMode?: boolean
   signal?: AbortSignal
   querySource?: QuerySource
-  /**
-   * Pre-seed the consecutive 529 counter. Used when this retry loop is a
-   * non-streaming fallback after a streaming 529 — the streaming 529 should
-   * count toward MAX_529_RETRIES so total 529s-before-fallback is consistent
-   * regardless of which request mode hit the overload.
-   */
+  /** 预先设置连续529计数器。当此重试循环是流式529后的非流式回退时使用——流式529应计入MAX_529_RETRIES，这样无论哪种请求模式遇到过载，回退前的总529次数都保持一致。 */
   initialConsecutive529Errors?: number
 }
 
 export class CannotRetryError extends Error {
+  /** 初始化当前实例及其必要状态。 */
   constructor(
     public readonly originalError: unknown,
     public readonly retryContext: RetryContext,
@@ -131,7 +122,7 @@ export class CannotRetryError extends Error {
     super(message)
     this.name = 'RetryError'
 
-    // Preserve the original stack trace if available
+    // 如果可用，保留原始堆栈跟踪
     if (originalError instanceof Error && originalError.stack) {
       this.stack = originalError.stack
     }
@@ -139,6 +130,7 @@ export class CannotRetryError extends Error {
 }
 
 export class FallbackTriggeredError extends Error {
+  /** 初始化当前实例及其必要状态。 */
   constructor(
     public readonly originalModel: string,
     public readonly fallbackModel: string,
@@ -148,6 +140,7 @@ export class FallbackTriggeredError extends Error {
   }
 }
 
+/** 执行 with Retry 对应的业务处理。 */
 export async function* withRetry<T>(
   getClient: () => Promise<Anthropic>,
   operation: (
@@ -172,18 +165,17 @@ export async function* withRetry<T>(
       throw new APIUserAbortError()
     }
 
-    // Capture whether fast mode is active before this attempt
-    // (fallback may change the state mid-loop)
+    // 在此尝试之前捕获快速模式是否激活（回退可能在循环中间改变状态）
     const wasFastModeActive = isFastModeEnabled()
       ? retryContext.fastMode && !isFastModeCooldown()
       : false
 
     try {
-      // Get a fresh client instance on first attempt or after authentication errors
-      // - 401 for first-party API-key authentication failures
-      // - Bedrock-specific auth errors (403 or CredentialsProviderError)
-      // - Vertex-specific auth errors (credential refresh failures, 401)
-      // - ECONNRESET/EPIPE: stale keep-alive socket; disable pooling and reconnect
+      // 在首次尝试或认证错误后获取新的客户端实例
+      // - 401 表示第一方API密钥认证失败
+      // - Bedrock特有的认证错误（403或CredentialsProviderError）
+      // - Vertex特有的认证错误（凭证刷新失败，401）
+      // - ECONNRESET/EPIPE：保持连接套接字过期；禁用连接池并重新连接
       const isStaleConnection = isStaleConnectionError(lastError)
       if (
         isStaleConnection &&
@@ -216,12 +208,7 @@ export async function* withRetry<T>(
         { level: 'error' },
       )
 
-      // Fast mode fallback: on 429/529, either wait and retry (short delays)
-      // or fall back to standard speed (long delays) to avoid cache thrashing.
-      // Skip in persistent mode: the short-retry path below loops with fast
-      // mode still active, so its `continue` never reaches the attempt clamp
-      // and the for-loop terminates. Persistent sessions want the chunked
-      // keep-alive path instead of fast-mode cache-preservation anyway.
+      // 快速模式回退：在429/529时，要么等待并重试（短延迟），要么回退到标准速度（长延迟），以避免缓存抖动。在持久模式下跳过：下面的短重试路径在快速模式仍激活时循环，因此其`continue`永远不会到达尝试限制，for循环终止。持久会话无论如何都希望采用分块保活路径，而不是快速模式的缓存保留。
       if (
         wasFastModeActive &&
         !isPersistentRetryEnabled() &&
@@ -230,13 +217,11 @@ export async function* withRetry<T>(
       ) {
         const retryAfterMs = getRetryAfterMs(error)
         if (retryAfterMs !== null && retryAfterMs < SHORT_RETRY_THRESHOLD_MS) {
-          // Short retry-after: wait and retry with fast mode still active
-          // to preserve prompt cache (same model name on retry).
+          // 短重试延迟：等待并以快速模式仍激活的状态重试，以保留提示缓存（重试时使用相同的模型名称）。
           await sleep(retryAfterMs, options.signal, { abortError })
           continue
         }
-        // Long or unknown retry-after: enter cooldown (switches to standard
-        // speed model), with a minimum floor to avoid flip-flopping.
+        // 长或未知的重试延迟：进入冷却（切换到标准速度模型），并设置最低下限以避免来回切换。
         const cooldownMs = Math.max(
           retryAfterMs ?? DEFAULT_FAST_MODE_FALLBACK_HOLD_MS,
           MIN_COOLDOWN_MS,
@@ -251,35 +236,33 @@ export async function* withRetry<T>(
         continue
       }
 
-      // Fast mode fallback: if the API rejects the fast mode parameter
-      // (e.g., org doesn't have fast mode enabled), permanently disable fast
-      // mode and retry at standard speed.
+      // 快速模式回退：如果API拒绝快速模式参数（例如，组织未启用快速模式），则永久禁用快速模式并以标准速度重试。
       if (wasFastModeActive && isFastModeNotEnabledError(error)) {
         handleFastModeRejectedByAPI()
         retryContext.fastMode = false
         continue
       }
 
-      // Non-foreground sources bail immediately on 529 — no retry amplification
-      // during capacity cascades. User never sees these fail.
+      // 非前台源在529时立即放弃——在容量级联期间没有重试放大。用户永远不会看到这些失败。
       if (is529Error(error) && !shouldRetry529(options.querySource)) {
         throw new CannotRetryError(error, retryContext)
       }
 
-      // Track consecutive 529 errors
+      // 跟踪连续的529错误
       if (
         is529Error(error) &&
-        // If FALLBACK_FOR_ALL_PRIMARY_MODELS is not set, fall through only if the primary model is a non-custom Opus model.
-        // TODO: Revisit if the isNonCustomOpusModel check should still exist, or if isNonCustomOpusModel is a stale artifact of when Claude Code was hardcoded on Opus.
+        // 如果未设置FALLBACK_FOR_ALL_PRIMARY_MODELS，则仅当主要模型是非自定义的Opus模型时才回退。
+        // 默认只为内置 Opus 主模型启用模型回退；自定义模型需显式设置
+        // FALLBACK_FOR_ALL_PRIMARY_MODELS，避免在未知部署上擅自切换模型。
         (process.env.FALLBACK_FOR_ALL_PRIMARY_MODELS ||
           isNonCustomOpusModel(options.model))
       ) {
         consecutive529Errors++
         if (consecutive529Errors >= MAX_529_RETRIES) {
-          // Check if fallback model is specified
+          // 检查是否指定了回退模型
           if (options.fallbackModel) {
 
-            // Throw special error to indicate fallback was triggered
+            // 抛出特殊错误以指示已触发回退
             throw new FallbackTriggeredError(
               options.model,
               options.fallbackModel,
@@ -298,14 +281,14 @@ export async function* withRetry<T>(
         }
       }
 
-      // Only retry if the error indicates we should
+      // 仅当错误指示应重试时才重试
       const persistent =
         isPersistentRetryEnabled() && isTransientCapacityError(error)
       if (attempt > maxRetries && !persistent) {
         throw new CannotRetryError(error, retryContext)
       }
 
-      // AWS/GCP errors aren't always APIError, but can be retried
+      // AWS/GCP错误不总是APIError，但可以重试
       const handledCloudAuthError =
         handleAwsCredentialError(error) || handleGcpCredentialError(error)
       if (
@@ -315,10 +298,8 @@ export async function* withRetry<T>(
         throw new CannotRetryError(error, retryContext)
       }
 
-      // Handle max tokens context overflow errors by adjusting max_tokens for the next attempt
-      // NOTE: With extended-context-window beta, this 400 error should not occur.
-      // The API now returns 'model_context_window_exceeded' stop_reason instead.
-      // Keeping for backward compatibility.
+      // 通过调整下次尝试的max_tokens来处理最大令牌上下文溢出错误
+      // 注意：使用扩展上下文窗口beta版时，不应出现此400错误。API现在返回'model_context_window_exceeded'停止原因。保留以向后兼容。
       if (error instanceof APIError) {
         const overflowData = parseMaxTokensContextOverflowError(error)
         if (overflowData) {
@@ -337,7 +318,7 @@ export async function* withRetry<T>(
             )
             throw error
           }
-          // Ensure we have enough tokens for thinking + at least 1 output token
+          // 确保有足够的令牌用于思考 + 至少1个输出令牌
           const minRequired =
             (retryContext.thinkingConfig.type === 'enabled'
               ? retryContext.thinkingConfig.budgetTokens
@@ -354,14 +335,12 @@ export async function* withRetry<T>(
         }
       }
 
-      // For other errors, proceed with normal retry logic
-      // Get retry-after header if available
+      // 对于其他错误，继续正常的重试逻辑。如果可用，获取retry-after头
       const retryAfter = getRetryAfter(error)
       let delayMs: number
       if (persistent && error instanceof APIError && error.status === 429) {
         persistentAttempt++
-        // Window-based limits (e.g. 5hr Max/Pro) include a reset timestamp.
-        // Wait until reset rather than polling every 5 min uselessly.
+        // 基于窗口的限制（例如5小时Max/Pro）包含重置时间戳。等待重置，而不是无用地每5分钟轮询。
         const resetDelay = getRateLimitResetDelayMs(error)
         delayMs =
           resetDelay ??
@@ -375,9 +354,7 @@ export async function* withRetry<T>(
           )
       } else if (persistent) {
         persistentAttempt++
-        // Retry-After is a server directive and bypasses maxDelayMs inside
-        // getRetryDelay (intentional — honoring it is correct). Cap at the
-        // 6hr reset-cap here so a pathological header can't wait unbounded.
+        // Retry-After是服务器指令，绕过getRetryDelay内部的maxDelayMs（有意为之——遵守它是正确的）。在此处限制为6小时重置上限，以避免病态头导致无限等待。
         delayMs = Math.min(
           getRetryDelay(
             persistentAttempt,
@@ -390,14 +367,14 @@ export async function* withRetry<T>(
         delayMs = getRetryDelay(attempt, retryAfter)
       }
 
-      // In persistent mode the for-loop `attempt` is clamped at maxRetries+1;
-      // use persistentAttempt for telemetry/yields so they show the true count.
+      // 在持久模式下，for循环 `attempt` 被限制在 maxRetries+1；
+      // 使用 persistentAttempt 进行遥测/产出，以显示真实次数。
       const reportedAttempt = persistent ? persistentAttempt : attempt
 
       if (persistent) {
-        // Chunk long sleeps so the host sees periodic stdout activity and
-        // does not mark the session idle. Each yield surfaces as
-        // {type:'system', subtype:'api_retry'} on stdout via QueryEngine.
+        // 将长休眠分块，以便主机看到定期的 stdout 活动，
+        // 不会将会话标记为空闲。每次产出作为
+        // {type:'system', subtype:'api_retry'} 通过 QueryEngine 出现在 stdout 上。
         let remaining = delayMs
         while (remaining > 0) {
           if (options.signal?.aborted) throw new APIUserAbortError()
@@ -413,8 +390,8 @@ export async function* withRetry<T>(
           await sleep(chunk, options.signal, { abortError })
           remaining -= chunk
         }
-        // Clamp so the for-loop never terminates. Backoff uses the separate
-        // persistentAttempt counter which keeps growing to the 5-min cap.
+        // 限制以使 for 循环永不终止。退避使用单独的
+        // persistentAttempt 计数器，该计数器持续增长至 5 分钟上限。
         if (attempt >= maxRetries) attempt = maxRetries
       } else {
         if (error instanceof APIError) {
@@ -428,6 +405,7 @@ export async function* withRetry<T>(
   throw new CannotRetryError(lastError, retryContext)
 }
 
+/** 获取 get Retry After 对应的数据或状态。 */
 function getRetryAfter(error: unknown): string | null {
   return (
     ((error as { headers?: { 'retry-after'?: string } }).headers?.[
@@ -439,6 +417,7 @@ function getRetryAfter(error: unknown): string | null {
   )
 }
 
+/** 获取 get Retry Delay 对应的数据或状态。 */
 export function getRetryDelay(
   attempt: number,
   retryAfterHeader?: string | null,
@@ -459,6 +438,7 @@ export function getRetryDelay(
   return baseDelay + jitter
 }
 
+/** 解析 parse Max Tokens Context Overflow Error 对应的数据或状态。 */
 export function parseMaxTokensContextOverflowError(error: APIError):
   | {
       inputTokens: number
@@ -478,7 +458,7 @@ export function parseMaxTokensContextOverflowError(error: APIError):
     return undefined
   }
 
-  // Example format: "input length and `max_tokens` exceed context limit: 188059 + 20000 > 200000"
+  // 示例格式："input length and `max_tokens` exceed context limit: 188059 + 20000 > 200000"
   const regex =
     /input length and `max_tokens` exceed context limit: (\d+) \+ (\d+) > (\d+)/
   const match = error.message.match(regex)
@@ -506,9 +486,8 @@ export function parseMaxTokensContextOverflowError(error: APIError):
   return { inputTokens, maxTokens, contextLimit }
 }
 
-// TODO: Replace with a response header check once the API adds a dedicated
-// header for fast-mode rejection (e.g., x-fast-mode-rejected). String-matching
-// the error message is fragile and will break if the API wording changes.
+// 当前 API 没有专用于快速模式拒绝的响应头，只能兼容其稳定错误短语；
+// 若服务端新增机器可读标头，应优先改用标头，避免文案变化影响判断。
 function isFastModeNotEnabledError(error: unknown): boolean {
   if (!(error instanceof APIError)) {
     return false
@@ -519,24 +498,26 @@ function isFastModeNotEnabledError(error: unknown): boolean {
   )
 }
 
+/** 判断是否满足 is529 Error 对应的数据或状态。 */
 export function is529Error(error: unknown): boolean {
   if (!(error instanceof APIError)) {
     return false
   }
 
-  // Check for 529 status code or overloaded error in message
+  // 检查消息中是否有 529 状态码或过载错误
   return (
     error.status === 529 ||
-    // See below: the SDK sometimes fails to properly pass the 529 status code during streaming
+    // 见下文：SDK 有时在流式传输期间无法正确传递 529 状态码
     (error.message?.includes('"type":"overloaded_error"') ?? false)
   )
 }
 
+/** 判断是否满足 is Bedrock Auth Error 对应的数据或状态。 */
 function isBedrockAuthError(error: unknown): boolean {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) {
-    // AWS libs reject without an API call if .aws holds a past Expiration value
-    // otherwise, API calls that receive expired tokens give generic 403
-    // "The security token included in the request is invalid"
+    // 如果 .aws 包含过去的 Expiration 值，AWS 库会拒绝而不进行 API 调用；
+    // 否则，接收过期令牌的 API 调用会给出通用 403
+    // 此时服务端通常返回“The security token included in the request is invalid”。
     if (
       isAwsCredentialsProviderError(error) ||
       (error instanceof APIError && error.status === 403)
@@ -548,8 +529,8 @@ function isBedrockAuthError(error: unknown): boolean {
 }
 
 /**
- * Clear AWS auth caches if appropriate.
- * @returns true if action was taken.
+ * 清除 AWS 认证缓存（如果适用）。
+ * @returns 如果执行了操作则返回 true。
  */
 function handleAwsCredentialError(error: unknown): boolean {
   if (isBedrockAuthError(error)) {
@@ -559,8 +540,8 @@ function handleAwsCredentialError(error: unknown): boolean {
   return false
 }
 
-// google-auth-library throws plain Error (no typed name like AWS's
-// CredentialsProviderError). Match common SDK-level credential-failure messages.
+// google-auth-library 抛出普通 Error（没有像 AWS 的
+// CredentialsProviderError 那样的类型化名称）。匹配常见的 SDK 级凭证失败消息。
 function isGoogleAuthLibraryCredentialError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   const msg = error.message
@@ -571,13 +552,14 @@ function isGoogleAuthLibraryCredentialError(error: unknown): boolean {
   )
 }
 
+/** 判断是否满足 is Vertex Auth Error 对应的数据或状态。 */
 function isVertexAuthError(error: unknown): boolean {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) {
-    // SDK-level: google-auth-library fails in prepareOptions() before the HTTP call
+    // SDK 级别：google-auth-library 在 HTTP 调用之前的 prepareOptions() 中失败
     if (isGoogleAuthLibraryCredentialError(error)) {
       return true
     }
-    // Server-side: Vertex returns 401 for expired/invalid tokens
+    // 服务器端：Vertex 对过期/无效令牌返回 401
     if (error instanceof APIError && error.status === 401) {
       return true
     }
@@ -586,8 +568,8 @@ function isVertexAuthError(error: unknown): boolean {
 }
 
 /**
- * Clear GCP auth caches if appropriate.
- * @returns true if action was taken.
+ * 清除 GCP 认证缓存（如果适用）。
+ * @returns 如果执行了操作则返回 true。
  */
 function handleGcpCredentialError(error: unknown): boolean {
   if (isVertexAuthError(error)) {
@@ -597,28 +579,29 @@ function handleGcpCredentialError(error: unknown): boolean {
   return false
 }
 
+/** 判断是否满足 should Retry 对应的数据或状态。 */
 function shouldRetry(error: APIError): boolean {
-  // Persistent mode: 429/529 always retryable and bypass x-should-retry.
+  // 持久模式：429/529 始终可重试，并绕过 x-should-retry。
   if (isPersistentRetryEnabled() && isTransientCapacityError(error)) {
     return true
   }
 
-  // Check for overloaded errors first by examining the message content
-  // The SDK sometimes fails to properly pass the 529 status code during streaming,
-  // so we need to check the error message directly
+  // 首先通过检查消息内容来检查过载错误。
+  // SDK 有时在流式传输期间无法正确传递 529 状态码，
+  // 因此我们需要直接检查错误消息
   if (error.message?.includes('"type":"overloaded_error"')) {
     return true
   }
 
-  // Check for max tokens context overflow errors that we can handle
+  // 检查可处理的最大令牌上下文溢出错误
   if (parseMaxTokensContextOverflowError(error)) {
     return true
   }
 
-  // Note this is not a standard header.
+  // 注意，这不是标准头。
   const shouldRetryHeader = error.headers?.get('x-should-retry')
 
-  // If the server explicitly says whether or not to retry, obey.
+  // 如果服务器明确指示是否重试，则遵循。
   if (shouldRetryHeader === 'true') {
     return true
   }
@@ -633,43 +616,46 @@ function shouldRetry(error: APIError): boolean {
 
   if (!error.status) return false
 
-  // Retry on request timeouts.
+  // 在请求超时时重试。
   if (error.status === 408) return true
 
-  // Retry on lock timeouts.
+  // 在锁定超时时重试。
   if (error.status === 409) return true
 
-  // API-key providers may use Retry-After for transient rate limits.
+  // API 密钥提供者可能对临时速率限制使用 Retry-After。
   if (error.status === 429) {
     return true
   }
 
-  // Clear API key cache on 401 and allow retry.
+  // 在 401 时清除 API 密钥缓存并允许重试。
   if (error.status === 401) {
     clearApiKeyHelperCache()
     return true
   }
 
-  // Retry internal errors.
+  // 重试内部错误。
   if (error.status && error.status >= 500) return true
 
   return false
 }
 
+/** 获取 get Default Max Retries 对应的数据或状态。 */
 export function getDefaultMaxRetries(): number {
   if (process.env.CLAUDE_CODE_MAX_RETRIES) {
     return parseInt(process.env.CLAUDE_CODE_MAX_RETRIES, 10)
   }
   return DEFAULT_MAX_RETRIES
 }
+/** 获取 get Max Retries 对应的数据或状态。 */
 function getMaxRetries(options: RetryOptions): number {
   return options.maxRetries ?? getDefaultMaxRetries()
 }
 
-const DEFAULT_FAST_MODE_FALLBACK_HOLD_MS = 30 * 60 * 1000 // 30 minutes
-const SHORT_RETRY_THRESHOLD_MS = 20 * 1000 // 20 seconds
-const MIN_COOLDOWN_MS = 10 * 60 * 1000 // 10 minutes
+const DEFAULT_FAST_MODE_FALLBACK_HOLD_MS = 30 * 60 * 1000 // 30 分钟
+const SHORT_RETRY_THRESHOLD_MS = 20 * 1000 // 20秒
+const MIN_COOLDOWN_MS = 10 * 60 * 1000 // 10分钟
 
+/** 获取 get Retry After Ms 对应的数据或状态。 */
 function getRetryAfterMs(error: APIError): number | null {
   const retryAfter = getRetryAfter(error)
   if (retryAfter) {
@@ -681,6 +667,7 @@ function getRetryAfterMs(error: APIError): number | null {
   return null
 }
 
+/** 获取 get Rate Limit Reset Delay Ms 对应的数据或状态。 */
 function getRateLimitResetDelayMs(error: APIError): number | null {
   const resetHeader = error.headers?.get?.('anthropic-ratelimit-unified-reset')
   if (!resetHeader) return null
