@@ -104,8 +104,6 @@ import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
 import { firstLineOf } from './stringUtils.js'
 import {
-  normalizeLegacyToolName,
-  getLegacyToolNames,
   permissionRuleValueFromString,
 } from './permissions/permissionRuleParser.js'
 import { logError } from './log.js'
@@ -1243,26 +1241,17 @@ function matchesPattern(matchQuery: string, matcher: string): boolean {
       /** 执行 patterns 对应的业务处理。 */
       const patterns = matcher
         .split('|')
-        .map(p => normalizeLegacyToolName(p.trim()))
+        .map(p => p.trim())
       return patterns.includes(matchQuery)
     }
     // 简单的精确匹配
-    return matchQuery === normalizeLegacyToolName(matcher)
+    return matchQuery === matcher
   }
 
   // 否则视为正则表达式
   try {
     const regex = new RegExp(matcher)
-    if (regex.test(matchQuery)) {
-      return true
-    }
-    // 同时针对旧名称进行测试，以便像 "^Task$" 这样的模式仍然匹配
-    for (const legacyName of getLegacyToolNames(matchQuery)) {
-      if (regex.test(legacyName)) {
-        return true
-      }
-    }
-    return false
+    return regex.test(matchQuery)
   } catch {
     // 如果正则表达式无效，记录错误并返回 false
     logForDebugging(`Invalid regex pattern in hook matcher: ${matcher}`)
@@ -1288,7 +1277,7 @@ async function prepareIfConditionMatcher(
     return undefined
   }
 
-  const toolName = normalizeLegacyToolName(hookInput.tool_name)
+  const toolName = hookInput.tool_name
   const tool = tools && findToolByName(tools, hookInput.tool_name)
   const input = tool?.inputSchema.safeParse(hookInput.tool_input)
   const patternMatcher =
@@ -1298,7 +1287,7 @@ async function prepareIfConditionMatcher(
 
   return ifCondition => {
     const parsed = permissionRuleValueFromString(ifCondition)
-    if (normalizeLegacyToolName(parsed.toolName) !== toolName) {
+    if (parsed.toolName !== toolName) {
       return false
     }
     if (!parsed.ruleContent) {

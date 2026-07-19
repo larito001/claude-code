@@ -9,12 +9,7 @@ import { renderToolResultMessage, renderToolUseMessage } from './UI.js'
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
-    task_id: z
-      .string()
-      .optional()
-      .describe('The ID of the background task to stop'),
-    // shell_id is accepted for backward compatibility with the deprecated KillShell tool
-    shell_id: z.string().optional().describe('Deprecated: use task_id instead'),
+    task_id: z.string().describe('The ID of the background task to stop'),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
@@ -39,9 +34,6 @@ export type Output = z.infer<OutputSchema>
 export const TaskStopTool = buildTool({
   name: TASK_STOP_TOOL_NAME,
   searchHint: 'kill a running background task',
-  // KillShell is the deprecated name - kept as alias for backward compatibility
-  // with existing transcripts and SDK users
-  aliases: ['KillShell'],
   maxResultSizeChars: 100_000,
   userFacingName: () => 'Stop Task',
   get inputSchema(): InputSchema {
@@ -55,26 +47,16 @@ export const TaskStopTool = buildTool({
     return true
   },
   toAutoClassifierInput(input) {
-    return input.task_id ?? input.shell_id ?? ''
+    return input.task_id
   },
-  async validateInput({ task_id, shell_id }, { getAppState }) {
-    // Support both task_id and shell_id (deprecated KillShell compat)
-    const id = task_id ?? shell_id
-    if (!id) {
-      return {
-        result: false,
-        message: 'Missing required parameter: task_id',
-        errorCode: 1,
-      }
-    }
-
+  async validateInput({ task_id }, { getAppState }) {
     const appState = getAppState()
-    const task = appState.tasks?.[id] as TaskStateBase | undefined
+    const task = appState.tasks?.[task_id] as TaskStateBase | undefined
 
     if (!task) {
       return {
         result: false,
-        message: `No task found with ID: ${id}`,
+        message: `No task found with ID: ${task_id}`,
         errorCode: 1,
       }
     }
@@ -82,7 +64,7 @@ export const TaskStopTool = buildTool({
     if (task.status !== 'running') {
       return {
         result: false,
-        message: `Task ${id} is not running (status: ${task.status})`,
+        message: `Task ${task_id} is not running (status: ${task.status})`,
         errorCode: 3,
       }
     }
@@ -104,17 +86,8 @@ export const TaskStopTool = buildTool({
   },
   renderToolUseMessage,
   renderToolResultMessage,
-  async call(
-    { task_id, shell_id },
-    { getAppState, setAppState, abortController },
-  ) {
-    // Support both task_id and shell_id (deprecated KillShell compat)
-    const id = task_id ?? shell_id
-    if (!id) {
-      throw new Error('Missing required parameter: task_id')
-    }
-
-    const result = await stopTask(id, {
+  async call({ task_id }, { getAppState, setAppState }) {
+    const result = await stopTask(task_id, {
       getAppState,
       setAppState,
     })

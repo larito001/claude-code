@@ -524,21 +524,7 @@ export function normalizeToolInput<T extends Tool>(
       } as z.infer<T['inputSchema']>
     }
     case TASK_OUTPUT_TOOL_NAME: {
-      // Normalize legacy parameter names from AgentOutputTool/BashOutputTool
-      const legacyInput = input as Record<string, unknown>
-      const taskId =
-        legacyInput.task_id ?? legacyInput.agentId ?? legacyInput.bash_id
-      const timeout =
-        legacyInput.timeout ??
-        (typeof legacyInput.wait_up_to === 'number'
-          ? legacyInput.wait_up_to * 1000
-          : undefined)
-      // SAFETY: See comment in BashTool case above
-      return {
-        task_id: taskId ?? '',
-        block: legacyInput.block ?? true,
-        timeout: timeout ?? 30000,
-      } as z.infer<T['inputSchema']>
+      return tool.inputSchema.parse(input) as z.infer<T['inputSchema']>
     }
     default:
       return input

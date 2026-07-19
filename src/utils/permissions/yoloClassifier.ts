@@ -325,9 +325,6 @@ function buildToolLookup(tools: Tools): ToolLookup {
   const map = new Map<string, Tool>()
   for (const tool of tools) {
     map.set(tool.name, tool)
-    for (const alias of tool.aliases ?? []) {
-      map.set(alias, tool)
-    }
   }
   return map
 }

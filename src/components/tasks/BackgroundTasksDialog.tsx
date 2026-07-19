@@ -212,7 +212,7 @@ export function BackgroundTasksDialog({
     if (e.key === 'x') {
       e.preventDefault();
       if (currentSelection_0.type === 'local_bash' && currentSelection_0.status === 'running') {
-        void killShellTask(currentSelection_0.id);
+        void stopShellTask(currentSelection_0.id);
       } else if (currentSelection_0.type === 'local_agent' && currentSelection_0.status === 'running') {
         void killAgentTask(currentSelection_0.id);
       } else if (currentSelection_0.type === 'in_process_teammate' && currentSelection_0.status === 'running') {
@@ -237,7 +237,7 @@ export function BackgroundTasksDialog({
       }
     }
   };
-  async function killShellTask(taskId: string): Promise<void> {
+  async function stopShellTask(taskId: string): Promise<void> {
     await LocalShellTask.kill(taskId, setAppState);
   }
   async function killAgentTask(taskId_0: string): Promise<void> {
@@ -302,7 +302,7 @@ export function BackgroundTasksDialog({
     // Detail mode - show appropriate detail dialog
     switch (task_0.type) {
       case 'local_bash':
-        return <ShellDetailDialog shell={task_0} onDone={onDone} onKillShell={() => void killShellTask(task_0.id)} onBack={goBackToList} key={`shell-${task_0.id}`} />;
+        return <ShellDetailDialog shell={task_0} onDone={onDone} onStopTask={() => void stopShellTask(task_0.id)} onBack={goBackToList} key={`shell-${task_0.id}`} />;
       case 'local_agent':
         return <AsyncAgentDetailDialog agent={task_0} onDone={onDone} onKillAgent={() => void killAgentTask(task_0.id)} onBack={goBackToList} key={`agent-${task_0.id}`} />;
       case 'in_process_teammate':

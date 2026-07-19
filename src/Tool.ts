@@ -347,19 +347,15 @@ export type ToolCallProgress<P extends ToolProgressData = ToolProgressData> = (
 // 任何输出具有字符串键的对象的模式类型
 export type AnyObject = z.ZodType<{ [key: string]: unknown }>
 
-/**
- * 检查工具是否与给定名称（主名称或别​​名）匹配。
- */
+/** 检查工具是否与给定主名称匹配。 */
 export function toolMatchesName(
-  tool: { name: string; aliases?: string[] },
+  tool: { name: string },
   name: string,
 ): boolean {
-  return tool.name === name || (tool.aliases?.includes(name) ?? false)
+  return tool.name === name
 }
 
-/**
- * 从工具列表中按名称或别名查找工具。
- */
+/** 从工具列表中按主名称查找工具。 */
 export function findToolByName(tools: Tools, name: string): Tool | undefined {
   return tools.find(t => toolMatchesName(t, name))
 }
@@ -369,11 +365,6 @@ export type Tool<
   Output = unknown,
   P extends ToolProgressData = ToolProgressData,
 > = {
-  /**
-   * 重命名工具时用于向后兼容的可选别名。
-   * 除了其主要名称之外，还可以通过这些名称中的任何一个来查找该工具。
-   */
-  aliases?: string[]
   /**
    * ToolSearch 用于关键字匹配的单行功能短语。
    * 延迟时帮助模型通过关键字搜索找到此工具。

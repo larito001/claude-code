@@ -7,10 +7,6 @@ import type {
   SDKMessage,
 } from 'src/entrypoints/agentSdkTypes.js'
 import {
-  AGENT_TOOL_NAME,
-  LEGACY_AGENT_TOOL_NAME,
-} from 'src/tools/AgentTool/constants.js'
-import {
   getAnthropicApiKeyWithSource,
   type ApiKeySource as CredentialApiKeySource,
 } from '../auth.js'
@@ -20,12 +16,6 @@ import {
   getSettings_DEPRECATED,
   getSettingsForSource,
 } from '../settings/settings.js'
-
-// 兼容仍识别旧版 Task 工具名的 SDK 使用者。待公共协议完成 Agent 名称迁移后，
-// 可在一次明确的协议主版本升级中删除该映射。
-export function sdkCompatToolName(name: string): string {
-  return name === AGENT_TOOL_NAME ? LEGACY_AGENT_TOOL_NAME : name
-}
 
 /**
  * 将本框架的 API Key 来源映射为公共 Agent SDK 的来源枚举。
@@ -83,8 +73,7 @@ export function buildSystemInitMessage(inputs: SystemInitInputs): SDKMessage {
     subtype: 'init',
     cwd: getCwd(),
     session_id: getSessionId(),
-    /** 转换 tools 对应的数据或状态。 */
-    tools: inputs.tools.map(tool => sdkCompatToolName(tool.name)),
+    tools: inputs.tools.map(tool => tool.name),
     /** 执行 mcp servers 对应的业务处理。 */
     mcp_servers: inputs.mcpClients.map(client => ({
       name: client.name,

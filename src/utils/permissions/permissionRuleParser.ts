@@ -1,29 +1,4 @@
-import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
-import { TASK_OUTPUT_TOOL_NAME } from '../../tools/TaskOutputTool/constants.js'
-import { TASK_STOP_TOOL_NAME } from '../../tools/TaskStopTool/prompt.js'
 import type { PermissionRuleValue } from './PermissionRule.js'
-
-// Maps legacy tool names to their current canonical names.
-// When a tool is renamed, add old → new here so permission rules,
-// hooks, and persisted wire names resolve to the canonical name.
-const LEGACY_TOOL_NAME_ALIASES: Record<string, string> = {
-  Task: AGENT_TOOL_NAME,
-  KillShell: TASK_STOP_TOOL_NAME,
-  AgentOutputTool: TASK_OUTPUT_TOOL_NAME,
-  BashOutputTool: TASK_OUTPUT_TOOL_NAME,
-}
-
-export function normalizeLegacyToolName(name: string): string {
-  return LEGACY_TOOL_NAME_ALIASES[name] ?? name
-}
-
-export function getLegacyToolNames(canonicalName: string): string[] {
-  const result: string[] = []
-  for (const [legacy, canonical] of Object.entries(LEGACY_TOOL_NAME_ALIASES)) {
-    if (canonical === canonicalName) result.push(legacy)
-  }
-  return result
-}
 
 /**
  * Escapes special characters in rule content for safe storage in permission rules.
@@ -82,20 +57,20 @@ export function permissionRuleValueFromString(
   const openParenIndex = findFirstUnescapedChar(ruleString, '(')
   if (openParenIndex === -1) {
     // No parenthesis found - this is just a tool name
-    return { toolName: normalizeLegacyToolName(ruleString) }
+    return { toolName: ruleString }
   }
 
   // Find the last unescaped closing parenthesis
   const closeParenIndex = findLastUnescapedChar(ruleString, ')')
   if (closeParenIndex === -1 || closeParenIndex <= openParenIndex) {
     // No matching closing paren or malformed - treat as tool name
-    return { toolName: normalizeLegacyToolName(ruleString) }
+    return { toolName: ruleString }
   }
 
   // Ensure the closing paren is at the end
   if (closeParenIndex !== ruleString.length - 1) {
     // Content after closing paren - treat as tool name
-    return { toolName: normalizeLegacyToolName(ruleString) }
+    return { toolName: ruleString }
   }
 
   const toolName = ruleString.substring(0, openParenIndex)
@@ -103,18 +78,18 @@ export function permissionRuleValueFromString(
 
   // Missing toolName (e.g., "(foo)") is malformed - treat whole string as tool name
   if (!toolName) {
-    return { toolName: normalizeLegacyToolName(ruleString) }
+    return { toolName: ruleString }
   }
 
   // Empty content (e.g., "Bash()") or standalone wildcard (e.g., "Bash(*)")
   // should be treated as just the tool name (tool-wide rule)
   if (rawContent === '' || rawContent === '*') {
-    return { toolName: normalizeLegacyToolName(toolName) }
+    return { toolName }
   }
 
   // Unescape the content
   const ruleContent = unescapeRuleContent(rawContent)
-  return { toolName: normalizeLegacyToolName(toolName), ruleContent }
+  return { toolName, ruleContent }
 }
 
 /**

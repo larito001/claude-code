@@ -145,7 +145,6 @@ import { formatFileSize } from './format.js'
 import { validateImagesForAPI } from './imageValidation.js'
 import { safeParseJSON } from './json.js'
 import { logError, logMCPDebug } from './log.js'
-import { normalizeLegacyToolName } from './permissions/permissionRuleParser.js'
 import {
   getPlanModeV2AgentCount,
   getPlanModeV2ExploreAgentCount,
@@ -1548,7 +1547,7 @@ function stripUnavailableToolReferencesFromUserMessage(
         if (!isToolReferenceBlock(c)) return false
         const toolName = (c as { tool_name?: string }).tool_name
         return (
-          toolName && !availableToolNames.has(normalizeLegacyToolName(toolName))
+          toolName && !availableToolNames.has(toolName)
         )
       }),
   )
@@ -1571,11 +1570,10 @@ function stripUnavailableToolReferencesFromUserMessage(
           if (!isToolReferenceBlock(c)) return true
           const rawToolName = (c as { tool_name?: string }).tool_name
           if (!rawToolName) return true
-          const toolName = normalizeLegacyToolName(rawToolName)
-          const isAvailable = availableToolNames.has(toolName)
+          const isAvailable = availableToolNames.has(rawToolName)
           if (!isAvailable) {
             logForDebugging(
-              `Filtering out tool_reference for unavailable tool: ${toolName}`,
+              `Filtering out tool_reference for unavailable tool: ${rawToolName}`,
               { level: 'warn' },
             )
           }

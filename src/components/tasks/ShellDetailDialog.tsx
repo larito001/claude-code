@@ -18,7 +18,7 @@ type Props = {
   onDone: (result?: string, options?: {
     display?: CommandResultDisplay;
   }) => void;
-  onKillShell?: () => void;
+  onStopTask?: () => void;
   onBack?: () => void;
 };
 const SHELL_DETAIL_TAIL_BYTES = 8192;
@@ -51,7 +51,7 @@ export function ShellDetailDialog(t0) {
   const {
     shell,
     onDone,
-    onKillShell,
+    onStopTask,
     onBack
   } = t0;
   const {
@@ -123,7 +123,7 @@ export function ShellDetailDialog(t0) {
   }
   useKeybindings(t5, t6);
   let t7;
-  if ($[12] !== onBack || $[13] !== onDone || $[14] !== onKillShell || $[15] !== shell.status) {
+  if ($[12] !== onBack || $[13] !== onDone || $[14] !== onStopTask || $[15] !== shell.status) {
     t7 = e => {
       if (e.key === " ") {
         e.preventDefault();
@@ -135,16 +135,16 @@ export function ShellDetailDialog(t0) {
           e.preventDefault();
           onBack();
         } else {
-          if (e.key === "x" && shell.status === "running" && onKillShell) {
+          if (e.key === "x" && shell.status === "running" && onStopTask) {
             e.preventDefault();
-            onKillShell();
+            onStopTask();
           }
         }
       }
     };
     $[12] = onBack;
     $[13] = onDone;
-    $[14] = onKillShell;
+    $[14] = onStopTask;
     $[15] = shell.status;
     $[16] = t7;
   } else {
@@ -163,10 +163,10 @@ export function ShellDetailDialog(t0) {
   const displayCommand = t8;
   const t9 = isMonitor ? "Monitor details" : "Shell details";
   let t10;
-  if ($[19] !== onBack || $[20] !== onKillShell || $[21] !== shell.status) {
-    t10 = exitState => exitState.pending ? <Text>Press {exitState.keyName} again to exit</Text> : <Byline>{onBack && <KeyboardShortcutHint shortcut={"\u2190"} action="go back" />}<KeyboardShortcutHint shortcut="Esc/Enter/Space" action="close" />{shell.status === "running" && onKillShell && <KeyboardShortcutHint shortcut="x" action="stop" />}</Byline>;
+  if ($[19] !== onBack || $[20] !== onStopTask || $[21] !== shell.status) {
+    t10 = exitState => exitState.pending ? <Text>Press {exitState.keyName} again to exit</Text> : <Byline>{onBack && <KeyboardShortcutHint shortcut={"\u2190"} action="go back" />}<KeyboardShortcutHint shortcut="Esc/Enter/Space" action="close" />{shell.status === "running" && onStopTask && <KeyboardShortcutHint shortcut="x" action="stop" />}</Byline>;
     $[19] = onBack;
-    $[20] = onKillShell;
+    $[20] = onStopTask;
     $[21] = shell.status;
     $[22] = t10;
   } else {
