@@ -4,7 +4,7 @@ import {
   COST_HAIKU_45,
   formatModelPricing,
 } from '../modelCost.js'
-import { getSettings_DEPRECATED } from '../settings/settings.js'
+import { getInitialSettings } from '../settings/settings.js'
 import { checkOpus1mAccess, checkSonnet1mAccess } from './check1mAccess.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import {
@@ -269,7 +269,7 @@ export function getModelOptions(fastMode = false): ModelOption[] {
  * 始终保留“Default”选项（值：null）。
  */
 function filterModelOptionsByAllowlist(options: ModelOption[]): ModelOption[] {
-  const settings = getSettings_DEPRECATED() || {}
+  const settings = getInitialSettings() || {}
   if (!settings.availableModels) {
     return options // 无限制
   }

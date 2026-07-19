@@ -127,8 +127,7 @@ import type { EDITOR_MODES, NOTIFICATION_CHANNELS } from './configConstants.js'
 
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number]
 
-// 旧配置可能仍包含“emacs”；继续接受该值以保证跨版本迁移。
-export type EditorMode = 'emacs' | (typeof EDITOR_MODES)[number]
+export type EditorMode = (typeof EDITOR_MODES)[number]
 
 export type DiffTool = 'terminal' | 'auto'
 
@@ -138,10 +137,6 @@ export const CONFIG_SCHEMA_VERSION = 1 as const
 
 export type GlobalConfig = {
   schemaVersion: typeof CONFIG_SCHEMA_VERSION
-  /**
-   * @deprecated 请改用settings.apiKeyHelper。
-   */
-  apiKeyHelper?: string
   projects?: Record<string, ProjectConfig>
   numStartups: number
   theme: ThemeSetting
@@ -156,10 +151,6 @@ export type GlobalConfig = {
   hasUsedBackslashReturn?: boolean
   autoCompactEnabled: boolean // 控制是否启用自动压缩
   showTurnDuration: boolean // 控制是否显示回合持续时间消息（例如“Cooked for 1m 6s”）
-  /**
-   * @deprecated 请改用 settings.env。
-   */
-  env: { [key: string]: string } // 为 CLI 设置的环境变量
   hasSeenTasksHint?: boolean // 用户是否看到任务提示
   hasUsedStash?: boolean // 用户是否使用过stash功能（Ctrl+S）
   hasUsedBackgroundTask?: boolean // 用户是否已将任务置于后台 (Ctrl+B)
@@ -301,7 +292,6 @@ function createDefaultGlobalConfig(): GlobalConfig {
     hasUsedBackgroundTask: false,
     queuedCommandUpHintCount: 0,
     diffTool: 'auto',
-    env: {},
     tipsHistory: {},
     memoryUsageCount: 0,
     promptQueueUseCount: 0,
@@ -321,7 +311,6 @@ function createDefaultGlobalConfig(): GlobalConfig {
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = createDefaultGlobalConfig()
 
 export const GLOBAL_CONFIG_KEYS = [
-  'apiKeyHelper',
   'theme',
   'verbose',
   'preferredNotifChannel',
@@ -331,7 +320,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'autoCompactEnabled',
   'showTurnDuration',
   'diffTool',
-  'env',
   'tipsHistory',
   'todoFeatureEnabled',
   'showExpandedTodos',

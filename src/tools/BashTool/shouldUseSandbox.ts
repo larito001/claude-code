@@ -1,6 +1,6 @@
 import { splitCommand_DEPRECATED } from '../../utils/bash/commands.js'
 import { SandboxManager } from '../../utils/sandbox/sandbox-adapter.js'
-import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
+import { getInitialSettings } from '../../utils/settings/settings.js'
 import {
   BINARY_HIJACK_VARS,
   bashPermissionRule,
@@ -19,7 +19,7 @@ type SandboxInput = {
 // system (which prompts users) is the actual security control.
 function containsExcludedCommand(command: string): boolean {
   // Check user-configured excluded commands from settings
-  const settings = getSettings_DEPRECATED()
+  const settings = getInitialSettings()
   const userExcludedCommands = settings.sandbox?.excludedCommands ?? []
 
   if (userExcludedCommands.length === 0) {

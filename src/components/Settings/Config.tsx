@@ -596,8 +596,7 @@ export function Config({
   }, {
     id: 'editorMode',
     label: 'Editor mode',
-    // Convert 'emacs' to 'normal' for backward compatibility
-    value: globalConfig.editorMode === 'emacs' ? 'normal' : globalConfig.editorMode || 'normal',
+    value: globalConfig.editorMode || 'normal',
     options: ['normal', 'vim'],
     type: 'enum',
     onChange(value_1: string) {
@@ -795,7 +794,7 @@ export function Config({
       formattedChanges.push(`Set response language to ${chalk.bold(currentLanguage ?? 'Default (English)')}`);
     }
     if (globalConfig.editorMode !== initialConfig.current.editorMode) {
-      formattedChanges.push(`Set editor mode to ${chalk.bold(globalConfig.editorMode || 'emacs')}`);
+      formattedChanges.push(`Set editor mode to ${chalk.bold(globalConfig.editorMode || 'normal')}`);
     }
     if (globalConfig.diffTool !== initialConfig.current.diffTool) {
       formattedChanges.push(`Set diff tool to ${chalk.bold(globalConfig.diffTool)}`);

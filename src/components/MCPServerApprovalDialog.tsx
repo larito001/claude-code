@@ -1,6 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import React from 'react';
-import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js';
+import { getInitialSettings, updateSettingsForSource } from '../utils/settings/settings.js';
 import { Select } from './CustomSelect/index.js';
 import { Dialog } from './design-system/Dialog.js';
 import { MCPServerDialogCopy } from './MCPServerDialogCopy.js';
@@ -21,7 +21,7 @@ export function MCPServerApprovalDialog(t0) {
         case "yes":
         case "yes_all":
           {
-            const currentSettings_0 = getSettings_DEPRECATED() || {};
+            const currentSettings_0 = getInitialSettings() || {};
             const enabledServers = currentSettings_0.enabledMcpjsonServers || [];
             if (!enabledServers.includes(serverName)) {
               updateSettingsForSource("localSettings", {
@@ -38,7 +38,7 @@ export function MCPServerApprovalDialog(t0) {
           }
         case "no":
           {
-            const currentSettings = getSettings_DEPRECATED() || {};
+            const currentSettings = getInitialSettings() || {};
             const disabledServers = currentSettings.disabledMcpjsonServers || [];
             if (!disabledServers.includes(serverName)) {
               updateSettingsForSource("localSettings", {

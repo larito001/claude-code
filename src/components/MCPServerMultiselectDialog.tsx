@@ -2,7 +2,7 @@ import { c as _c } from "react/compiler-runtime";
 import partition from 'lodash-es/partition.js';
 import React, { useCallback } from 'react';
 import { Box, Text } from '../ink.js';
-import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js';
+import { getInitialSettings, updateSettingsForSource } from '../utils/settings/settings.js';
 import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js';
 import { SelectMulti } from './CustomSelect/SelectMulti.js';
 import { Byline } from './design-system/Byline.js';
@@ -22,7 +22,7 @@ export function MCPServerMultiselectDialog(t0) {
   let t1;
   if ($[0] !== onDone || $[1] !== serverNames) {
     t1 = function onSubmit(selectedServers) {
-      const currentSettings = getSettings_DEPRECATED() || {};
+      const currentSettings = getInitialSettings() || {};
       const enabledServers = currentSettings.enabledMcpjsonServers || [];
       const disabledServers = currentSettings.disabledMcpjsonServers || [];
       const [approvedServers, rejectedServers] = partition(serverNames, server => selectedServers.includes(server));
@@ -50,7 +50,7 @@ export function MCPServerMultiselectDialog(t0) {
   let t2;
   if ($[3] !== onDone || $[4] !== serverNames) {
     t2 = () => {
-      const currentSettings_0 = getSettings_DEPRECATED() || {};
+      const currentSettings_0 = getInitialSettings() || {};
       const disabledServers_0 = currentSettings_0.disabledMcpjsonServers || [];
       const newDisabledServers_0 = [...new Set([...disabledServers_0, ...serverNames])];
       updateSettingsForSource("localSettings", {

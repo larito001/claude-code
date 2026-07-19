@@ -82,7 +82,7 @@ import {
   readTranscriptForLoad,
   SKIP_PRECOMPACT_THRESHOLD,
 } from './sessionStoragePortable.js'
-import { getSettings_DEPRECATED } from './settings/settings.js'
+import { getInitialSettings } from './settings/settings.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 import type { ContentReplacementRecord } from './toolResultStorage.js'
 import { validateUuid } from './uuid.js'
@@ -782,7 +782,7 @@ class Project {
     )
     return (
       (getNodeEnv() === 'test' && !allowTestPersistence) ||
-      getSettings_DEPRECATED()?.cleanupPeriodDays === 0 ||
+      getInitialSettings()?.cleanupPeriodDays === 0 ||
       isSessionPersistenceDisabled() ||
       isEnvTruthy(process.env.CLAUDE_CODE_SKIP_PROMPT_HISTORY)
     )
@@ -1554,16 +1554,9 @@ export function buildConversationChain(
  * DIFFERENT assistant. The topology is a DAG; the walk above is a linked-list
  * traversal and keeps only one branch.
  *
- * Two loss modes observed in production (both fixed here):
- *   1. Sibling assistant orphaned: walk goes prev→asstA→TR_A→next, drops asstB
- *      (same message.id, chained off asstA) and TR_B.
- *   2. Progress-fork (legacy, pre-#23537): each tool_use asst had a progress
- *      child (continued the write chain) AND a TR child. Walk followed
- *      progress; TRs were dropped. No longer written (progress removed from
- *      transcript persistence), but old transcripts still have this shape.
- *
- * Read-side fix: the write topology is already on disk for old transcripts;
- * this recovery pass handles them.
+ * A sibling assistant can be orphaned when the walk goes
+ * prev→asstA→TR_A→next and drops asstB (same message.id, chained off asstA)
+ * and TR_B. This recovery pass restores the current parallel-tool topology.
  */
 function recoverOrphanedParallelToolResults(
   messages: Map<UUID, TranscriptMessage>,

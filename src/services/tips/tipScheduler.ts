@@ -1,4 +1,4 @@
-import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
+import { getInitialSettings } from '../../utils/settings/settings.js'
 import { getSessionsSinceLastShown, recordTipShown } from './tipHistory.js'
 import { getRelevantTips } from './tipRegistry.js'
 import type { Tip, TipContext } from './types.js'
@@ -29,7 +29,7 @@ export async function getTipToShowOnSpinner(
   context?: TipContext,
 ): Promise<Tip | undefined> {
   // Check if tips are disabled (default to true if not set)
-  if (getSettings_DEPRECATED().spinnerTipsEnabled === false) {
+  if (getInitialSettings().spinnerTipsEnabled === false) {
     return undefined
   }
 

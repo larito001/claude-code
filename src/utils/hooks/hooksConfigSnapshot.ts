@@ -27,7 +27,7 @@ function getHooksFromAllowedSources(): HooksSettings {
     return policySettings.hooks ?? {}
   }
 
-  const mergedSettings = settingsModule.getSettings_DEPRECATED()
+  const mergedSettings = settingsModule.getInitialSettings()
 
   // 如果在非托管设置中设置了 disableAllHooks，则仅受管理的 hooks 仍然运行
   // （非托管设置无法覆盖受管理的 hooks）
@@ -54,7 +54,7 @@ export function shouldAllowManagedHooksOnly(): boolean {
   // 如果设置了 disableAllHooks 但并非来自受管理设置，
   // 则视为仅受管理（非受管理的 hooks 被禁用，受管理的 hooks 仍运行）
   if (
-    settingsModule.getSettings_DEPRECATED().disableAllHooks === true &&
+    settingsModule.getInitialSettings().disableAllHooks === true &&
     policySettings?.disableAllHooks !== true
   ) {
     return true

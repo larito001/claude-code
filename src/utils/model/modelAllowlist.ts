@@ -1,4 +1,4 @@
-import { getSettings_DEPRECATED } from '../settings/settings.js'
+import { getInitialSettings } from '../settings/settings.js'
 import { isModelAlias, isModelFamilyAlias } from './aliases.js'
 import { parseUserSpecifiedModel } from './model.js'
 import { resolveOverriddenModel } from './modelStrings.js'
@@ -75,7 +75,7 @@ function familyHasSpecificEntries(
  * 检查模型是否被 settings 中的 availableModels 允许列表允许。如果未设置 availableModels，则允许所有模型。匹配层级：1. 家族别名（"opus", "sonnet", "haiku"）——整个家族的通配符，除非该家族存在更具体的条目（例如 "opus-4-5"）。此时家族通配符被忽略，仅应用具体条目。2. 版本前缀（"opus-4-5", "claude-opus-4-5"）——该版本的任何构建。3. 完整模型ID（"claude-opus-4-5-20251101"）——仅精确匹配
  */
 export function isModelAllowed(model: string): boolean {
-  const settings = getSettings_DEPRECATED() || {}
+  const settings = getInitialSettings() || {}
   const { availableModels } = settings
   if (!availableModels) {
     return true // 无限制

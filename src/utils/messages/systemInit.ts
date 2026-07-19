@@ -13,7 +13,7 @@ import {
 import { getCwd } from '../cwd.js'
 import { getFastModeState } from '../fastMode.js'
 import {
-  getSettings_DEPRECATED,
+  getInitialSettings,
   getSettingsForSource,
 } from '../settings/settings.js'
 
@@ -65,7 +65,7 @@ export type SystemInitInputs = {
  * 所有调用路径必须生成完全相同的消息结构，避免交互模式和无界面模式的协议漂移。
  */
 export function buildSystemInitMessage(inputs: SystemInitInputs): SDKMessage {
-  const settings = getSettings_DEPRECATED()
+  const settings = getInitialSettings()
   const outputStyle = settings?.outputStyle ?? DEFAULT_OUTPUT_STYLE_NAME
 
   const initMessage: SDKMessage = {

@@ -760,9 +760,6 @@ export function getInitialSettings(): SettingsJson {
   return settings || {}
 }
 
-/** @deprecated 改用 getInitialSettings()。此别名仅用于向后兼容。 */
-export const getSettings_DEPRECATED = getInitialSettings
-
 export type SettingsWithSources = {
   effective: SettingsJson
   /** 按优先级从低到高排序——后面的条目覆盖前面的。 */

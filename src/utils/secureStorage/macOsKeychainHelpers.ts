@@ -5,10 +5,7 @@ import { userInfo } from 'os'
 import { getFrameworkConfigHomeDir } from '../envUtils.js'
 import type { SecureStorageData } from './types.js'
 
-// Suffix distinguishing the OAuth credentials keychain entry from the legacy
-// API key entry (which uses no suffix). Both share the service name base.
-// DO NOT change this value — it's part of the keychain lookup key and would
-// orphan existing stored credentials.
+// Suffix for the MCP OAuth credentials keychain entry.
 export const CREDENTIALS_SERVICE_SUFFIX = '-credentials'
 
 export function getMacOsKeychainStorageServiceName(
@@ -17,19 +14,18 @@ export function getMacOsKeychainStorageServiceName(
   const configDir = getFrameworkConfigHomeDir()
   const isDefaultDir = !process.env.FRAMEWORK_CONFIG_DIR
 
-  // Use a hash of the config dir path to create a unique but stable suffix
-  // Only add suffix for non-default directories to maintain backwards compatibility
+  // Use a hash of the config dir path to create a unique but stable suffix.
   const dirHash = isDefaultDir
     ? ''
     : `-${createHash('sha256').update(configDir).digest('hex').substring(0, 8)}`
-  return `Claude Code${serviceSuffix}${dirHash}`
+  return `Claude Code Core Framework${serviceSuffix}${dirHash}`
 }
 
 export function getUsername(): string {
   try {
     return process.env.USER || userInfo().username
   } catch {
-    return 'claude-code-user'
+    return 'claude-code-core-framework-user'
   }
 }
 

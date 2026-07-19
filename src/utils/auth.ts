@@ -12,7 +12,7 @@ import { errorMessage } from './errors.js'
 import { execSyncWithDefaults_DEPRECATED } from './execFileNoThrow.js'
 import { logError } from './log.js'
 import {
-  getSettings_DEPRECATED,
+  getInitialSettings,
   getSettingsForSource,
 } from './settings/settings.js'
 import { jsonParse } from './slowOperations.js'
@@ -66,7 +66,7 @@ export function getConfiguredApiKeyHelper(): string | undefined {
   if (isBareMode()) {
     return getSettingsForSource('flagSettings')?.apiKeyHelper
   }
-  const mergedSettings = getSettings_DEPRECATED() || {}
+  const mergedSettings = getInitialSettings() || {}
   return mergedSettings.apiKeyHelper
 }
 
@@ -259,7 +259,7 @@ export function prefetchApiKeyFromApiKeyHelperIfSafe(): void {
 
 /** 从设置中获取已配置的otelHeadersHelper */
 function getConfiguredOtelHeadersHelper(): string | undefined {
-  const mergedSettings = getSettings_DEPRECATED() || {}
+  const mergedSettings = getInitialSettings() || {}
   return mergedSettings.otelHeadersHelper
 }
 

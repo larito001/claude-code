@@ -11,7 +11,7 @@ export const NOTIFICATION_CHANNELS = [
   'notifications_disabled',
 ] as const
 
-// Valid editor modes (excludes deprecated 'emacs' which is auto-migrated to 'normal')
+// Valid editor modes
 export const EDITOR_MODES = ['normal', 'vim'] as const
 
 // Valid teammate modes for spawning

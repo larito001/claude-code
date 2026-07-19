@@ -1042,7 +1042,7 @@ async function run(): Promise<CommanderCommand> {
 
     const effectiveReplayUserMessages = !!options.replayUserMessages;
     if (getIsNonInteractiveSession()) {
-      // 现在应用完全合并的设置环境（包括项目范围的 .claude-code-core-framework/settings.json PATH/GIT_DIR/GIT_WORK_TREE），以便 gitExe() 和下面的 git spawn 能够看到它们。信任在 -p 模式下是隐式的；managedEnv.ts:96-97 的文档字符串说明这应用来自所有来源的“潜在危险的环境变量如 LD_PRELOAD、PATH”。下面的 isNonInteractiveSession 块中的后续调用是幂等的（Object.assign，configureGlobalAgents 弹出之前的拦截器），并在插件初始化后获取任何插件贡献的环境。项目设置已经在这里加载：init() 中的 applySafeConfigEnvironmentVariables 调用了 managedEnv.ts:86 的 getSettings_DEPRECATED，它合并了所有启用的来源，包括 projectSettings/localSettings。
+      // 现在应用完全合并的设置环境（包括项目范围的 .claude-code-core-framework/settings.json PATH/GIT_DIR/GIT_WORK_TREE），以便 gitExe() 和下面的 git spawn 能够看到它们。信任在 -p 模式下是隐式的；managedEnv.ts:96-97 的文档字符串说明这应用来自所有来源的“潜在危险的环境变量如 LD_PRELOAD、PATH”。下面的 isNonInteractiveSession 块中的后续调用是幂等的（Object.assign，configureGlobalAgents 弹出之前的拦截器），并在插件初始化后获取任何插件贡献的环境。项目设置已经在这里加载：init() 中的 applySafeConfigEnvironmentVariables 调用了 managedEnv.ts:86 的 getInitialSettings，它合并了所有启用的来源，包括 projectSettings/localSettings。
       applyConfigEnvironmentVariables();
 
       // 现在生成 git status/log/branch，以便子进程执行与下面的 getCommands await 和 startDeferredPrefetches 重叠。在 setup() 之后，以便 cwd 是最终的（setup.ts:254 可能对 --worktree 执行 process.chdir(worktreePath)），并且在上述 applyConfigEnvironmentVariables 之后，以便来自所有来源（受信任 + 项目）的 PATH/GIT_DIR/GIT_WORK_TREE 被应用。getSystemContext 被记忆化；startDeferredPrefetches 中的 prefetchSystemContextIfSafe 调用变为缓存命中。await getIsGit() 产生的微任务在下面的 getCommands Promise.all await 中耗尽。信任在 -p 模式下是隐式的（与 prefetchSystemContextIfSafe 相同的条件）。

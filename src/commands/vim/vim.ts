@@ -3,12 +3,7 @@ import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 
 export const call: LocalCommandCall = async () => {
   const config = getGlobalConfig()
-  let currentMode = config.editorMode || 'normal'
-
-  // Handle backward compatibility - treat 'emacs' as 'normal'
-  if (currentMode === 'emacs') {
-    currentMode = 'normal'
-  }
+  const currentMode = config.editorMode || 'normal'
 
   const newMode = currentMode === 'normal' ? 'vim' : 'normal'
 

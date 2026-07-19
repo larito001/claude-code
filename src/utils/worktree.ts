@@ -996,9 +996,6 @@ export async function removeAgentWorktree(
 const EPHEMERAL_WORKTREE_PATTERNS = [
   /^agent-a[0-9a-f]{7}$/,
   /^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$/,
-  // Legacy wf-<idx> slugs from before workflowRunId disambiguation — kept so
-  // the 30-day sweep still cleans up worktrees leaked by older builds.
-  /^wf-\d+$/,
   // Real bridge slugs are `bridge-${safeFilenameId(sessionId)}`.
   /^bridge-[A-Za-z0-9_]+(-[A-Za-z0-9_]+)*$/,
   // Template job worktrees: job-<templateName>-<8hex>. Prefix distinguishes
