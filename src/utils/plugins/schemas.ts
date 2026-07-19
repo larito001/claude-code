@@ -4,156 +4,18 @@ import { McpServerConfigSchema } from '../../services/mcp/types.js'
 import { lazySchema } from '../lazySchema.js'
 
 /**
- * First-layer defense against official marketplace impersonation.
- *
- * This validation blocks direct impersonation attempts like "anthropic-official",
- * "claude-marketplace", etc. Indirect variations (e.g., "my-claude-marketplace")
- * are not blocked intentionally to avoid false positives on legitimate names.
- * Source org verification provides additional protection at registration/install time.
- */
-
-/**
- * Official marketplace names that are reserved for Anthropic/Claude official use.
- * These names are allowed ONLY for official marketplaces and blocked for third parties.
- */
-export const ALLOWED_OFFICIAL_MARKETPLACE_NAMES = new Set([
-  'claude-code-marketplace',
-  'claude-code-plugins',
-  'claude-plugins-official',
-  'anthropic-marketplace',
-  'anthropic-plugins',
-  'agent-skills',
-  'life-sciences',
-  'knowledge-work-plugins',
-])
-
-/**
- * Official marketplaces that should NOT auto-update by default.
- * These are still reserved/allowed names, but opt out of the auto-update
- * default that other official marketplaces receive.
- */
-const NO_AUTO_UPDATE_OFFICIAL_MARKETPLACES = new Set(['knowledge-work-plugins'])
-
-/**
  * Check if auto-update is enabled for a marketplace.
- * Uses the stored value if set, otherwise defaults based on whether
- * it's an official Anthropic marketplace (true) or not (false).
- * Official marketplaces in NO_AUTO_UPDATE_OFFICIAL_MARKETPLACES are excluded
- * from the auto-update default.
+ * Third-party marketplaces update only when explicitly enabled.
  *
  * @param marketplaceName - The name of the marketplace
  * @param entry - The marketplace entry (may have autoUpdate set)
  * @returns Whether auto-update is enabled for this marketplace
  */
 export function isMarketplaceAutoUpdate(
-  marketplaceName: string,
+  _marketplaceName: string,
   entry: { autoUpdate?: boolean },
 ): boolean {
-  const normalizedName = marketplaceName.toLowerCase()
-  return (
-    entry.autoUpdate ??
-    (ALLOWED_OFFICIAL_MARKETPLACE_NAMES.has(normalizedName) &&
-      !NO_AUTO_UPDATE_OFFICIAL_MARKETPLACES.has(normalizedName))
-  )
-}
-
-/**
- * Pattern to detect names that impersonate official Anthropic/Claude marketplaces.
- *
- * Matches names containing variations like:
- * - "official" combined with "anthropic" or "claude" (e.g., "official-claude-plugins")
- * - "anthropic" or "claude" combined with "official" (e.g., "claude-official")
- * - Names starting with "anthropic" or "claude" followed by official-sounding terms
- *   like "marketplace", "plugins" (e.g., "anthropic-marketplace-new", "claude-plugins-v2")
- *
- * The pattern is case-insensitive.
- */
-export const BLOCKED_OFFICIAL_NAME_PATTERN =
-  /(?:official[^a-z0-9]*(anthropic|claude)|(?:anthropic|claude)[^a-z0-9]*official|^(?:anthropic|claude)[^a-z0-9]*(marketplace|plugins|official))/i
-
-/**
- * Pattern to detect non-ASCII characters that could be used for homograph attacks.
- * Marketplace names should only contain ASCII characters to prevent impersonation
- * via lookalike Unicode characters (e.g., Cyrillic 'а' instead of Latin 'a').
- */
-const NON_ASCII_PATTERN = /[^\u0020-\u007E]/
-
-/**
- * Check if a marketplace name impersonates an official Anthropic/Claude marketplace.
- *
- * @param name - The marketplace name to check
- * @returns true if the name is blocked (impersonates official), false if allowed
- */
-export function isBlockedOfficialName(name: string): boolean {
-  // If it's in the allowed list, it's not blocked
-  if (ALLOWED_OFFICIAL_MARKETPLACE_NAMES.has(name.toLowerCase())) {
-    return false
-  }
-
-  // Block names with non-ASCII characters to prevent homograph attacks
-  // (e.g., using Cyrillic 'а' to impersonate 'anthropic')
-  if (NON_ASCII_PATTERN.test(name)) {
-    return true
-  }
-
-  // Check if it matches the blocked pattern
-  return BLOCKED_OFFICIAL_NAME_PATTERN.test(name)
-}
-
-/**
- * The official GitHub organization for Anthropic marketplaces.
- * Reserved names must come from this org.
- */
-export const OFFICIAL_GITHUB_ORG = 'anthropics'
-
-/**
- * Validate that a marketplace with a reserved name comes from the official source.
- *
- * Reserved names (in ALLOWED_OFFICIAL_MARKETPLACE_NAMES) can only be used by
- * marketplaces from the official Anthropic GitHub organization.
- *
- * @param name - The marketplace name
- * @param source - The marketplace source configuration
- * @returns An error message if validation fails, or null if valid
- */
-export function validateOfficialNameSource(
-  name: string,
-  source: { source: string; repo?: string; url?: string },
-): string | null {
-  const normalizedName = name.toLowerCase()
-
-  // Only validate reserved names
-  if (!ALLOWED_OFFICIAL_MARKETPLACE_NAMES.has(normalizedName)) {
-    return null // Not a reserved name, no source validation needed
-  }
-
-  // Check for GitHub source type
-  if (source.source === 'github') {
-    // Verify the repo is from the official org
-    const repo = source.repo || ''
-    if (!repo.toLowerCase().startsWith(`${OFFICIAL_GITHUB_ORG}/`)) {
-      return `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/${OFFICIAL_GITHUB_ORG}/' can use this name.`
-    }
-    return null // Valid: reserved name from official GitHub source
-  }
-
-  // Check for git URL source type
-  if (source.source === 'git' && source.url) {
-    const url = source.url.toLowerCase()
-    // Check for HTTPS URL format: https://github.com/anthropics/...
-    // or SSH format: git@github.com:anthropics/...
-    const isHttpsAnthropics = url.includes('github.com/anthropics/')
-    const isSshAnthropics = url.includes('git@github.com:anthropics/')
-
-    if (isHttpsAnthropics || isSshAnthropics) {
-      return null // Valid: reserved name from official git URL
-    }
-
-    return `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/${OFFICIAL_GITHUB_ORG}/' can use this name.`
-  }
-
-  // Reserved names must come from GitHub (either 'github' or 'git' source)
-  return `The name '${name}' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the '${OFFICIAL_GITHUB_ORG}' organization.`
+  return entry.autoUpdate ?? false
 }
 
 /**
@@ -232,10 +94,6 @@ const MarketplaceNameSchema = lazySchema(() =>
           'Marketplace name cannot contain path separators (/ or \\), ".." sequences, or be "."',
       },
     )
-    .refine(name => !isBlockedOfficialName(name), {
-      message:
-        'Marketplace name impersonates an official Anthropic/Claude marketplace',
-    })
     .refine(name => name.toLowerCase() !== 'inline', {
       message:
         'Marketplace name "inline" is reserved for --plugin-dir session plugins',
@@ -1012,23 +870,9 @@ export const MarketplaceSourceSchema = lazySchema(() =>
     z
       .object({
         source: z.literal('settings'),
-        name: MarketplaceNameSchema()
-          .refine(
-            name => !ALLOWED_OFFICIAL_MARKETPLACE_NAMES.has(name.toLowerCase()),
-            {
-              message:
-                'Reserved official marketplace names cannot be used with settings sources. ' +
-                'validateOfficialNameSource only accepts github/git sources from anthropics/* ' +
-                'for these names; a settings source would be rejected after ' +
-                'loadAndCacheMarketplace has already written to disk with cleanupNeeded=false.',
-            },
-          )
-          .describe(
-            'Marketplace name. Must match the extraKnownMarketplaces key (enforced); ' +
-              'the synthetic manifest is written under this name. Same validation ' +
-              'as PluginMarketplaceSchema plus reserved-name rejection \u2014 ' +
-              'validateOfficialNameSource runs after the disk write, too late to clean up.',
-          ),
+        name: MarketplaceNameSchema().describe(
+          'Marketplace name. Must match the extraKnownMarketplaces key.',
+        ),
         plugins: z
           .array(SettingsMarketplacePluginSchema())
           .describe('Plugin entries declared inline in settings.json'),

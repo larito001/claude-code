@@ -18,7 +18,6 @@ import {
   modelSupportsEffort,
 } from '../../utils/effort.js'
 import { env } from '../../utils/env.js'
-import { cacheKeys } from '../../utils/fileStateCache.js'
 import { getWorktreeCount } from '../../utils/git.js'
 import {
   detectRunningIDEsCached,
@@ -34,9 +33,6 @@ import {
   getUserSpecifiedModelSetting,
 } from '../../utils/model/model.js'
 import { getPlatform } from '../../utils/platform.js'
-import { isPluginInstalled } from '../../utils/plugins/installedPluginsManager.js'
-import { loadKnownMarketplacesConfigSafe } from '../../utils/plugins/marketplaceManager.js'
-import { OFFICIAL_MARKETPLACE_NAME } from '../../utils/plugins/officialMarketplace.js'
 import {
   getCurrentSessionAgentColor,
   isCustomTitleEnabled,
@@ -44,42 +40,6 @@ import {
 import { getFeatureValue } from '../featureConfig.js'
 import { getSessionsSinceLastShown } from './tipHistory.js'
 import type { Tip, TipContext } from './types.js'
-
-let _isOfficialMarketplaceInstalledCache: boolean | undefined
-async function isOfficialMarketplaceInstalled(): Promise<boolean> {
-  if (_isOfficialMarketplaceInstalledCache !== undefined) {
-    return _isOfficialMarketplaceInstalledCache
-  }
-  const config = await loadKnownMarketplacesConfigSafe()
-  _isOfficialMarketplaceInstalledCache = OFFICIAL_MARKETPLACE_NAME in config
-  return _isOfficialMarketplaceInstalledCache
-}
-
-async function isMarketplacePluginRelevant(
-  pluginName: string,
-  context: TipContext | undefined,
-  signals: { filePath?: RegExp; cli?: string[] },
-): Promise<boolean> {
-  if (!(await isOfficialMarketplaceInstalled())) {
-    return false
-  }
-  if (isPluginInstalled(`${pluginName}@${OFFICIAL_MARKETPLACE_NAME}`)) {
-    return false
-  }
-  const { bashTools } = context ?? {}
-  if (signals.cli && bashTools?.size) {
-    if (signals.cli.some(cmd => bashTools.has(cmd))) {
-      return true
-    }
-  }
-  if (signals.filePath && context?.readFileState) {
-    const readFiles = cacheKeys(context.readFileState)
-    if (readFiles.some(fp => signals.filePath!.test(fp))) {
-      return true
-    }
-  }
-  return false
-}
 
 const externalTips: Tip[] = [
   {
@@ -422,31 +382,6 @@ const externalTips: Tip[] = [
         : Infinity
       return hasOpusPlanMode && daysSinceLastUse > 3
     },
-  },
-  {
-    id: 'frontend-design-plugin',
-    content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
-      return `Working with HTML/CSS? Install the frontend-design plugin:\n${blue(`/plugin install frontend-design@${OFFICIAL_MARKETPLACE_NAME}`)}`
-    },
-    cooldownSessions: 3,
-    isRelevant: async context =>
-      isMarketplacePluginRelevant('frontend-design', context, {
-        filePath: /\.(html|css|htm)$/i,
-      }),
-  },
-  {
-    id: 'vercel-plugin',
-    content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
-      return `Working with Vercel? Install the vercel plugin:\n${blue(`/plugin install vercel@${OFFICIAL_MARKETPLACE_NAME}`)}`
-    },
-    cooldownSessions: 3,
-    isRelevant: async context =>
-      isMarketplacePluginRelevant('vercel', context, {
-        filePath: /(?:^|[/\\])vercel\.json$/i,
-        cli: ['vercel'],
-      }),
   },
   {
     id: 'effort-high-nudge',

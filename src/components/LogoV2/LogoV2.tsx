@@ -3,12 +3,12 @@ import * as React from 'react';
 import { Box, Text, color } from '../../ink.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { stringWidth } from '../../ink/stringWidth.js';
-import { getLayoutMode, calculateLayoutDimensions, calculateOptimalLeftWidth, formatWelcomeMessage, truncatePath, getRecentActivitySync, getRecentReleaseNotesSync, getLogoDisplayData } from '../../utils/logoV2Utils.js';
+import { getLayoutMode, calculateLayoutDimensions, calculateOptimalLeftWidth, formatWelcomeMessage, truncatePath, getRecentActivitySync, getLogoDisplayData } from '../../utils/logoV2Utils.js';
 import { truncate } from '../../utils/format.js';
 import { Clawd } from './Clawd.js';
 import { FeedColumn } from './FeedColumn.js';
-import { createRecentActivityFeed, createWhatsNewFeed, createProjectOnboardingFeed } from './feedConfigs.js';
-import { getGlobalConfig, saveGlobalConfig } from 'src/utils/config.js';
+import { createRecentActivityFeed, createProjectOnboardingFeed } from './feedConfigs.js';
+import { getGlobalConfig } from 'src/utils/config.js';
 import { resolveThemeSetting } from 'src/utils/systemTheme.js';
 import { getInitialSettings } from 'src/utils/settings/settings.js';
 import { isDebugMode, isDebugToStdErr, getDebugLogPath } from 'src/utils/debug.js';
@@ -16,7 +16,6 @@ import { useEffect, useState } from 'react';
 import { getSteps, shouldShowProjectOnboarding, incrementProjectOnboardingSeenCount } from '../../projectOnboardingState.js';
 import { CondensedLogo } from './CondensedLogo.js';
 import { OffscreenFreeze } from '../OffscreenFreeze.js';
-import { checkForReleaseNotesSync } from '../../utils/releaseNotes.js';
 import { isEnvTruthy } from 'src/utils/envUtils.js';
 import { EmergencyTip } from './EmergencyTip.js';
 import { Opus1mMergeNotice } from './Opus1mMergeNotice.js';
@@ -52,12 +51,6 @@ export function LogoV2() {
   const showSandboxStatus = t1;  const agent = useAppState(_temp);
   const effortValue = useAppState(_temp2);
   const config = getGlobalConfig();
-  let changelog;
-  try {
-    changelog = getRecentReleaseNotesSync(3);
-  } catch {
-    changelog = [];
-  }
   const [announcement] = useState(() => {
     const announcements = getInitialSettings().companyAnnouncements;
     if (!announcements || announcements.length === 0) {
@@ -65,17 +58,9 @@ export function LogoV2() {
     }
     return config.numStartups === 1 ? announcements[0] : announcements[Math.floor(Math.random() * announcements.length)];
   });
-  const {
-    hasReleaseNotes
-  } = checkForReleaseNotesSync(config.lastReleaseNotesSeen);
   let t2;
   if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
     t2 = () => {
-      const currentConfig = getGlobalConfig();
-      if (currentConfig.lastReleaseNotesSeen === MACRO.VERSION) {
-        return;
-      }
-      saveGlobalConfig(_temp3);
       if (showOnboarding) {
         incrementProjectOnboardingSeenCount();
       }
@@ -95,7 +80,7 @@ export function LogoV2() {
   useEffect(t2, t3);
   let t4;
   if ($[5] === Symbol.for("react.memo_cache_sentinel")) {
-    t4 = !hasReleaseNotes && !showOnboarding && !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO);
+    t4 = !showOnboarding && !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO);
     $[5] = t4;
   } else {
     t4 = $[5];
@@ -121,7 +106,7 @@ export function LogoV2() {
     t10 = $[14];
   }
   const modelDisplayName = t10;
-  if (!hasReleaseNotes && !showOnboarding && !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO)) {
+  if (!showOnboarding && !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO)) {
     let t11;
     let t12;
     let t13;
@@ -333,7 +318,7 @@ export function LogoV2() {
   } else {
     t24 = $[61];
   }
-  const t25 = layoutMode === "horizontal" && <FeedColumn feeds={showOnboarding ? [createProjectOnboardingFeed(getSteps()), createRecentActivityFeed(activities)] : [createRecentActivityFeed(activities), createWhatsNewFeed(changelog)]} maxWidth={rightWidth} />;
+  const t25 = layoutMode === "horizontal" && <FeedColumn feeds={showOnboarding ? [createProjectOnboardingFeed(getSteps()), createRecentActivityFeed(activities)] : [createRecentActivityFeed(activities)]} maxWidth={rightWidth} />;
   let t26;
   if ($[62] !== T2 || $[63] !== t15 || $[64] !== t23 || $[65] !== t24 || $[66] !== t25) {
     t26 = <T2 flexDirection={t15} paddingX={t16} gap={t17}>{t23}{t24}{t25}</T2>;
@@ -420,15 +405,6 @@ export function LogoV2() {
     t41 = $[93];
   }
   return t41;
-}
-function _temp3(current) {
-  if (current.lastReleaseNotesSeen === MACRO.VERSION) {
-    return current;
-  }
-  return {
-    ...current,
-    lastReleaseNotesSeen: MACRO.VERSION
-  };
 }
 function _temp2(s_0) {
   return s_0.effortValue;

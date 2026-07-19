@@ -66,11 +66,6 @@ export async function installPluginsForHeadless(): Promise<boolean> {
     await getFsImplementation().mkdir(getZipCachePluginsDir())
   }
 
-  // Declared now includes an implicit claude-plugins-official entry when any
-  // enabled plugin references it (see getDeclaredMarketplaces). This routes
-  // the official marketplace through the same reconciler path as any other —
-  // which composes correctly with CLAUDE_CODE_PLUGIN_SEED_DIR: seed registers
-  // it in known_marketplaces.json, reconciler diff sees it as upToDate, no clone.
   const declaredCount = Object.keys(getDeclaredMarketplaces()).length
 
   const metrics = {
@@ -88,8 +83,8 @@ export async function installPluginsForHeadless(): Promise<boolean> {
     if (declaredCount === 0) {
       logForDebugging('installPluginsForHeadless: no marketplaces declared')
     } else {
-      // Reconcile declared marketplaces (settings intent + implicit official)
-      // with materialized state. Zip cache: skip unsupported source types.
+      // Reconcile declared marketplaces with materialized state. Zip cache:
+      // skip unsupported source types.
       const reconcileResult = await withDiagnosticsTiming(
         'headless_marketplace_reconcile',
         () =>

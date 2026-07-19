@@ -23,18 +23,6 @@ export function createRecentActivityFeed(activities: LogOption[]): FeedConfig {
     emptyMessage: 'No recent activity'
   };
 }
-export function createWhatsNewFeed(releaseNotes: string[]): FeedConfig {
-  const lines: FeedLine[] = releaseNotes.map(note => {
-    return {
-      text: note
-    };
-  });
-  return {
-    title: "What's new",
-    lines,
-    emptyMessage: 'Check the project changelog for updates'
-  };
-}
 export function createProjectOnboardingFeed(steps: Step[]): FeedConfig {
   const enabledSteps = steps.filter(({
     isEnabled

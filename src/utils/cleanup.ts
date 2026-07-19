@@ -5,9 +5,7 @@ import { logForDebugging } from './debug.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import { type FsOperations, getFsImplementation } from './fsOperations.js'
 import { cleanupOldImageCaches } from './imageStore.js'
-import * as lockfile from './lockfile.js'
 import { logError } from './log.js'
-import { cleanupOldVersions } from './nativeInstaller/index.js'
 import { cleanupOldPastes } from './pasteStore.js'
 import { getProjectsDir } from './sessionStorage.js'
 import { getSettingsWithAllErrors } from './settings/allErrors.js'
@@ -424,46 +422,6 @@ export async function cleanupOldDebugLogs(): Promise<CleanupResult> {
 
   // Intentionally do NOT remove debugDir even if empty — needed for future logs
   return result
-}
-
-const ONE_DAY_MS = 24 * 60 * 60 * 1000
-
-/**
- * Throttled wrapper around cleanupOldVersions for recurring cleanup in long-running sessions.
- * Uses a marker file and lock to ensure it runs at most once per 24 hours,
- * and does not block if another process is already running cleanup.
- * The regular cleanupOldVersions() should still be used for installer flows.
- */
-export async function cleanupOldVersionsThrottled(): Promise<void> {
-  const markerPath = join(getClaudeConfigHomeDir(), '.version-cleanup')
-
-  try {
-    const stat = await fs.stat(markerPath)
-    if (Date.now() - stat.mtimeMs < ONE_DAY_MS) {
-      logForDebugging('version cleanup: skipping, ran recently')
-      return
-    }
-  } catch {
-    // File doesn't exist, proceed with cleanup
-  }
-
-  try {
-    await lockfile.lock(markerPath, { retries: 0, realpath: false })
-  } catch {
-    logForDebugging('version cleanup: skipping, lock held')
-    return
-  }
-
-  logForDebugging('version cleanup: starting (throttled)')
-
-  try {
-    await cleanupOldVersions()
-    await fs.writeFile(markerPath, new Date().toISOString())
-  } catch (error) {
-    logError(error as Error)
-  } finally {
-    await lockfile.unlock(markerPath, { realpath: false }).catch(() => {})
-  }
 }
 
 export async function cleanupOldMessageFilesInBackground(): Promise<void> {

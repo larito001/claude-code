@@ -5,13 +5,20 @@ import {
   tryParseShellCommand,
 } from '../bash/shellQuote.js'
 import { logForDebugging } from '../debug.js'
-import { getShellType } from '../localInstaller.js'
 import * as Shell from '../Shell.js'
 
 // Constants
 const MAX_SHELL_COMPLETIONS = 15
 const SHELL_COMPLETION_TIMEOUT_MS = 1000
 const COMMAND_OPERATORS = ['|', '||', '&&', ';'] as const
+
+function getShellType(): 'zsh' | 'bash' | 'fish' | 'unknown' {
+  const shellPath = process.env.SHELL ?? ''
+  if (shellPath.includes('zsh')) return 'zsh'
+  if (shellPath.includes('bash')) return 'bash'
+  if (shellPath.includes('fish')) return 'fish'
+  return 'unknown'
+}
 
 export type ShellCompletionType = 'command' | 'variable' | 'file'
 

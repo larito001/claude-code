@@ -11,11 +11,9 @@ import { openBrowser } from '../../utils/browser.js';
 import { logForDebugging } from '../../utils/debug.js';
 import { errorMessage } from '../../utils/errors.js';
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
-import { formatInstallCount, getInstallCounts } from '../../utils/plugins/installCounts.js';
 import { isPluginGloballyInstalled, isPluginInstalled } from '../../utils/plugins/installedPluginsManager.js';
 import { createPluginId, formatFailureDetails, formatMarketplaceLoadingErrors, getMarketplaceSourceDisplay, loadMarketplacesWithGracefulDegradation } from '../../utils/plugins/marketplaceHelpers.js';
 import { getMarketplace, loadKnownMarketplacesConfig } from '../../utils/plugins/marketplaceManager.js';
-import { OFFICIAL_MARKETPLACE_NAME } from '../../utils/plugins/officialMarketplace.js';
 import { installPluginFromMarketplace } from '../../utils/plugins/pluginInstallationHelpers.js';
 import { isPluginBlockedByPolicy } from '../../utils/plugins/pluginPolicy.js';
 import { plural } from '../../utils/stringUtils.js';
@@ -65,7 +63,6 @@ export function BrowseMarketplace({
   const [marketplaces, setMarketplaces] = useState<MarketplaceInfo[]>([]);
   const [availablePlugins, setAvailablePlugins] = useState<InstallablePlugin[]>([]);
   const [loading, setLoading] = useState(true);
-  const [installCounts, setInstallCounts] = useState<Map<string, number> | null>(null);
 
   // Selection state
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -271,29 +268,7 @@ export function BrowseMarketplace({
           });
         }
 
-        // Fetch install counts and sort by popularity
-        try {
-          const counts = await getInstallCounts();
-          if (cancelled) return;
-          setInstallCounts(counts);
-          if (counts) {
-            // Sort by install count (descending), then alphabetically
-            installablePlugins.sort((a_1, b_1) => {
-              const countA = counts.get(a_1.pluginId) ?? 0;
-              const countB = counts.get(b_1.pluginId) ?? 0;
-              if (countA !== countB) return countB - countA;
-              return a_1.entry.name.localeCompare(b_1.entry.name);
-            });
-          } else {
-            // No counts available - sort alphabetically
-            installablePlugins.sort((a_2, b_2) => a_2.entry.name.localeCompare(b_2.entry.name));
-          }
-        } catch (error_0) {
-          if (cancelled) return;
-          // Log the error, then gracefully degrade to alphabetical sort
-          logForDebugging(`Failed to fetch install counts: ${errorMessage(error_0)}`);
-          installablePlugins.sort((a_0, b_0) => a_0.entry.name.localeCompare(b_0.entry.name));
-        }
+        installablePlugins.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
         setAvailablePlugins(installablePlugins);
         setSelectedIndex(0);
         setSelectedForInstall(new Set());
@@ -768,11 +743,6 @@ export function BrowseMarketplace({
                 {plugin_6.entry.category && <Text dimColor> [{plugin_6.entry.category}]</Text>}
                 {plugin_6.entry.tags?.includes('community-managed') && <Text dimColor> [Community Managed]</Text>}
                 {plugin_6.isInstalled && <Text dimColor> (installed)</Text>}
-                {installCounts && selectedMarketplace === OFFICIAL_MARKETPLACE_NAME && <Text dimColor>
-                      {' · '}
-                      {formatInstallCount(installCounts.get(plugin_6.pluginId) ?? 0)}{' '}
-                      installs
-                    </Text>}
               </Text>
             </Box>
             {plugin_6.entry.description && <Box marginLeft={4}>

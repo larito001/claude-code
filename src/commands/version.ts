@@ -12,8 +12,7 @@ const call: LocalCommandCall = async () => {
 const version = {
   type: 'local',
   name: 'version',
-  description:
-    'Print the version this session is running (not what autoupdate downloaded)',
+  description: 'Print the version this session is running',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command

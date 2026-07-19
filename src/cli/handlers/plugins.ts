@@ -20,7 +20,6 @@ import { getPluginErrorMessage } from '../../types/plugin.js'
 import { errorMessage } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js'
-import { getInstallCounts } from '../../utils/plugins/installCounts.js'
 import {
   isPluginInstalled,
   loadInstalledPluginsV2,
@@ -297,14 +296,10 @@ export async function pluginListHandler(options: {
         marketplaceName: string
         version?: string
         source: PluginSource
-        installCount?: number
       }> = []
 
       try {
-        const [config, installCounts] = await Promise.all([
-          loadKnownMarketplacesConfig(),
-          getInstallCounts(),
-        ])
+        const config = await loadKnownMarketplacesConfig()
         const { marketplaces } =
           await loadMarketplacesWithGracefulDegradation(config)
 
@@ -324,7 +319,6 @@ export async function pluginListHandler(options: {
                   marketplaceName,
                   version: entry.version,
                   source: entry.source,
-                  installCount: installCounts?.get(pluginId),
                 })
               }
             }

@@ -2,10 +2,7 @@ import type {
   EditableSettingSource,
   SettingSource,
 } from '../settings/constants.js'
-import {
-  ALLOWED_OFFICIAL_MARKETPLACE_NAMES,
-  type PluginScope,
-} from './schemas.js'
+import type { PluginScope } from './schemas.js'
 
 /**
  * Extended scope type that includes 'flag' for session-only plugins.
@@ -64,20 +61,6 @@ export function parsePluginIdentifier(plugin: string): ParsedPluginIdentifier {
  */
 export function buildPluginId(name: string, marketplace?: string): string {
   return marketplace ? `${name}@${marketplace}` : name
-}
-
-/**
- * Check if a marketplace name is an official (Anthropic-controlled) marketplace.
- * Used for telemetry redaction — official plugin identifiers are safe to log to
- * general telemetry metadata; third-party identifiers remain redacted.
- */
-export function isOfficialMarketplaceName(
-  marketplace: string | undefined,
-): boolean {
-  return (
-    marketplace !== undefined &&
-    ALLOWED_OFFICIAL_MARKETPLACE_NAMES.has(marketplace.toLowerCase())
-  )
 }
 
 /**

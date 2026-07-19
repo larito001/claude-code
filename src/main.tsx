@@ -3,11 +3,8 @@ if (typeof globalThis.MACRO === 'undefined') {
   (globalThis as any).MACRO = {
     VERSION: '2.1.87',
     BUILD_TIME: new Date().toISOString(),
-    PACKAGE_URL: '@anthropic-ai/claude-code',
-    NATIVE_PACKAGE_URL: undefined,
     FEEDBACK_CHANNEL: '#claude-code-research',
     ISSUES_EXPLAINER: 'https://github.com/beita6969/claude-code/issues',
-    VERSION_CHANGELOG: '',
   };
 }
 
@@ -46,7 +43,7 @@ import { count } from './utils/array.js';
 import { installAsciicastRecorder } from './utils/asciicast.js';
 import { prefetchAwsCredentialsAndBedRockInfoIfSafe, prefetchGcpCredentialsIfSafe } from './utils/auth.js';
 import { getCurrentApiCredentialConfigurationError } from './utils/apiCredentialValidation.js';
-import { checkHasTrustDialogAccepted, getGlobalConfig, isAutoUpdaterDisabled, saveGlobalConfig } from './utils/config.js';
+import { checkHasTrustDialogAccepted, getGlobalConfig, saveGlobalConfig } from './utils/config.js';
 import { seedEarlyInput, stopCapturingEarlyInput } from './utils/earlyInput.js';
 import { getInitialEffortSetting, parseEffortValue } from './utils/effort.js';
 import { getInitialFastModeSetting, isFastModeEnabled, prefetchFastModeStatus, resolveFastModeStatusFromCache } from './utils/fastMode.js';
@@ -87,7 +84,6 @@ import type { AgentColorName } from './tools/AgentTool/agentColorManager.js';
 import { getActiveAgentsFromList, getAgentDefinitionsWithOverrides, isBuiltInAgent, isCustomAgent, parseAgentsFromJson } from './tools/AgentTool/loadAgentsDir.js';
 import type { LogOption } from './types/logs.js';
 import type { Message as MessageType } from './types/message.js';
-import { assertMinVersion } from './utils/autoUpdater.js';
 import { getContextWindowForModel } from './utils/context.js';
 import { loadConversationForResume } from './utils/conversationRecovery.js';
 import { isBareMode, isEnvTruthy } from './utils/envUtils.js';
@@ -142,7 +138,6 @@ import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession,
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') as typeof import('./utils/permissions/autoModeState.js') : null;
 
-import { migrateAutoUpdatesToSettings } from './migrations/migrateAutoUpdatesToSettings.js';
 import { migrateBypassPermissionsAcceptedToSettings } from './migrations/migrateBypassPermissionsAcceptedToSettings.js';
 import { migrateEnableAllProjectMcpServersToSettings } from './migrations/migrateEnableAllProjectMcpServersToSettings.js';
 import { migrateLegacyOpusToCurrent } from './migrations/migrateLegacyOpusToCurrent.js';
@@ -161,7 +156,6 @@ import { isInBundledMode } from './utils/bundledMode.js';
 import { logForDiagnosticsNoPII } from './utils/diagLogs.js';
 import { filterExistingPaths, getKnownPathsForRepo } from './utils/githubRepoPathMapping.js';
 import { clearPluginCache } from './utils/plugins/pluginLoader.js';
-import { migrateChangelogFromConfig } from './utils/releaseNotes.js';
 import { SandboxManager } from './utils/sandbox/sandbox-adapter.js';
 import { shouldEnableThinkingByDefault, type ThinkingConfig } from './utils/thinking.js';
 import { getTmuxInstallInstructions, isTmuxAvailable, parsePRReference } from './utils/worktree.js';
@@ -179,7 +173,6 @@ profileCheckpoint('main_tsx_imports_loaded');
 const CURRENT_MIGRATION_VERSION = 11;
 function runMigrations(): void {
   if (getGlobalConfig().migrationVersion !== CURRENT_MIGRATION_VERSION) {
-    migrateAutoUpdatesToSettings();
     migrateBypassPermissionsAcceptedToSettings();
     migrateEnableAllProjectMcpServersToSettings();
     migrateSonnet1mToSonnet45();
@@ -193,10 +186,6 @@ function runMigrations(): void {
       migrationVersion: CURRENT_MIGRATION_VERSION
     });
   }
-  // 异步迁移：不会阻塞，触发后无需等待
-  migrateChangelogFromConfig().catch(() => {
-    // 静默忽略迁移错误 - 将在下次启动时重试
-  });
 }
 
 /**
@@ -1051,7 +1040,6 @@ async function run(): Promise<CommanderCommand> {
       // biome-ignore lint/suspicious/noConsole:: intentional console output
       console.error(warning);
     });
-    void assertMinVersion();
 
     // Kick off MCP config loading early (safe - just reads files, no execution).
     // Both interactive and -p use getClaudeCodeMcpConfigs (local file reads only).
@@ -1575,8 +1563,8 @@ async function run(): Promise<CommanderCommand> {
     // Sequencing matters: the warmup scans disk for .orphaned_at markers,
     // so it must see the GC's Pass 1 (remove markers from reinstalled
     // versions) and Pass 2 (stamp unmarked orphans) already applied. The
-    // warm also lands before autoupdate (fires on first submit in REPL)
-    // can orphan this session's active version underneath us.
+    // warm also lands before background plugin updates (which fire on first
+    // submit in REPL) can orphan this session's active plugin version.
     // --bare / SIMPLE: skip plugin version sync + orphan cleanup. These
     // are install/upgrade bookkeeping that scripted calls don't need —
     // the next interactive session will reconcile. The await here was
@@ -2422,7 +2410,7 @@ async function run(): Promise<CommanderCommand> {
     }
   }
 
-  program.command('doctor').description('Check the health of your Claude Code auto-updater. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.').action(async () => {
+  program.command('doctor').description('Check runtime, settings, tools, plugins, and MCP health. The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks, so only use this command in directories you trust.').action(async () => {
     const [{
       doctorHandler
     }, {
@@ -2430,29 +2418,6 @@ async function run(): Promise<CommanderCommand> {
     }] = await Promise.all([import('./cli/handlers/util.js'), import('./ink.js')]);
     const root = await createRoot(getBaseRenderOptions(false));
     await doctorHandler(root);
-  });
-
-  // claude update
-  //
-  // For SemVer-compliant versioning with build metadata (X.X.X+SHA):
-  // - We perform exact string comparison (including SHA) to detect any change
-  // - This ensures users always get the latest build, even when only the SHA changes
-  // - UI shows both versions including build metadata for clarity
-  program.command('update').alias('upgrade').description('Check for updates and install if available').action(async () => {
-    const {
-      update
-    } = await import('src/cli/update.js');
-    await update();
-  });
-
-  // claude install
-  program.command('install [target]').description('Install Claude Code native build. Use [target] to specify version (stable, latest, or specific version)').option('--force', 'Force installation even if already installed').action(async (target: string | undefined, options: {
-    force?: boolean;
-  }) => {
-    const {
-      installHandler
-    } = await import('./cli/handlers/util.js');
-    await installHandler(target, options);
   });
 
   profileCheckpoint('run_before_parse');

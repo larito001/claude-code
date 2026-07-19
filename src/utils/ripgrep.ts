@@ -27,6 +27,14 @@ type RipgrepConfig = {
   argv0?: string
 }
 
+type RipgrepStatus = {
+  working: boolean
+  lastTested: number
+  config: RipgrepConfig
+}
+
+let ripgrepStatus: RipgrepStatus | null = null
+
 const getRipgrepConfig = memoize((): RipgrepConfig => {
   const userWantsSystemRipgrep = isEnvDefinedFalsy(
     process.env.USE_BUILTIN_RIPGREP,

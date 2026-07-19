@@ -321,7 +321,7 @@ function handleAdd(path: string): void {
 
 /**
  * Handle a file being deleted. Uses a grace period to absorb delete-and-recreate
- * patterns (e.g. auto-updater, another session starting up). If the file is
+ * patterns (e.g. another process or session replacing the file). If the file is
  * recreated within the grace period (detected via 'add' or 'change' event),
  * the deletion is cancelled and treated as a normal change instead.
  */

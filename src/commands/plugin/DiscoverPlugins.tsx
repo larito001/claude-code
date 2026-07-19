@@ -16,11 +16,9 @@ import { openBrowser } from '../../utils/browser.js';
 import { logForDebugging } from '../../utils/debug.js';
 import { errorMessage } from '../../utils/errors.js';
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
-import { formatInstallCount, getInstallCounts } from '../../utils/plugins/installCounts.js';
 import { isPluginGloballyInstalled } from '../../utils/plugins/installedPluginsManager.js';
 import { createPluginId, detectEmptyMarketplaceReason, type EmptyMarketplaceReason, formatFailureDetails, formatMarketplaceLoadingErrors, loadMarketplacesWithGracefulDegradation } from '../../utils/plugins/marketplaceHelpers.js';
 import { loadKnownMarketplacesConfig } from '../../utils/plugins/marketplaceManager.js';
-import { OFFICIAL_MARKETPLACE_NAME } from '../../utils/plugins/officialMarketplace.js';
 import { installPluginFromMarketplace } from '../../utils/plugins/pluginInstallationHelpers.js';
 import { isPluginBlockedByPolicy } from '../../utils/plugins/pluginPolicy.js';
 import { plural } from '../../utils/stringUtils.js';
@@ -62,7 +60,6 @@ export function DiscoverPlugins({
   // Data state
   const [availablePlugins, setAvailablePlugins] = useState<InstallablePlugin[]>([]);
   const [loading, setLoading] = useState(true);
-  const [installCounts, setInstallCounts] = useState<Map<string, number> | null>(null);
 
   // Search state
   const [isSearchMode, setIsSearchModeRaw] = useState(false);
@@ -156,27 +153,7 @@ export function DiscoverPlugins({
         // Filter out installed and policy-blocked plugins
         const uninstalledPlugins = allPlugins.filter(p => !p.isInstalled && !isPluginBlockedByPolicy(p.pluginId));
 
-        // Fetch install counts and sort by popularity
-        try {
-          const counts = await getInstallCounts();
-          setInstallCounts(counts);
-          if (counts) {
-            // Sort by install count (descending), then alphabetically
-            uninstalledPlugins.sort((a_0, b_0) => {
-              const countA = counts.get(a_0.pluginId) ?? 0;
-              const countB = counts.get(b_0.pluginId) ?? 0;
-              if (countA !== countB) return countB - countA;
-              return a_0.entry.name.localeCompare(b_0.entry.name);
-            });
-          } else {
-            // No counts available - sort alphabetically
-            uninstalledPlugins.sort((a_1, b_1) => a_1.entry.name.localeCompare(b_1.entry.name));
-          }
-        } catch (error_0) {
-          // Log the error, then gracefully degrade to alphabetical sort
-          logForDebugging(`Failed to fetch install counts: ${errorMessage(error_0)}`);
-          uninstalledPlugins.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
-        }
+        uninstalledPlugins.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
         setAvailablePlugins(uninstalledPlugins);
 
         // Detect empty reason if no plugins available
@@ -618,11 +595,6 @@ export function DiscoverPlugins({
                 {plugin_5.entry.name}
                 <Text dimColor> · {plugin_5.marketplaceName}</Text>
                 {plugin_5.entry.tags?.includes('community-managed') && <Text dimColor> [Community Managed]</Text>}
-                {installCounts && plugin_5.marketplaceName === OFFICIAL_MARKETPLACE_NAME && <Text dimColor>
-                      {' · '}
-                      {formatInstallCount(installCounts.get(plugin_5.pluginId) ?? 0)}{' '}
-                      installs
-                    </Text>}
               </Text>
             </Box>
             {plugin_5.entry.description && <Box marginLeft={4}>

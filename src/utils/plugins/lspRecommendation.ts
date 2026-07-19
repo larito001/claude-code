@@ -19,10 +19,7 @@ import {
   getMarketplace,
   loadKnownMarketplacesConfig,
 } from './marketplaceManager.js'
-import {
-  ALLOWED_OFFICIAL_MARKETPLACE_NAMES,
-  type PluginMarketplaceEntry,
-} from './schemas.js'
+import type { PluginMarketplaceEntry } from './schemas.js'
 
 /**
  * LSP plugin recommendation returned to the caller
@@ -32,20 +29,12 @@ export type LspPluginRecommendation = {
   pluginName: string // Human-readable plugin name
   marketplaceName: string // Marketplace name
   description?: string // Plugin description
-  isOfficial: boolean // From official marketplace?
   extensions: string[] // File extensions this plugin supports
   command: string // LSP server command (e.g., "typescript-language-server")
 }
 
 // Maximum number of times user can ignore recommendations before we stop showing
 const MAX_IGNORED_COUNT = 5
-
-/**
- * Check if a marketplace is official (from Anthropic)
- */
-function isOfficialMarketplace(name: string): boolean {
-  return ALLOWED_OFFICIAL_MARKETPLACE_NAMES.has(name.toLowerCase())
-}
 
 /**
  * Internal type for LSP info extracted from plugin manifest
@@ -149,7 +138,6 @@ type LspPluginInfo = {
   marketplaceName: string
   extensions: Set<string>
   command: string
-  isOfficial: boolean
 }
 
 /**
@@ -168,8 +156,6 @@ async function getLspPluginsFromMarketplaces(): Promise<
     for (const marketplaceName of Object.keys(config)) {
       try {
         const marketplace = await getMarketplace(marketplaceName)
-        const isOfficial = isOfficialMarketplace(marketplaceName)
-
         for (const entry of marketplace.plugins) {
           // Skip plugins without lspServers
           if (!entry.lspServers) {
@@ -187,7 +173,6 @@ async function getLspPluginsFromMarketplaces(): Promise<
             marketplaceName,
             extensions: lspInfo.extensions,
             command: lspInfo.command,
-            isOfficial,
           })
         }
       } catch (error) {
@@ -213,8 +198,6 @@ async function getLspPluginsFromMarketplaces(): Promise<
  * 2. Have their LSP binary installed on the system
  * 3. Are not already installed
  * 4. Are not in the user's "never suggest" list
- *
- * Results are sorted with official marketplace plugins first.
  *
  * @param filePath - Path to the file to find LSP plugins for
  * @returns Array of matching plugin recommendations (empty if none or disabled)
@@ -289,20 +272,12 @@ export async function getMatchingLspPlugins(
     }
   }
 
-  // Sort: official marketplaces first
-  pluginsWithBinary.sort((a, b) => {
-    if (a.info.isOfficial && !b.info.isOfficial) return -1
-    if (!a.info.isOfficial && b.info.isOfficial) return 1
-    return 0
-  })
-
   // Convert to recommendations
   return pluginsWithBinary.map(({ info, pluginId }) => ({
     pluginId,
     pluginName: info.entry.name,
     marketplaceName: info.marketplaceName,
     description: info.entry.description,
-    isOfficial: info.isOfficial,
     extensions: Array.from(info.extensions),
     command: info.command,
   }))

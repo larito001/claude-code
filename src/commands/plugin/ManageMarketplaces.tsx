@@ -10,7 +10,6 @@ import { Box, Text, useInput } from '../../ink.js';
 import { useKeybinding, useKeybindings } from '../../keybindings/useKeybinding.js';
 import type { LoadedPlugin } from '../../types/plugin.js';
 import { count } from '../../utils/array.js';
-import { shouldSkipPluginAutoupdate } from '../../utils/config.js';
 import { errorMessage } from '../../utils/errors.js';
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
 import { createPluginId, formatMarketplaceLoadingErrors, getMarketplaceSourceDisplay, loadMarketplacesWithGracefulDegradation } from '../../utils/plugins/marketplaceHelpers.js';
@@ -365,13 +364,10 @@ export function ManageMarketplaces({
       value: 'update'
     }];
 
-    // Only show auto-update toggle if auto-updater is not globally disabled
-    if (!shouldSkipPluginAutoupdate()) {
-      options.push({
-        label: marketplace.autoUpdate ? 'Disable auto-update' : 'Enable auto-update',
-        value: 'toggle-auto-update'
-      });
-    }
+    options.push({
+      label: marketplace.autoUpdate ? 'Disable auto-update' : 'Enable auto-update',
+      value: 'toggle-auto-update'
+    });
     options.push({
       label: 'Remove marketplace',
       value: 'remove'
@@ -648,7 +644,7 @@ export function ManageMarketplaces({
           </Box>}
 
         {/* Show explanatory text at the bottom when auto-update is enabled */}
-        {!isUpdating && !shouldSkipPluginAutoupdate() && selectedMarketplace.autoUpdate && <Box marginTop={1}>
+        {!isUpdating && selectedMarketplace.autoUpdate && <Box marginTop={1}>
               <Text dimColor>
                 Auto-update enabled. Claude Code will automatically update this
                 marketplace and its installed plugins.
@@ -703,9 +699,7 @@ export function ManageMarketplaces({
               <Box flexDirection="column" flexGrow={1}>
                 <Box flexDirection="row" gap={1}>
                   <Text bold strikethrough={state.pendingRemove} dimColor={state.pendingRemove}>
-                    {state.name === 'claude-plugins-official' && <Text color="claude">✻ </Text>}
                     {state.name}
-                    {state.name === 'claude-plugins-official' && <Text color="claude"> ✻</Text>}
                   </Text>
                   {indicators.length > 0 && <Text color="warning">[{indicators.join(', ')}]</Text>}
                 </Box>

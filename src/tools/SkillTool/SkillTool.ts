@@ -2,7 +2,6 @@ import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs
 import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from 'src/bootstrap/state.js'
 import {
-  builtInCommandNames,
   findCommand,
   getCommands,
   type PromptCommand,
@@ -26,15 +25,10 @@ import type {
 import { logForDebugging } from 'src/utils/debug.js'
 import type { PermissionDecision } from 'src/utils/permissions/PermissionResult.js'
 import { getRuleByContentsForTool } from 'src/utils/permissions/permissions.js'
-import {
-  isOfficialMarketplaceName,
-  parsePluginIdentifier,
-} from 'src/utils/plugins/pluginIdentifier.js'
 import { z } from 'zod/v4'
 import { clearInvokedSkillsForAgent } from '../../bootstrap/state.js'
 import { COMMAND_MESSAGE_TAG } from '../../constants/xml.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
-import { getAgentContext } from '../../utils/agentContext.js'
 import {
   extractResultText,
   prepareForkedCommandContext,
@@ -78,7 +72,6 @@ async function getAllCommands(context: ToolUseContext): Promise<Command[]> {
   const localCommands = await getCommands(getProjectRoot())
   return uniqBy([...localCommands, ...mcpSkills], 'name')
 }
-
 // Re-export Progress from centralized types to break import cycles
 export type { SkillToolProgress as Progress } from '../../types/tools.js'
 
@@ -99,18 +92,6 @@ async function executeForkedSkill(
 ): Promise<ToolResult<Output>> {
   const startTime = Date.now()
   const agentId = createAgentId()
-  const isBuiltIn = builtInCommandNames().has(commandName)
-  const isOfficialSkill = isOfficialMarketplaceSkill(command)
-  const isBundled = command.source === 'bundled'
-  const forkedSanitizedName =
-    isBuiltIn || isBundled || isOfficialSkill ? commandName : 'custom'
-
-  const pluginMarketplace = command.pluginInfo
-    ? parsePluginIdentifier(command.pluginInfo.repository).marketplace
-    : undefined
-  const queryDepth = context.queryTracking?.depth ?? 0
-  const parentAgentId = getAgentContext()?.agentId
-
   const { modifiedGetAppState, baseAgent, promptMessages, skillContent } =
     await prepareForkedCommandContext(command, args || '', context)
 
@@ -500,20 +481,6 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
     const model = processedCommand.model
     const effort = command?.type === 'prompt' ? command.effort : undefined
 
-    const isBuiltIn = builtInCommandNames().has(commandName)
-    const isBundled = command?.type === 'prompt' && command.source === 'bundled'
-    const isOfficialSkill =
-      command?.type === 'prompt' && isOfficialMarketplaceSkill(command)
-    const sanitizedCommandName =
-      isBuiltIn || isBundled || isOfficialSkill ? commandName : 'custom'
-
-    const pluginMarketplace =
-      command?.type === 'prompt' && command.pluginInfo
-        ? parsePluginIdentifier(command.pluginInfo.repository).marketplace
-        : undefined
-    const queryDepth = context.queryTracking?.depth ?? 0
-    const parentAgentId = getAgentContext()?.agentId
-
     // Get the tool use ID from the parent message for linking newMessages
     const toolUseID = getToolUseIDFromParentMessage(
       parentMessage,
@@ -719,13 +686,4 @@ function skillHasOnlySafeProperties(command: Command): boolean {
     return false
   }
   return true
-}
-
-function isOfficialMarketplaceSkill(command: PromptCommand): boolean {
-  if (command.source !== 'plugin' || !command.pluginInfo?.repository) {
-    return false
-  }
-  return isOfficialMarketplaceName(
-    parsePluginIdentifier(command.pluginInfo.repository).marketplace,
-  )
 }

@@ -87,11 +87,11 @@ Set \`commit\` or \`pr\` to empty string \`""\` to hide that attribution.
 \`\`\`json
 {
   "enabledPlugins": {
-    "formatter@anthropic-tools": true
+    "formatter@company-marketplace": true
   }
 }
 \`\`\`
-Plugin syntax: \`plugin-name@source\` where source is \`claude-code-marketplace\`, \`claude-plugins-official\`, or \`builtin\`.
+Plugin syntax: \`plugin-name@marketplace-name\`; bundled plugins use \`plugin-name@builtin\`.
 
 ### Other Settings
 - \`language\`: Preferred response language (e.g., "japanese")

@@ -11,7 +11,7 @@ import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
 import { getGlobalClaudeFile } from './env.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getClaudeConfigHomeDir } from './envUtils.js'
 import { ConfigParseError, getErrnoCode } from './errors.js'
 import { writeFileSyncAndFlush_DEPRECATED } from './file.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -22,7 +22,6 @@ import * as lockfile from './lockfile.js'
 import { logError } from './log.js'
 import type { MemoryType } from './memory/types.js'
 import { normalizePathForConfigKey } from './path.js'
-import { getEssentialTrafficOnlyReason } from './privacyLevel.js'
 import { getManagedFilePath } from './settings/managedPath.js'
 import type { ThemeSetting } from './theme.js'
 
@@ -129,8 +128,6 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   hasClaudeMdExternalIncludesWarningShown: false,
 }
 
-export type InstallMethod = 'local' | 'native' | 'global' | 'unknown'
-
 export {
   EDITOR_MODES,
   NOTIFICATION_CHANNELS,
@@ -154,22 +151,12 @@ export type GlobalConfig = {
   apiKeyHelper?: string
   projects?: Record<string, ProjectConfig>
   numStartups: number
-  installMethod?: InstallMethod
-  autoUpdates?: boolean
-  // 用于区分基于保护的禁用和用户首选项的标志
-  autoUpdatesProtectedForNative?: boolean
   // 上次显示 Doctor 时的会话计数
   doctorShownAtSession?: number
   theme: ThemeSetting
   hasCompletedOnboarding?: boolean
   // 跟踪重置入门的最后一个版本，与 MIN_VERSION_REQUIRING_ONBOARDING_RESET 一起使用
   lastOnboardingVersion?: string
-  // 跟踪查看发行说明的最后一个版本，用于管理发行说明
-  lastReleaseNotesSeen?: string
-  // 上次获取变更日志时的时间戳（内容存储在 ~/.claude/cache/changelog.md 中）
-  changelogLastFetched?: number
-  // @deprecated - 迁移到 ~/.claude/cache/changelog.md。保留以获得迁移支持。
-  cachedChangelog?: string
   mcpServers?: Record<string, McpServerConfig>
   preferredNotifChannel: NotificationChannel
   /**
@@ -330,18 +317,6 @@ export type GlobalConfig = {
 
   // 自动完成排名的技能使用跟踪
   skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
-  // 官方市场自动安装跟踪
-  officialMarketplaceAutoInstallAttempted?: boolean // 是否尝试自动安装
-  officialMarketplaceAutoInstalled?: boolean // 自动安装是否成功
-  officialMarketplaceAutoInstallFailReason?:
-    | 'policy_blocked'
-    | 'git_unavailable'
-    | 'gcs_unavailable'
-    | 'unknown' // 失败原因（如果适用）
-  officialMarketplaceAutoInstallRetryCount?: number // 重试次数
-  officialMarketplaceAutoInstallLastAttemptTime?: number // 最后一次尝试的时间戳
-  officialMarketplaceAutoInstallNextRetryTime?: number // 最早重试时间
-
   // Chrome 扩展程序配对状态（跨会话持续存在）
   chromeExtension?: {
     pairedDeviceId?: string
@@ -352,18 +327,6 @@ export type GlobalConfig = {
   lspRecommendationDisabled?: boolean // 禁用所有 LSP 插件建议
   lspRecommendationNeverPlugins?: string[] // 绝不建议的插件 ID
   lspRecommendationIgnoredCount?: number // 跟踪被忽略的建议（5 后停止）
-
-  // Claude Code 提示协议状态（来自 CLI/SDK 的 <claude-code-hint /> 标记）。
-  // 按提示类型嵌套，因此将来的类型（docs、mcp、...）无需新的插入
-  // 顶级键。
-  claudeCodeHints?: {
-    // 已提示用户输入插件 ID。显示一次语义：
-    // 无论是/否响应都会记录下来，并且不会重新提示。上限为
-    // 100 个条目限制配置增长 — 超过该限制，提示将完全停止。
-    plugin?: string[]
-    // 用户从对话框中选择“不再显示插件安装提示”。
-    disabled?: boolean
-  }
 
   // 权限解释器配置
   permissionExplainerEnabled?: boolean // 启用俳句生成的权限请求解释（默认值：true）
@@ -406,8 +369,6 @@ export type GlobalConfig = {
 function createDefaultGlobalConfig(): GlobalConfig {
   return {
     numStartups: 0,
-    installMethod: undefined,
-    autoUpdates: undefined,
     theme: 'dark',
     preferredNotifChannel: 'auto',
     verbose: false,
@@ -440,9 +401,6 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = createDefaultGlobalConfig()
 
 export const GLOBAL_CONFIG_KEYS = [
   'apiKeyHelper',
-  'installMethod',
-  'autoUpdates',
-  'autoUpdatesProtectedForNative',
   'theme',
   'verbose',
   'preferredNotifChannel',
@@ -570,7 +528,6 @@ export function isPathTrusted(dir: string): boolean {
 // 我们必须把这个测试代码放在这里，因为 Jest 不支持模拟 ES 模块:O
 const TEST_GLOBAL_CONFIG_FOR_TESTING: GlobalConfig = {
   ...DEFAULT_GLOBAL_CONFIG,
-  autoUpdates: false,
 }
 const TEST_PROJECT_CONFIG_FOR_TESTING: ProjectConfig = {
   ...DEFAULT_PROJECT_CONFIG,
@@ -672,60 +629,6 @@ let globalConfigCache: { config: GlobalConfig | null; mtime: number } = {
 }
 
 /**
- * Migrates old autoUpdaterStatus to new installMethod and autoUpdates fields
- * @internal
- */
-function migrateConfigFields(config: GlobalConfig): GlobalConfig {
-  // Already migrated
-  if (config.installMethod !== undefined) {
-    return config
-  }
-
-  // autoUpdaterStatus is removed from the type but may exist in old configs
-  const legacy = config as GlobalConfig & {
-    autoUpdaterStatus?:
-      | 'migrated'
-      | 'installed'
-      | 'disabled'
-      | 'enabled'
-      | 'no_permissions'
-      | 'not_configured'
-  }
-
-  // Determine install method and auto-update preference from old field
-  let installMethod: InstallMethod = 'unknown'
-  let autoUpdates = config.autoUpdates ?? true // Default to enabled unless explicitly disabled
-
-  switch (legacy.autoUpdaterStatus) {
-    case 'migrated':
-      installMethod = 'local'
-      break
-    case 'installed':
-      installMethod = 'native'
-      break
-    case 'disabled':
-      // When disabled, we don't know the install method
-      autoUpdates = false
-      break
-    case 'enabled':
-    case 'no_permissions':
-    case 'not_configured':
-      // These imply global installation
-      installMethod = 'global'
-      break
-    case undefined:
-      // No old status, keep defaults
-      break
-  }
-
-  return {
-    ...config,
-    installMethod,
-    autoUpdates,
-  }
-}
-
-/**
  * Removes history field from projects (migrated to history.jsonl)
  * @internal
  */
@@ -782,10 +685,10 @@ function startGlobalConfigFreshnessWatcher(): void {
           const parsed = safeParseJSON(stripBOM(content))
           if (parsed === null || typeof parsed !== 'object') return
           globalConfigCache = {
-            config: migrateConfigFields({
+            config: {
               ...createDefaultGlobalConfig(),
               ...(parsed as Partial<GlobalConfig>),
-            }),
+            },
             mtime: curr.mtimeMs,
           }
         })
@@ -827,9 +730,7 @@ export function getGlobalConfig(): GlobalConfig {
     } catch {
       // File doesn't exist
     }
-    const config = migrateConfigFields(
-      getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig),
-    )
+    const config = getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
     globalConfigCache = {
       config,
       mtime: stats?.mtimeMs ?? Date.now(),
@@ -838,9 +739,7 @@ export function getGlobalConfig(): GlobalConfig {
     return config
   } catch {
     // If anything goes wrong, fall back to uncached behavior
-    return migrateConfigFields(
-      getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig),
-    )
+    return getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
   }
 }
 
@@ -1366,63 +1265,6 @@ export function saveCurrentProjectConfig(
     saveConfig(getGlobalClaudeFile(), written, DEFAULT_GLOBAL_CONFIG)
     writeThroughGlobalConfigCache(written)
   }
-}
-
-export function isAutoUpdaterDisabled(): boolean {
-  return getAutoUpdaterDisabledReason() !== null
-}
-
-/**
- * Returns true if plugin autoupdate should be skipped.
- * This checks if the auto-updater is disabled AND the FORCE_AUTOUPDATE_PLUGINS
- * env var is not set to 'true'. The env var allows forcing plugin autoupdate
- * even when the auto-updater is otherwise disabled.
- */
-export function shouldSkipPluginAutoupdate(): boolean {
-  return (
-    isAutoUpdaterDisabled() &&
-    !isEnvTruthy(process.env.FORCE_AUTOUPDATE_PLUGINS)
-  )
-}
-
-export type AutoUpdaterDisabledReason =
-  | { type: 'development' }
-  | { type: 'env'; envVar: string }
-  | { type: 'config' }
-
-export function formatAutoUpdaterDisabledReason(
-  reason: AutoUpdaterDisabledReason,
-): string {
-  switch (reason.type) {
-    case 'development':
-      return 'development build'
-    case 'env':
-      return `${reason.envVar} set`
-    case 'config':
-      return 'config'
-  }
-}
-
-export function getAutoUpdaterDisabledReason(): AutoUpdaterDisabledReason | null {
-  if (process.env.NODE_ENV === 'development') {
-    return { type: 'development' }
-  }
-  if (isEnvTruthy(process.env.DISABLE_AUTOUPDATER)) {
-    return { type: 'env', envVar: 'DISABLE_AUTOUPDATER' }
-  }
-  const essentialTrafficEnvVar = getEssentialTrafficOnlyReason()
-  if (essentialTrafficEnvVar) {
-    return { type: 'env', envVar: essentialTrafficEnvVar }
-  }
-  const config = getGlobalConfig()
-  if (
-    config.autoUpdates === false &&
-    (config.installMethod !== 'native' ||
-      config.autoUpdatesProtectedForNative !== true)
-  ) {
-    return { type: 'config' }
-  }
-  return null
 }
 
 export function recordFirstStartTime(): void {

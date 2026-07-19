@@ -30,7 +30,6 @@ import {
 import { getManagedPluginNames } from './managedPlugins.js'
 import { getMarketplaceCacheOnly, getPluginById } from './marketplaceManager.js'
 import {
-  isOfficialMarketplaceName,
   parsePluginIdentifier,
   scopeToSettingSource,
 } from './pluginIdentifier.js'
