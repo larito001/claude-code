@@ -169,10 +169,7 @@ export function useMultiSelectState<T>({
   const [selectedValues, setSelectedValues] = useState<T[]>(defaultValue)
   const [isSubmitFocused, setIsSubmitFocused] = useState(false)
 
-  // Reset selectedValues when options change (e.g. async-loaded data changes
-  // defaultValue after mount). Mirrors the reset pattern in use-select-navigation.ts
-  // and the deleted ui/useMultiSelectState.ts — without this, MCPServerDesktopImportDialog
-  // keeps colliding servers checked after getAllMcpConfigs() resolves.
+  // 当异步加载改变选项或默认值时重置选择，避免保留已不存在的选项。
   const [lastOptions, setLastOptions] = useState(options)
   if (options !== lastOptions && !isDeepStrictEqual(options, lastOptions)) {
     setSelectedValues(defaultValue)
@@ -210,9 +207,8 @@ export function useMultiSelectState<T>({
     focusValue,
   })
 
-  // Automatically register as an overlay.
-  // This ensures CancelRequestHandler won't intercept Escape when the multi-select is active.
-  useRegisterOverlay('multi-select')
+  // 多选处于活动状态时注册为浮层，避免取消请求处理器抢先消费 Escape。
+  useRegisterOverlay('multi-select', true)
 
   const updateInputValue = useCallback(
     (value: T, inputValue: string) => {

@@ -229,6 +229,12 @@ function containsUntranslatedEnglish(comment: string): boolean {
       .replace(/^@(?:param|returns?|throws?|typeParam)\b(?:\s+\S+)?\s*/iu, '')
       .trim()
     if (!ENGLISH_WORD_PATTERN.test(prose)) continue
+    if (
+      /^[A-Za-z_$][\w$]*$/u.test(prose) &&
+      /[A-Z_$]/u.test(prose.slice(1))
+    ) {
+      continue
+    }
 
     const words = prose.match(/[A-Za-z]{3,}/gu) ?? []
     if (words.length > 0 && words.every(word => word === word.toUpperCase())) {

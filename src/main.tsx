@@ -2095,14 +2095,6 @@ async function run(): Promise<CommanderCommand> {
     } = await import('./cli/handlers/mcp.js');
     await mcpAddJsonHandler(name, json, options);
   });
-  mcp.command('add-from-claude-desktop').description('Import MCP servers from Claude Desktop (Mac and WSL only)').option('-s, --scope <scope>', 'Configuration scope (local, user, or project)', 'local').action(async (options: {
-    scope?: string;
-  }) => {
-    const {
-      mcpAddFromDesktopHandler
-    } = await import('./cli/handlers/mcp.js');
-    await mcpAddFromDesktopHandler(options);
-  });
   mcp.command('reset-project-choices').description('Reset all approved and rejected project-scoped (.mcp.json) servers within this project').action(async () => {
     const {
       mcpResetChoicesHandler
@@ -2110,14 +2102,6 @@ async function run(): Promise<CommanderCommand> {
     await mcpResetChoicesHandler();
   });
 
-  // 克劳德·奥特
-
-  /**
-   * 帮助函数一致地处理市场命令错误。
-   * 记录错误并以状态 1 退出进程。
-   * @param error 发生的错误
-   * @param action 失败操作的描述
-   */
   // 所有插件/市场子命令上的隐藏标志以定位 cowork_plugins。
   const coworkOption = () => new Option('--cowork', 'Use cowork_plugins directory').hideHelp();
 

@@ -1,10 +1,10 @@
 /**
- * SDK Control Schemas - Zod schemas for the control protocol.
+ * SDK控制模式 - 控制协议的Zod模式。
  *
- * These schemas define the control protocol between SDK implementations and the CLI.
- * Used by SDK builders (e.g., Python SDK) to communicate with the CLI process.
+ * 这些模式定义了SDK实现与CLI之间的控制协议。
+ * 供SDK构建者（例如Python SDK）用于与CLI进程通信。
  *
- * SDK consumers should use coreSchemas.ts instead.
+ * SDK消费者应改用coreSchemas.ts。
  */
 
 import { z } from 'zod/v4'
@@ -30,15 +30,14 @@ import {
 } from './coreSchemas.js'
 
 // ============================================================================
-// Opaque External Payload Schemas
+// 不透明外部负载模式
 // ============================================================================
 
-// JSONRPCMessage is versioned by @modelcontextprotocol/sdk and passes through
-// this protocol unchanged, so runtime validation intentionally stays open.
+// JSONRPCMessage 由 @modelcontextprotocol/sdk 进行版本控制，并且在此协议中保持不变地传递，因此运行时验证有意保持开放。
 export const JSONRPCMessagePlaceholder = lazySchema(() => z.unknown())
 
 // ============================================================================
-// Hook Callback Types
+// 钩子回调类型
 // ============================================================================
 
 export const SDKHookCallbackMatcherSchema = lazySchema(() =>
@@ -52,7 +51,7 @@ export const SDKHookCallbackMatcherSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Control Request Types
+// 控制请求类型
 // ============================================================================
 
 export const SDKControlInitializeRequestSchema = lazySchema(() =>
@@ -64,9 +63,12 @@ export const SDKControlInitializeRequestSchema = lazySchema(() =>
         .optional(),
       sdkMcpServers: z.array(z.string()).optional(),
       jsonSchema: z.record(z.string(), z.unknown()).optional(),
-      systemPrompt: z.string().optional(),
+      systemPrompt: z.array(z.string()).optional(),
       appendSystemPrompt: z.string().optional(),
+      appendSubagentSystemPrompt: z.string().optional(),
+      excludeDynamicSections: z.boolean().optional(),
       agents: z.record(z.string(), AgentDefinitionSchema()).optional(),
+      title: z.string().optional(),
       promptSuggestions: z.boolean().optional(),
       agentProgressSummaries: z.boolean().optional(),
     })
@@ -75,6 +77,7 @@ export const SDKControlInitializeRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Initialize Response Schema 组件。 */
 export const SDKControlInitializeResponseSchema = lazySchema(() =>
   z
     .object({
@@ -83,8 +86,7 @@ export const SDKControlInitializeResponseSchema = lazySchema(() =>
       output_style: z.string(),
       available_output_styles: z.array(z.string()),
       models: z.array(ModelInfoSchema()),
-      // Field name retained for Claude Agent SDK wire compatibility. The
-      // payload contains API backend metadata, not a logged-in account.
+      // 字段名称保留用于 Claude Agent SDK 线路兼容性。负载包含 API 后端元数据，而非登录账户。
       account: ApiBackendInfoSchema(),
       pid: z
         .number()
@@ -97,6 +99,7 @@ export const SDKControlInitializeResponseSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Interrupt Request Schema 组件。 */
 export const SDKControlInterruptRequestSchema = lazySchema(() =>
   z
     .object({
@@ -106,6 +109,7 @@ export const SDKControlInterruptRequestSchema = lazySchema(() =>
 )
 
 
+/** 渲染 SDK Control Permission Request Schema 组件。 */
 export const SDKControlPermissionRequestSchema = lazySchema(() =>
   z
     .object({
@@ -124,6 +128,7 @@ export const SDKControlPermissionRequestSchema = lazySchema(() =>
     .describe('Requests permission to use a tool with the given input.'),
 )
 
+/** 渲染 SDK Control Set Permission Mode Request Schema 组件。 */
 export const SDKControlSetPermissionModeRequestSchema = lazySchema(() =>
   z
     .object({
@@ -133,6 +138,7 @@ export const SDKControlSetPermissionModeRequestSchema = lazySchema(() =>
     .describe('Sets the permission mode for tool execution handling.'),
 )
 
+/** 渲染 SDK Control Set Model Request Schema 组件。 */
 export const SDKControlSetModelRequestSchema = lazySchema(() =>
   z
     .object({
@@ -142,6 +148,7 @@ export const SDKControlSetModelRequestSchema = lazySchema(() =>
     .describe('Sets the model to use for subsequent conversation turns.'),
 )
 
+/** 渲染 SDK Control Set Max Thinking Tokens Request Schema 组件。 */
 export const SDKControlSetMaxThinkingTokensRequestSchema = lazySchema(() =>
   z
     .object({
@@ -153,6 +160,7 @@ export const SDKControlSetMaxThinkingTokensRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Mcp Status Request Schema 组件。 */
 export const SDKControlMcpStatusRequestSchema = lazySchema(() =>
   z
     .object({
@@ -161,6 +169,7 @@ export const SDKControlMcpStatusRequestSchema = lazySchema(() =>
     .describe('Requests the current status of all MCP server connections.'),
 )
 
+/** 渲染 SDK Control Mcp Status Response Schema 组件。 */
 export const SDKControlMcpStatusResponseSchema = lazySchema(() =>
   z
     .object({
@@ -171,6 +180,7 @@ export const SDKControlMcpStatusResponseSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Get Context Usage Request Schema 组件。 */
 export const SDKControlGetContextUsageRequestSchema = lazySchema(() =>
   z
     .object({
@@ -181,6 +191,7 @@ export const SDKControlGetContextUsageRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 Context Category Schema 组件。 */
 const ContextCategorySchema = lazySchema(() =>
   z.object({
     name: z.string(),
@@ -190,6 +201,7 @@ const ContextCategorySchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Context Grid Square Schema 组件。 */
 const ContextGridSquareSchema = lazySchema(() =>
   z.object({
     color: z.string(),
@@ -201,6 +213,7 @@ const ContextGridSquareSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Control Get Context Usage Response Schema 组件。 */
 export const SDKControlGetContextUsageResponseSchema = lazySchema(() =>
   z
     .object({
@@ -304,6 +317,7 @@ export const SDKControlGetContextUsageResponseSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Rewind Files Request Schema 组件。 */
 export const SDKControlRewindFilesRequestSchema = lazySchema(() =>
   z
     .object({
@@ -314,6 +328,7 @@ export const SDKControlRewindFilesRequestSchema = lazySchema(() =>
     .describe('Rewinds file changes made since a specific user message.'),
 )
 
+/** 渲染 SDK Control Rewind Files Response Schema 组件。 */
 export const SDKControlRewindFilesResponseSchema = lazySchema(() =>
   z
     .object({
@@ -326,6 +341,7 @@ export const SDKControlRewindFilesResponseSchema = lazySchema(() =>
     .describe('Result of a rewindFiles operation.'),
 )
 
+/** 渲染 SDK Control Cancel Async Message Request Schema 组件。 */
 export const SDKControlCancelAsyncMessageRequestSchema = lazySchema(() =>
   z
     .object({
@@ -337,6 +353,7 @@ export const SDKControlCancelAsyncMessageRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Cancel Async Message Response Schema 组件。 */
 export const SDKControlCancelAsyncMessageResponseSchema = lazySchema(() =>
   z
     .object({
@@ -347,6 +364,7 @@ export const SDKControlCancelAsyncMessageResponseSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Seed Read State Request Schema 组件。 */
 export const SDKControlSeedReadStateRequestSchema = lazySchema(() =>
   z
     .object({
@@ -359,6 +377,7 @@ export const SDKControlSeedReadStateRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Hook Callback Request Schema 组件。 */
 export const SDKHookCallbackRequestSchema = lazySchema(() =>
   z
     .object({
@@ -370,6 +389,7 @@ export const SDKHookCallbackRequestSchema = lazySchema(() =>
     .describe('Delivers a hook callback with its input data.'),
 )
 
+/** 渲染 SDK Control Mcp Message Request Schema 组件。 */
 export const SDKControlMcpMessageRequestSchema = lazySchema(() =>
   z
     .object({
@@ -380,6 +400,7 @@ export const SDKControlMcpMessageRequestSchema = lazySchema(() =>
     .describe('Sends a JSON-RPC message to a specific MCP server.'),
 )
 
+/** 渲染 SDK Control Mcp Set Servers Request Schema 组件。 */
 export const SDKControlMcpSetServersRequestSchema = lazySchema(() =>
   z
     .object({
@@ -389,6 +410,7 @@ export const SDKControlMcpSetServersRequestSchema = lazySchema(() =>
     .describe('Replaces the set of dynamically managed MCP servers.'),
 )
 
+/** 渲染 SDK Control Mcp Set Servers Response Schema 组件。 */
 export const SDKControlMcpSetServersResponseSchema = lazySchema(() =>
   z
     .object({
@@ -401,6 +423,7 @@ export const SDKControlMcpSetServersResponseSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Reload Plugins Request Schema 组件。 */
 export const SDKControlReloadPluginsRequestSchema = lazySchema(() =>
   z
     .object({
@@ -411,6 +434,7 @@ export const SDKControlReloadPluginsRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Reload Plugins Response Schema 组件。 */
 export const SDKControlReloadPluginsResponseSchema = lazySchema(() =>
   z
     .object({
@@ -431,6 +455,7 @@ export const SDKControlReloadPluginsResponseSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Mcp Reconnect Request Schema 组件。 */
 export const SDKControlMcpReconnectRequestSchema = lazySchema(() =>
   z
     .object({
@@ -440,6 +465,7 @@ export const SDKControlMcpReconnectRequestSchema = lazySchema(() =>
     .describe('Reconnects a disconnected or failed MCP server.'),
 )
 
+/** 渲染 SDK Control Mcp Toggle Request Schema 组件。 */
 export const SDKControlMcpToggleRequestSchema = lazySchema(() =>
   z
     .object({
@@ -451,6 +477,7 @@ export const SDKControlMcpToggleRequestSchema = lazySchema(() =>
 )
 
 
+/** 渲染 SDK Control Stop Task Request Schema 组件。 */
 export const SDKControlStopTaskRequestSchema = lazySchema(() =>
   z
     .object({
@@ -460,6 +487,7 @@ export const SDKControlStopTaskRequestSchema = lazySchema(() =>
     .describe('Stops a running task.'),
 )
 
+/** 渲染 SDK Control Apply Flag Settings Request Schema 组件。 */
 export const SDKControlApplyFlagSettingsRequestSchema = lazySchema(() =>
   z
     .object({
@@ -471,6 +499,7 @@ export const SDKControlApplyFlagSettingsRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Get Settings Request Schema 组件。 */
 export const SDKControlGetSettingsRequestSchema = lazySchema(() =>
   z
     .object({
@@ -481,6 +510,7 @@ export const SDKControlGetSettingsRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Get Settings Response Schema 组件。 */
 export const SDKControlGetSettingsResponseSchema = lazySchema(() =>
   z
     .object({
@@ -504,8 +534,7 @@ export const SDKControlGetSettingsResponseSchema = lazySchema(() =>
       applied: z
         .object({
           model: z.string(),
-          // The public SDK exposes string effort levels only; the
-          // Zod→proto generator also cannot emit enum∪number unions.
+          // 公共SDK仅公开字符串努力级别；Zod→proto生成器也无法发出enum∪number联合类型。
           effort: z.enum(['low', 'medium', 'high', 'max']).nullable(),
         })
         .optional()
@@ -518,6 +547,7 @@ export const SDKControlGetSettingsResponseSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Elicitation Request Schema 组件。 */
 export const SDKControlElicitationRequestSchema = lazySchema(() =>
   z
     .object({
@@ -534,6 +564,7 @@ export const SDKControlElicitationRequestSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Control Elicitation Response Schema 组件。 */
 export const SDKControlElicitationResponseSchema = lazySchema(() =>
   z
     .object({
@@ -545,7 +576,7 @@ export const SDKControlElicitationResponseSchema = lazySchema(() =>
 
 
 // ============================================================================
-// Control Request/Response Wrappers
+// 控制请求/响应包装器
 // ============================================================================
 
 export const SDKControlRequestInnerSchema = lazySchema(() =>
@@ -574,6 +605,7 @@ export const SDKControlRequestInnerSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 SDK Control Request Schema 组件。 */
 export const SDKControlRequestSchema = lazySchema(() =>
   z.object({
     type: z.literal('control_request'),
@@ -582,6 +614,7 @@ export const SDKControlRequestSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Control Response Schema 组件。 */
 export const ControlResponseSchema = lazySchema(() =>
   z.object({
     subtype: z.literal('success'),
@@ -590,6 +623,7 @@ export const ControlResponseSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Control Error Response Schema 组件。 */
 export const ControlErrorResponseSchema = lazySchema(() =>
   z.object({
     subtype: z.literal('error'),
@@ -601,6 +635,7 @@ export const ControlErrorResponseSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Control Response Schema 组件。 */
 export const SDKControlResponseSchema = lazySchema(() =>
   z.object({
     type: z.literal('control_response'),
@@ -608,6 +643,7 @@ export const SDKControlResponseSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Control Cancel Request Schema 组件。 */
 export const SDKControlCancelRequestSchema = lazySchema(() =>
   z
     .object({
@@ -617,6 +653,7 @@ export const SDKControlCancelRequestSchema = lazySchema(() =>
     .describe('Cancels a currently open control request.'),
 )
 
+/** 渲染 SDK Keep Alive Message Schema 组件。 */
 export const SDKKeepAliveMessageSchema = lazySchema(() =>
   z
     .object({
@@ -625,6 +662,7 @@ export const SDKKeepAliveMessageSchema = lazySchema(() =>
     .describe('Keep-alive message to maintain WebSocket connection.'),
 )
 
+/** 渲染 SDK Update Environment Variables Message Schema 组件。 */
 export const SDKUpdateEnvironmentVariablesMessageSchema = lazySchema(() =>
   z
     .object({
@@ -635,7 +673,7 @@ export const SDKUpdateEnvironmentVariablesMessageSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Aggregate Message Types
+// 聚合消息类型
 // ============================================================================
 
 export const StdoutMessageSchema = lazySchema(() =>
@@ -651,6 +689,7 @@ export const StdoutMessageSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 Stdin Message Schema 组件。 */
 export const StdinMessageSchema = lazySchema(() =>
   z.union([
     SDKUserMessageSchema(),

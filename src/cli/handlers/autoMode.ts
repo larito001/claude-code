@@ -1,7 +1,4 @@
-/**
- * Auto mode subcommand handlers — dump default/merged classifier rules and
- * critique user-written rules. Dynamically imported when `claude auto-mode ...` runs.
- */
+/** 自动模式子命令处理器 — 转储默认/合并的分类器规则以及评析用户编写的规则。当运行 `claude auto-mode ...` 时动态导入。 */
 
 import { errorMessage } from '../../utils/errors.js'
 import {
@@ -17,20 +14,18 @@ import { getAutoModeConfig } from '../../utils/settings/settings.js'
 import { sideQuery } from '../../utils/sideQuery.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 
+/** 设置并保存 write Rules 对应的数据或状态。 */
 function writeRules(rules: AutoModeRules): void {
   process.stdout.write(jsonStringify(rules, null, 2) + '\n')
 }
 
+/** 执行 auto Mode Defaults Handler 对应的业务处理。 */
 export function autoModeDefaultsHandler(): void {
   writeRules(getDefaultExternalAutoModeRules())
 }
 
 /**
- * Dump the effective auto mode config: user settings where provided, external
- * defaults otherwise. Per-section REPLACE semantics — matches how
- * buildYoloSystemPrompt resolves the external template (a non-empty user
- * section replaces that section's defaults entirely; an empty/absent section
- * falls through to defaults).
+ * 转储有效的自动模式配置：用户提供的设置（若有），否则为外部默认值。按部分的 REPLACE 语义 — 与 buildYoloSystemPrompt 解析外部模板的方式一致（非空的用户部分完全替换该部分的默认值；空或缺失的部分则回退到默认值）。
  */
 export function autoModeConfigHandler(): void {
   const config = getAutoModeConfig()
@@ -70,6 +65,7 @@ const CRITIQUE_SYSTEM_PROMPT =
   'Be concise and constructive. Only comment on rules that could be improved. ' +
   'If all rules look good, say so.'
 
+/** 执行 auto Mode Critique Handler 对应的业务处理。 */
 export async function autoModeCritiqueHandler(options: {
   model?: string
 }): Promise<void> {
@@ -140,6 +136,7 @@ export async function autoModeCritiqueHandler(options: {
     return
   }
 
+  /** 执行 text Block 对应的业务处理。 */
   const textBlock = response.content.find(block => block.type === 'text')
   if (textBlock?.type === 'text') {
     process.stdout.write(textBlock.text + '\n')
@@ -148,6 +145,7 @@ export async function autoModeCritiqueHandler(options: {
   }
 }
 
+/** 格式化 format Rules For Critique 对应的数据或状态。 */
 function formatRulesForCritique(
   section: string,
   userRules: string[],

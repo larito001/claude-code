@@ -1,27 +1,22 @@
 /**
- * MCP subcommand handlers — extracted from main.tsx for lazy loading.
- * These are dynamically imported only when the corresponding `claude mcp *` command runs.
+ * MCP 子命令处理程序——从 main.tsx 中提取，用于懒加载。
+ * 这些处理程序仅在相应的 `claude mcp *` 命令运行时动态导入。
  */
 
 import { stat } from 'fs/promises';
 import pMap from 'p-map';
 import { cwd } from 'process';
-import React from 'react';
-import { MCPServerDesktopImportDialog } from '../../components/MCPServerDesktopImportDialog.js';
-import { render } from '../../ink.js';
-import { KeybindingSetup } from '../../keybindings/KeybindingProviderSetup.js';
 import { clearMcpClientConfig, clearServerTokensFromLocalStorage, getMcpClientConfig, readClientSecret, saveMcpClientSecret } from '../../services/mcp/auth.js';
 import { connectToServer, getMcpServerConnectionBatchSize } from '../../services/mcp/client.js';
 import { addMcpConfig, getAllMcpConfigs, getMcpConfigByName, getMcpConfigsByScope, removeMcpConfig } from '../../services/mcp/config.js';
 import type { ConfigScope, ScopedMcpServerConfig } from '../../services/mcp/types.js';
 import { describeMcpConfigFilePath, ensureConfigScope, getScopeLabel } from '../../services/mcp/utils.js';
-import { AppStateProvider } from '../../state/AppState.js';
 import { getCurrentProjectConfig, getGlobalConfig, saveCurrentProjectConfig } from '../../utils/config.js';
 import { isFsInaccessible } from '../../utils/errors.js';
 import { gracefulShutdown } from '../../utils/gracefulShutdown.js';
 import { safeParseJSON } from '../../utils/json.js';
-import { getPlatform } from '../../utils/platform.js';
 import { cliError, cliOk } from '../exit.js';
+/** 检查 check Mcp Server Health 对应的数据或状态。 */
 async function checkMcpServerHealth(name: string, server: ScopedMcpServerConfig): Promise<string> {
   try {
     const result = await connectToServer(name, server);
@@ -37,7 +32,7 @@ async function checkMcpServerHealth(name: string, server: ScopedMcpServerConfig)
   }
 }
 
-// mcp serve (lines 4512–4532)
+// mcp serve（第 4512–4532 行）
 export async function mcpServeHandler({
   debug,
   verbose
@@ -68,12 +63,13 @@ export async function mcpServeHandler({
   }
 }
 
-// mcp remove (lines 4545–4635)
+// mcp remove（第 4545–4635 行）
 export async function mcpRemoveHandler(name: string, options: {
   scope?: string;
 }): Promise<void> {
-  // Look up config before removing so we can clean up secure storage
+  // 删除前查找配置，以便清理安全存储
   const serverBeforeRemoval = getMcpConfigByName(name);
+  /** 规范化 cleanup Secure Storage 对应的数据或状态。 */
   const cleanupSecureStorage = () => {
     if (serverBeforeRemoval && (serverBeforeRemoval.type === 'sse' || serverBeforeRemoval.type === 'http')) {
       clearServerTokensFromLocalStorage(name, serverBeforeRemoval);
@@ -89,17 +85,17 @@ export async function mcpRemoveHandler(name: string, options: {
       cliOk(`File modified: ${describeMcpConfigFilePath(scope)}`);
     }
 
-    // If no scope specified, check where the server exists
+    // 如果未指定作用域，则检查服务器所在位置
     const projectConfig = getCurrentProjectConfig();
     const globalConfig = getGlobalConfig();
 
-    // Check if server exists in project scope (.mcp.json)
+    // 检查服务器是否存在于项目作用域（.mcp.json）中
     const {
       servers: projectServers
     } = getMcpConfigsByScope('project');
     const mcpJsonExists = !!projectServers[name];
 
-    // Count how many scopes contain this server
+    // 统计多少个作用域包含此服务器
     const scopes: Array<Exclude<ConfigScope, 'dynamic'>> = [];
     if (projectConfig.mcpServers?.[name]) scopes.push('local');
     if (mcpJsonExists) scopes.push('project');
@@ -107,14 +103,14 @@ export async function mcpRemoveHandler(name: string, options: {
     if (scopes.length === 0) {
       cliError(`No MCP server found with name: "${name}"`);
     } else if (scopes.length === 1) {
-      // Server exists in only one scope, remove it
+      // 服务器仅存在于一个作用域中，将其删除
       const scope = scopes[0]!;
       await removeMcpConfig(name, scope);
       cleanupSecureStorage();
       process.stdout.write(`Removed MCP server "${name}" from ${scope} config\n`);
       cliOk(`File modified: ${describeMcpConfigFilePath(scope)}`);
     } else {
-      // Server exists in multiple scopes
+      // 服务器存在于多个作用域中
       process.stderr.write(`MCP server "${name}" exists in multiple scopes:\n`);
       scopes.forEach(scope => {
         process.stderr.write(`  - ${getScopeLabel(scope)} (${describeMcpConfigFilePath(scope)})\n`);
@@ -130,7 +126,7 @@ export async function mcpRemoveHandler(name: string, options: {
   }
 }
 
-// mcp list (lines 4641–4688)
+// mcp list（第 4641–4688 行）
 export async function mcpListHandler(): Promise<void> {
   const {
     servers: configs
@@ -142,7 +138,7 @@ export async function mcpListHandler(): Promise<void> {
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log('Checking MCP server health...\n');
 
-    // Check servers concurrently
+    // 并发检查服务器
     const entries = Object.entries(configs);
     const results = await pMap(entries, async ([name, server]) => ({
       name,
@@ -156,7 +152,7 @@ export async function mcpListHandler(): Promise<void> {
       server,
       status
     } of results) {
-      // Intentionally excluding sse-ide servers here since they're internal
+      // 此处有意排除 sse-ide 服务器，因为它们是内部的
       if (server.type === 'sse') {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.log(`${name}: ${server.url} (SSE) - ${status}`);
@@ -170,12 +166,12 @@ export async function mcpListHandler(): Promise<void> {
       }
     }
   }
-  // Use gracefulShutdown to properly clean up MCP server connections
-  // (process.exit bypasses cleanup handlers, leaving child processes orphaned)
+  // 使用 gracefulShutdown 正确清理 MCP 服务器连接
+  // （process.exit 会绕过清理处理程序，导致子进程成为孤儿进程）
   await gracefulShutdown(0);
 }
 
-// mcp get (lines 4694–4786)
+// mcp get（第 4694–4786 行）
 export async function mcpGetHandler(name: string): Promise<void> {
   const server = getMcpConfigByName(name);
   if (!server) {
@@ -187,12 +183,12 @@ export async function mcpGetHandler(name: string): Promise<void> {
   // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.log(`  Scope: ${getScopeLabel(server.scope)}`);
 
-  // Check server health
+  // 检查服务器健康状态
   const status = await checkMcpServerHealth(name, server);
   // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.log(`  Status: ${status}`);
 
-  // Intentionally excluding sse-ide servers here since they're internal
+  // 此处有意排除 sse-ide 服务器，因为它们是内部的
   if (server.type === 'sse') {
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`  Type: sse`);
@@ -260,12 +256,12 @@ export async function mcpGetHandler(name: string): Promise<void> {
   }
   // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.log(`\nTo remove this server, run: claude mcp remove "${name}" -s ${server.scope}`);
-  // Use gracefulShutdown to properly clean up MCP server connections
-  // (process.exit bypasses cleanup handlers, leaving child processes orphaned)
+  // 使用 gracefulShutdown 正确清理 MCP 服务器连接
+  // （process.exit 会绕过清理处理程序，导致子进程成为孤儿进程）
   await gracefulShutdown(0);
 }
 
-// mcp add-json (lines 4801–4870)
+// mcp add-json（第 4801–4870 行）
 export async function mcpAddJsonHandler(name: string, json: string, options: {
   scope?: string;
   clientSecret?: true;
@@ -274,7 +270,7 @@ export async function mcpAddJsonHandler(name: string, json: string, options: {
     const scope = ensureConfigScope(options.scope);
     const parsedJson = safeParseJSON(json);
 
-    // Read secret before writing config so cancellation doesn't leave partial state
+    // 在写入配置前读取机密，以便取消操作不会留下部分状态
     const needsSecret = options.clientSecret && parsedJson && typeof parsedJson === 'object' && 'type' in parsedJson && (parsedJson.type === 'sse' || parsedJson.type === 'http') && 'url' in parsedJson && typeof parsedJson.url === 'string' && 'oauth' in parsedJson && parsedJson.oauth && typeof parsedJson.oauth === 'object' && 'clientId' in parsedJson.oauth;
     const clientSecret = needsSecret ? await readClientSecret() : undefined;
     await addMcpConfig(name, parsedJson, scope);
@@ -291,37 +287,7 @@ export async function mcpAddJsonHandler(name: string, json: string, options: {
   }
 }
 
-// mcp add-from-claude-desktop (lines 4881–4927)
-export async function mcpAddFromDesktopHandler(options: {
-  scope?: string;
-}): Promise<void> {
-  try {
-    const scope = ensureConfigScope(options.scope);
-    const platform = getPlatform();
-    const {
-      readClaudeDesktopMcpServers
-    } = await import('../../utils/claudeDesktop.js');
-    const servers = await readClaudeDesktopMcpServers();
-    if (Object.keys(servers).length === 0) {
-      cliOk('No MCP servers found in Claude Desktop configuration or configuration file does not exist.');
-    }
-    const {
-      unmount
-    } = await render(<AppStateProvider>
-        <KeybindingSetup>
-          <MCPServerDesktopImportDialog servers={servers} scope={scope} onDone={() => {
-          unmount();
-        }} />
-        </KeybindingSetup>
-      </AppStateProvider>, {
-      exitOnCtrlC: true
-    });
-  } catch (error) {
-    cliError((error as Error).message);
-  }
-}
-
-// mcp reset-project-choices (lines 4935–4952)
+// mcp reset-project-choices（第 4935–4952 行）
 export async function mcpResetChoicesHandler(): Promise<void> {
   saveCurrentProjectConfig(current => ({
     ...current,

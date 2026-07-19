@@ -184,6 +184,8 @@ try {
   )
 
   let sdkResult: { subtype?: string; result?: string; errors?: string[] } | undefined
+  const sdkStderr: string[] = []
+  const sdkMessageTypes: string[] = []
   const query = sdk.query({
     prompt: 'Reply with exactly BUILT_SDK_OK and no other text.',
     options: {
@@ -193,10 +195,12 @@ try {
       pathToClaudeCodeExecutable: builtCli,
       maxTurns: 1,
       tools: [],
+      stderr: (data: string) => sdkStderr.push(data),
     },
   })
   try {
     for await (const message of query) {
+      sdkMessageTypes.push(message.type)
       if (message.type === 'result') sdkResult = message
     }
   } finally {
@@ -204,7 +208,7 @@ try {
   }
   assert(
     sdkResult?.subtype === 'success',
-    `Built SDK query failed: ${sdkResult?.errors?.join('; ') ?? 'no result'}`,
+    `Built SDK query failed: ${sdkResult?.errors?.join('; ') ?? 'no result'}; messages=${sdkMessageTypes.join(',') || '<none>'}; stderr=${sdkStderr.join('').trim() || '<none>'}`,
   )
   assert(
     sdkResult.result?.trim() === 'BUILT_SDK_OK',

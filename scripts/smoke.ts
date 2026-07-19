@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, isAbsolute, join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { z } from 'zod/v4'
 import { builtInCommandNames } from '../src/commands.js'
 import { createSdkMcpServer, tool } from '../src/entrypoints/agentSdkTypes.js'
@@ -14,7 +14,6 @@ import { clearBundledSkills, getBundledSkills } from '../src/skills/bundledSkill
 import { initBundledSkills } from '../src/skills/bundled/index.js'
 import { getAllBaseTools } from '../src/tools.js'
 import { getBuiltInAgents } from '../src/tools/AgentTool/builtInAgents.js'
-import { getClaudeDesktopConfigPath } from '../src/utils/claudeDesktop.js'
 import { initBackgroundHousekeepingServices } from '../src/utils/backgroundHousekeeping.js'
 import { getApiCredentialConfigurationError } from '../src/utils/apiCredentialValidation.js'
 import { getFastModeUnavailableReason } from '../src/utils/fastMode.js'
@@ -156,14 +155,6 @@ assert(
   windowsDirectories.DESKTOP === join('D:\\Profiles\\framework', 'Desktop'),
   'Windows system-directory mapping is broken',
 )
-
-if (process.platform === 'win32') {
-  const desktopConfigPath = await getClaudeDesktopConfigPath()
-  assert(
-    basename(desktopConfigPath) === 'claude_desktop_config.json',
-    'Native Windows Claude Desktop MCP config path is broken',
-  )
-}
 
 const providerEnvironmentNames = [
   'CLAUDE_CODE_USE_BEDROCK',
