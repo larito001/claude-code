@@ -101,7 +101,6 @@ import type {
   SDKUserMessageReplay,
   PermissionResult,
   McpServerConfigForProcessTransport,
-  McpServerStatus,
   RewindFilesResult,
 } from 'src/entrypoints/agentSdkTypes.js'
 import type {
@@ -185,6 +184,7 @@ import {  resetSessionFilePointer,
   saveAgentSetting,
   saveMode,
   saveAiGeneratedTitle,
+  saveCustomTitle,
   restoreSessionMetadata,
 } from 'src/utils/sessionStorage.js'
 import { incrementPromptCount } from 'src/utils/commitAttribution.js'
@@ -429,8 +429,10 @@ export async function runHeadless(
     maxTurns: number | undefined
     maxBudgetUsd: number | undefined
     taskBudget: { total: number } | undefined
-    systemPrompt: string | undefined
+    systemPrompt: string | string[] | undefined
     appendSystemPrompt: string | undefined
+    appendSubagentSystemPrompt?: string | undefined
+    excludeDynamicSections?: boolean | undefined
     userSpecifiedModel: string | undefined
     fallbackModel: string | undefined
     replayUserMessages: boolean | undefined
@@ -894,8 +896,10 @@ function runHeadlessStreaming(
     maxTurns: number | undefined
     maxBudgetUsd: number | undefined
     taskBudget: { total: number } | undefined
-    systemPrompt: string | undefined
+    systemPrompt: string | string[] | undefined
     appendSystemPrompt: string | undefined
+    appendSubagentSystemPrompt?: string | undefined
+    excludeDynamicSections?: boolean | undefined
     userSpecifiedModel: string | undefined
     fallbackModel: string | undefined
     replayUserMessages?: boolean | undefined
@@ -1414,7 +1418,7 @@ function runHeadlessStreaming(
   }
 
   // 为控制响应构建McpServerStatus[]。由mcp_status和reload_plugins处理程序共享。读取闭包状态：sdkClients, dynamicMcpState。
-  function buildMcpServerStatuses(): McpServerStatus[] {
+  function buildMcpServerStatuses(): SDKControlReloadPluginsResponse['mcpServers'] {
     const currentAppState = getAppState()
     const currentMcpClients = currentAppState.mcp.clients
     const allMcpTools = uniqBy(
@@ -1864,6 +1868,8 @@ function runHeadlessStreaming(
               },
               customSystemPrompt: options.systemPrompt,
               appendSystemPrompt: options.appendSystemPrompt,
+              appendSubagentSystemPrompt: options.appendSubagentSystemPrompt,
+              excludeDynamicSections: options.excludeDynamicSections,
               getAppState,
               setAppState,
               abortController,
@@ -2448,6 +2454,7 @@ function runHeadlessStreaming(
             options,
             agents,
             getAppState,
+            initialMessages.length > 0,
           )
 
           // 当SDK使用者选择加入时，在AppState中启用提示建议。
@@ -2527,7 +2534,9 @@ function runHeadlessStreaming(
                 mainLoopModel: getMainLoopModel(),
                 tools: buildAllTools(appState),
                 agentDefinitions: appState.agentDefinitions,
-                customSystemPrompt: options.systemPrompt,
+                customSystemPrompt: Array.isArray(options.systemPrompt)
+                  ? options.systemPrompt.join('\n\n')
+                  : options.systemPrompt,
                 appendSystemPrompt: options.appendSystemPrompt,
               },
             })
@@ -3217,6 +3226,9 @@ function runHeadlessStreaming(
                     setAppState,
                     customSystemPrompt: options.systemPrompt,
                     appendSystemPrompt: options.appendSystemPrompt,
+                    appendSubagentSystemPrompt:
+                      options.appendSubagentSystemPrompt,
+                    excludeDynamicSections: options.excludeDynamicSections,
                     thinkingConfig: options.thinkingConfig,
                     agents: currentAgents,
                   })
@@ -3553,14 +3565,17 @@ async function handleInitializeRequest(
   structuredIO: StructuredIO,
   enableAuthStatus: boolean,
   options: {
-    systemPrompt: string | undefined
+    systemPrompt: string | string[] | undefined
     appendSystemPrompt: string | undefined
+    appendSubagentSystemPrompt?: string | undefined
+    excludeDynamicSections?: boolean | undefined
     agent?: string | undefined
     userSpecifiedModel?: string | undefined
     [key: string]: unknown
   },
   agents: AgentDefinition[],
   getAppState: () => AppState,
+  isResuming: boolean,
 ): Promise<void> {
   if (initialized) {
     output.enqueue({
@@ -3578,10 +3593,17 @@ async function handleInitializeRequest(
 
   // 从 stdin 应用 systemPrompt/appendSystemPrompt 以避免 ARG_MAX 限制
   if (request.systemPrompt !== undefined) {
+    // 保留 SDK 的提示词分段和动态边界，供查询层建立稳定的缓存前缀。
     options.systemPrompt = request.systemPrompt
   }
   if (request.appendSystemPrompt !== undefined) {
     options.appendSystemPrompt = request.appendSystemPrompt
+  }
+  if (request.appendSubagentSystemPrompt !== undefined) {
+    options.appendSubagentSystemPrompt = request.appendSubagentSystemPrompt
+  }
+  if (request.excludeDynamicSections !== undefined) {
+    options.excludeDynamicSections = request.excludeDynamicSections
   }
   if (request.promptSuggestions !== undefined) {
     options.promptSuggestions = request.promptSuggestions
@@ -3660,6 +3682,9 @@ async function handleInitializeRequest(
   }
   if (request.jsonSchema) {
     setInitJsonSchema(request.jsonSchema)
+  }
+  if (request.title && !isResuming) {
+    await saveCustomTitle(getSessionId() as UUID, request.title)
   }
   const initResponse: SDKControlInitializeResponse = {
     /** 执行 commands 对应的业务处理。 */

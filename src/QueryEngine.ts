@@ -6,13 +6,13 @@ import {
   isSessionPersistenceDisabled,
 } from 'src/bootstrap/state.js'
 import type {
-  PermissionMode,
   SDKCompactBoundaryMessage,
   SDKMessage,
   SDKPermissionDenial,
   SDKStatus,
   SDKUserMessageReplay,
 } from 'src/entrypoints/agentSdkTypes.js'
+import { toExternalPermissionMode } from './utils/permissions/PermissionMode.js'
 import { accumulateUsage, updateUsage } from 'src/services/api/claude.js'
 import type { NonNullableUsage } from 'src/services/api/logging.js'
 import { EMPTY_USAGE } from 'src/services/api/logging.js'
@@ -68,7 +68,10 @@ import {
   type ProcessUserInputContext,
   processUserInput,
 } from './utils/processUserInput/processUserInput.js'
-import { fetchSystemPromptParts } from './utils/queryContext.js'
+import {
+  fetchSystemPromptParts,
+  relocateDynamicSystemPromptSections,
+} from './utils/queryContext.js'
 import { setCwd } from './utils/Shell.js'
 import {
   flushSessionStorage,
@@ -156,8 +159,10 @@ export type QueryEngineConfig = {
   setAppState: (f: (prev: AppState) => AppState) => void
   initialMessages?: Message[]
   readFileCache: FileStateCache
-  customSystemPrompt?: string
+  customSystemPrompt?: string | string[]
   appendSystemPrompt?: string
+  appendSubagentSystemPrompt?: string
+  excludeDynamicSections?: boolean
   userSpecifiedModel?: string
   fallbackModel?: string
   thinkingConfig?: ThinkingConfig
@@ -222,6 +227,8 @@ export class QueryEngine {
       canUseTool,
       customSystemPrompt,
       appendSystemPrompt,
+      appendSubagentSystemPrompt,
+      excludeDynamicSections = false,
       userSpecifiedModel,
       fallbackModel,
       jsonSchema,
@@ -281,28 +288,43 @@ export class QueryEngine {
 
     headlessProfilerCheckpoint('before_getSystemPrompt')
     // 缩小一次，以便 TS 通过下面的条件跟踪类型。
-    const customPrompt =
-      typeof customSystemPrompt === 'string' ? customSystemPrompt : undefined
-    const {
-      defaultSystemPrompt,
-      userContext: baseUserContext,
-      systemContext,
-    } = await fetchSystemPromptParts({
+    const customPromptParts =
+      typeof customSystemPrompt === 'string'
+        ? [customSystemPrompt]
+        : customSystemPrompt
+    const promptParts = await fetchSystemPromptParts({
       tools,
       mainLoopModel: initialMainLoopModel,
       additionalWorkingDirectories: Array.from(
         initialAppState.toolPermissionContext.additionalWorkingDirectories.keys(),
       ),
       mcpClients,
-      customSystemPrompt: customPrompt,
+      customSystemPrompt,
     })
     headlessProfilerCheckpoint('after_getSystemPrompt')
+    let defaultSystemPrompt = promptParts.defaultSystemPrompt
+    let systemContext = promptParts.systemContext
     const userContext = {
-      ...baseUserContext,
+      ...promptParts.userContext,
       ...getCoordinatorUserContext(
         mcpClients,
         isScratchpadEnabled() ? getScratchpadDir() : undefined,
       ),
+    }
+
+    // 默认提示词以边界常量分隔静态与会话动态部分。SDK 请求跨用户缓存时，
+    // 将边界后的提示词和 systemContext 移到首条用户上下文消息；这样静态
+    // 系统提示词保持字节稳定，同时模型仍能看到完整的工作目录和环境信息。
+    if (excludeDynamicSections && customPromptParts === undefined) {
+      const relocated = relocateDynamicSystemPromptSections(
+        defaultSystemPrompt,
+        systemContext,
+      )
+      defaultSystemPrompt = relocated.defaultSystemPrompt
+      systemContext = relocated.systemContext
+      if (relocated.relocatedContext) {
+        userContext['Dynamic environment context'] = relocated.relocatedContext
+      }
     }
 
     // 当 SDK 调用方提供自定义系统提示并已设置
@@ -312,12 +334,12 @@ export class QueryEngine {
     // 编写/编辑要调用的工具、MEMORY.md 文件名、加载语义）。
     // 调用者可以通过appendSystemPrompt分层他们自己的策略文本。
     const memoryMechanicsPrompt =
-      customPrompt !== undefined && hasAutoMemPathOverride()
+      customPromptParts !== undefined && hasAutoMemPathOverride()
         ? await loadMemoryPrompt()
         : null
 
     const systemPrompt = asSystemPrompt([
-      ...(customPrompt !== undefined ? [customPrompt] : defaultSystemPrompt),
+      ...(customPromptParts ?? defaultSystemPrompt),
       ...(memoryMechanicsPrompt ? [memoryMechanicsPrompt] : []),
       ...(appendSystemPrompt ? [appendSystemPrompt] : []),
     ])
@@ -356,8 +378,9 @@ export class QueryEngine {
         mcpResources: {},
         ideInstallationStatus: null,
         isNonInteractiveSession: true,
-        customSystemPrompt,
+        customSystemPrompt: customPromptParts?.join('\n\n'),
         appendSystemPrompt,
+        appendSubagentSystemPrompt,
         agentDefinitions: { activeAgents: agents, allAgents: [] },
         theme: resolveThemeSetting(getGlobalConfig().theme),
         maxBudgetUsd,
@@ -509,8 +532,9 @@ export class QueryEngine {
         mcpResources: {},
         ideInstallationStatus: null,
         isNonInteractiveSession: true,
-        customSystemPrompt,
+        customSystemPrompt: customPromptParts?.join('\n\n'),
         appendSystemPrompt,
+        appendSubagentSystemPrompt,
         theme: resolveThemeSetting(getGlobalConfig().theme),
         agentDefinitions: { activeAgents: agents, allAgents: [] },
         maxBudgetUsd,
@@ -546,8 +570,9 @@ export class QueryEngine {
       tools,
       mcpClients,
       model: mainLoopModel,
-      permissionMode: initialAppState.toolPermissionContext
-        .mode as PermissionMode, // TODO：避免演员阵容
+      permissionMode: toExternalPermissionMode(
+        initialAppState.toolPermissionContext.mode,
+      ),
       commands,
       agents,
       skills,
@@ -848,7 +873,7 @@ export class QueryEngine {
             }
             return
           }
-          // Yield queued_command attachments as SDK user message replays
+          // 将排队的命令附件作为SDK用户消息重放生成
           else if (
             replayUserMessages &&
             message.attachment.type === 'queued_command'
@@ -1154,6 +1179,8 @@ export async function* ask({
   setReadFileCache,
   customSystemPrompt,
   appendSystemPrompt,
+  appendSubagentSystemPrompt,
+  excludeDynamicSections,
   userSpecifiedModel,
   fallbackModel,
   jsonSchema,
@@ -1181,8 +1208,10 @@ export async function* ask({
   taskBudget?: { total: number }
   canUseTool: CanUseToolFn
   mutableMessages?: Message[]
-  customSystemPrompt?: string
+  customSystemPrompt?: string | string[]
   appendSystemPrompt?: string
+  appendSubagentSystemPrompt?: string
+  excludeDynamicSections?: boolean
   userSpecifiedModel?: string
   fallbackModel?: string
   jsonSchema?: Record<string, unknown>
@@ -1216,6 +1245,8 @@ export async function* ask({
     readFileCache: cloneFileStateCache(getReadFileCache()),
     customSystemPrompt,
     appendSystemPrompt,
+    appendSubagentSystemPrompt,
+    excludeDynamicSections,
     userSpecifiedModel,
     fallbackModel,
     thinkingConfig,

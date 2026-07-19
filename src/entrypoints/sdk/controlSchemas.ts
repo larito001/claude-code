@@ -7,6 +7,11 @@
  * SDK消费者应改用coreSchemas.ts。
  */
 
+import type {
+  HookInput,
+  SDKMessage,
+} from '@anthropic-ai/claude-agent-sdk'
+import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod/v4'
 import { lazySchema } from '../../utils/lazySchema.js'
 import {
@@ -15,7 +20,6 @@ import {
   AgentInfoSchema,
   FastModeStateSchema,
   HookEventSchema,
-  HookInputSchema,
   McpServerConfigForProcessTransportSchema,
   McpServerStatusSchema,
   ModelInfoSchema,
@@ -34,7 +38,81 @@ import {
 // ============================================================================
 
 // JSONRPCMessage 由 @modelcontextprotocol/sdk 进行版本控制，并且在此协议中保持不变地传递，因此运行时验证有意保持开放。
-export const JSONRPCMessagePlaceholder = lazySchema(() => z.unknown())
+export const JSONRPCMessagePlaceholder = lazySchema(() =>
+  z.custom<JSONRPCMessage>(),
+)
+
+// 这些是上游 SDK 已公开、但本地 SDKMessageSchema 尚未单独建模的
+// 通用消息。运行时仍严格检查每种结构；类型标注仅用来与上游
+// SDKMessage 联合保持兼容。不在此列表中的订阅限流事件不会被接受。
+const SDKAdditionalMessageSchema = lazySchema(
+  () =>
+    z.union([
+      z.object({
+        type: z.literal('system'),
+        subtype: z.literal('plugin_install'),
+        status: z.enum(['started', 'installed', 'failed', 'completed']),
+        name: z.string().optional(),
+        error: z.string().optional(),
+        uuid: z.string(),
+        session_id: z.string(),
+      }),
+      z.object({
+        type: z.literal('system'),
+        subtype: z.literal('task_updated'),
+        task_id: z.string(),
+        patch: z.object({
+          status: z
+            .enum(['pending', 'running', 'completed', 'failed', 'killed'])
+            .optional(),
+          description: z.string().optional(),
+          end_time: z.number().optional(),
+          total_paused_ms: z.number().optional(),
+          error: z.string().optional(),
+          is_backgrounded: z.boolean().optional(),
+        }),
+        uuid: z.string(),
+        session_id: z.string(),
+      }),
+      z.object({
+        type: z.literal('system'),
+        subtype: z.literal('notification'),
+        key: z.string(),
+        text: z.string(),
+        priority: z.enum(['low', 'medium', 'high', 'immediate']),
+        color: z.string().optional(),
+        timeout_ms: z.number().optional(),
+        uuid: z.string(),
+        session_id: z.string(),
+      }),
+      z.object({
+        type: z.literal('system'),
+        subtype: z.literal('memory_recall'),
+        mode: z.enum(['select', 'synthesize']),
+        memories: z.array(
+          z.object({
+            path: z.string(),
+            scope: z.enum(['personal', 'team']),
+            content: z.string().optional(),
+          }),
+        ),
+        uuid: z.string(),
+        session_id: z.string(),
+      }),
+      z.object({
+        type: z.literal('system'),
+        subtype: z.literal('mirror_error'),
+        error: z.string(),
+        key: z.object({
+          projectKey: z.string(),
+          sessionId: z.string(),
+          subpath: z.string().optional(),
+        }),
+        uuid: z.string(),
+        session_id: z.string(),
+      }),
+    ]) as unknown as z.ZodType<SDKMessage>,
+)
 
 // ============================================================================
 // 钩子回调类型
@@ -383,7 +461,7 @@ export const SDKHookCallbackRequestSchema = lazySchema(() =>
     .object({
       subtype: z.literal('hook_callback'),
       callback_id: z.string(),
-      input: HookInputSchema(),
+      input: z.custom<HookInput>(),
       tool_use_id: z.string().optional(),
     })
     .describe('Delivers a hook callback with its input data.'),
@@ -474,6 +552,64 @@ export const SDKControlMcpToggleRequestSchema = lazySchema(() =>
       enabled: z.boolean(),
     })
     .describe('Enables or disables an MCP server.'),
+)
+
+/** 定义结束当前流式会话的控制请求。 */
+export const SDKControlEndSessionRequestSchema = lazySchema(() =>
+  z.object({
+    subtype: z.literal('end_session'),
+    reason: z.string().optional(),
+  }),
+)
+
+/** 定义启用 MCP Channel 的控制请求。 */
+export const SDKControlChannelEnableRequestSchema = lazySchema(() =>
+  z.object({
+    subtype: z.literal('channel_enable'),
+    serverName: z.string(),
+  }),
+)
+
+/** 定义启动 MCP OAuth 认证的控制请求。 */
+export const SDKControlMcpAuthenticateRequestSchema = lazySchema(() =>
+  z.object({
+    subtype: z.literal('mcp_authenticate'),
+    serverName: z.string(),
+  }),
+)
+
+/** 定义提交 MCP OAuth 回调地址的控制请求。 */
+export const SDKControlMcpOAuthCallbackUrlRequestSchema = lazySchema(() =>
+  z.object({
+    subtype: z.literal('mcp_oauth_callback_url'),
+    serverName: z.string(),
+    callbackUrl: z.string(),
+  }),
+)
+
+/** 定义清除 MCP OAuth 凭据的控制请求。 */
+export const SDKControlMcpClearAuthRequestSchema = lazySchema(() =>
+  z.object({
+    subtype: z.literal('mcp_clear_auth'),
+    serverName: z.string(),
+  }),
+)
+
+/** 定义生成会话标题的控制请求。 */
+export const SDKControlGenerateSessionTitleRequestSchema = lazySchema(() =>
+  z.object({
+    subtype: z.literal('generate_session_title'),
+    description: z.string(),
+    persist: z.boolean().optional(),
+  }),
+)
+
+/** 定义不打断主任务的侧问题控制请求。 */
+export const SDKControlSideQuestionRequestSchema = lazySchema(() =>
+  z.object({
+    subtype: z.literal('side_question'),
+    question: z.string(),
+  }),
 )
 
 
@@ -598,6 +734,13 @@ export const SDKControlRequestInnerSchema = lazySchema(() =>
     SDKControlReloadPluginsRequestSchema(),
     SDKControlMcpReconnectRequestSchema(),
     SDKControlMcpToggleRequestSchema(),
+    SDKControlEndSessionRequestSchema(),
+    SDKControlChannelEnableRequestSchema(),
+    SDKControlMcpAuthenticateRequestSchema(),
+    SDKControlMcpOAuthCallbackUrlRequestSchema(),
+    SDKControlMcpClearAuthRequestSchema(),
+    SDKControlGenerateSessionTitleRequestSchema(),
+    SDKControlSideQuestionRequestSchema(),
     SDKControlStopTaskRequestSchema(),
     SDKControlApplyFlagSettingsRequestSchema(),
     SDKControlGetSettingsRequestSchema(),
@@ -679,6 +822,7 @@ export const SDKUpdateEnvironmentVariablesMessageSchema = lazySchema(() =>
 export const StdoutMessageSchema = lazySchema(() =>
   z.union([
     SDKMessageSchema(),
+    SDKAdditionalMessageSchema(),
     SDKStreamlinedTextMessageSchema(),
     SDKStreamlinedToolUseSummaryMessageSchema(),
     SDKPostTurnSummaryMessageSchema(),

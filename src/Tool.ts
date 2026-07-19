@@ -173,6 +173,8 @@ export type ToolUseContext = {
     customSystemPrompt?: string
     /** 主系统提示符后附加的附加系统提示符 */
     appendSystemPrompt?: string
+    /** 仅追加到子代理系统提示词的附加指令。 */
+    appendSubagentSystemPrompt?: string
     /** 覆盖 querySource 以进行分析跟踪 */
     querySource?: QuerySource
     /** 用于获取最新工具的可选回调（例如，在 MCP 服务器连接查询中后） */
@@ -457,7 +459,7 @@ export type Tool<
    */
   readonly alwaysLoad?: boolean
   /**
-   * For MCP tools: the server and tool names as received from the MCP server (unnormalized).
+   * 对于 MCP 工具：从 MCP 服务器接收到的服务器和工具名称（未标准化）。
    * 存在于所有 MCP 工具上，无论“name”是否带有前缀 (mcp__server__tool)
    * 或无前缀（CLAUDE_AGENT_SDK_MCP_NO_PREFIX 模式）。
    */
@@ -562,7 +564,7 @@ export type Tool<
   /**
    * 返回此工具用于自动模式的紧凑表示
    * 安全分类器。示例：Bash 的“ls -la”、“/tmp/x：新内容”
-   * for Edit. Return '' to skip this tool in the classifier transcript
+   * 用于 Edit。返回 '' 以在分类器转录中跳过此工具
    * （例如与安全无关的工具）。可能会返回一个要避免的对象
    * 当调用者 JSON 包装值时进行双重编码。
    */
@@ -740,7 +742,7 @@ export type ToolDef<
   Partial<Pick<Tool<Input, Output, P>, DefaultableToolKeys>>
 
 /**
- * Type-level spread mirroring `{ ...TOOL_DEFAULTS, ...def }`. For each
+ * 类型级展开镜像 `{ ...TOOL_DEFAULTS, ...def }`。对于每个
  * 默认密钥：如果 D 提供（必需），则 D 的类型获胜；如果 D 省略
  * 它或者它是可选的（继承自约束中的 Partial<>），
  * 默认填充。所有其他密钥都逐字来自 D — 保留数量，
@@ -756,7 +758,7 @@ type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
 
 /**
  * 从部分定义构建完整的“工具”，填充安全默认值
- * for the commonly-stubbed methods. All tool exports should go through this so
+ * 用于常用的存根方法。所有工具导出都应通过此函数，这样
  * 默认值位于一个地方，调用者永远不需要 `?.() ??默认`。
  *
  * 默认值（重要时失败关闭）：
@@ -794,18 +796,15 @@ const TOOL_DEFAULTS = {
 // 测试依赖于此），而不是接口的严格签名。
 type ToolDefaults = typeof TOOL_DEFAULTS
 
-// D 从调用站点推断具体的对象文字类型。这
-// 约束为方法参数提供上下文类型；中的“任何”
-// 约束位置是结构性的，永远不会泄漏到返回类型中。
-// builtTool<D> 在类型级别镜像运行时 `{...TOOL_DEFAULTS, ...def}`。
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyToolDef = ToolDef<any, any, any>
+// D 从调用处推断具体的工具定义，约束只限定必需的结构，
+// 不会把宽泛类型泄漏到返回值。BuiltTool<D> 在类型层镜像
+// 运行时的 `{ ...TOOL_DEFAULTS, ...def }`。
+type AnyToolDef = ToolDef<AnyObject, unknown, ToolProgressData>
 
 /** 创建 build Tool 对应的数据或状态。 */
 export function buildTool<D extends AnyToolDef>(def: D): BuiltTool<D> {
-  // 运行时间分布很简单； “as”弥合了两者之间的差距
-  // 结构任意约束和精确的Bui​​ltTool<D> 返回。这
-  // 这套类型语义由全部 60 多个工具的零错误类型检查验证。
+  // 运行时只是合并默认值与工具定义；类型断言用来表达展开后的
+  // 精确 BuiltTool<D> 形状。所有工具都由全量类型检查覆盖。
   return {
     ...TOOL_DEFAULTS,
     /** 执行 user Facing Name 对应的业务处理。 */

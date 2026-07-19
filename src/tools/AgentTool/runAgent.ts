@@ -81,14 +81,12 @@ import { resolveAgentTools } from './agentToolUtils.js'
 import { type AgentDefinition, isBuiltInAgent } from './loadAgentsDir.js'
 
 /**
- * Initialize agent-specific MCP servers
- * Agents can define their own MCP servers in their frontmatter that are additive
- * to the parent's MCP clients. These servers are connected when the agent starts
- * and cleaned up when the agent finishes.
+ * 初始化代理特定的MCP服务器
+ * 代理可以在其前置元数据中定义自己的MCP服务器，这些服务器是对父级MCP客户端的补充。这些服务器在代理启动时连接，在代理结束时清理。
  *
- * @param agentDefinition The agent definition with optional mcpServers
- * @param parentClients MCP clients inherited from parent context
- * @returns Merged clients (parent + agent-specific), agent MCP tools, and cleanup function
+ * @param agentDefinition 包含可选的mcpServers的代理定义
+ * @param parentClients 从父级上下文继承的MCP客户端
+ * @returns 合并后的客户端（父级+代理特定）、代理MCP工具和清理函数
  */
 async function initializeAgentMcpServers(
   agentDefinition: AgentDefinition,
@@ -96,22 +94,20 @@ async function initializeAgentMcpServers(
 ): Promise<{
   clients: MCPServerConnection[]
   tools: Tools
+  /** 规范化 cleanup 对应的数据或状态。 */
   cleanup: () => Promise<void>
 }> {
-  // If no agent-specific servers defined, return parent clients as-is
+  // 如果没有定义代理特定的服务器，则按原样返回父级客户端
   if (!agentDefinition.mcpServers?.length) {
     return {
       clients: parentClients,
       tools: [],
+      /** 规范化 cleanup 对应的数据或状态。 */
       cleanup: async () => {},
     }
   }
 
-  // When MCP is locked to plugin-only, skip frontmatter MCP servers for
-  // USER-CONTROLLED agents only. Plugin, built-in, and policySettings agents
-  // are admin-trusted — their frontmatter MCP is part of the admin-approved
-  // surface. Blocking them (as the first cut did) breaks plugin agents that
-  // legitimately need MCP, contradicting "plugin-provided always loads."
+  // 当MCP锁定为仅插件模式时，仅对USER-CONTROLLED代理跳过前置元数据MCP服务器。插件、内置和policySettings代理是管理员信任的——它们的前置元数据MCP属于管理员批准的表面。阻止它们（就像初次实现那样）会破坏合法需要MCP的插件代理，与“插件提供的始终加载”相矛盾。
   const agentIsAdminTrusted = isSourceAdminTrusted(agentDefinition.source)
   if (isRestrictedToPluginOnly('mcp') && !agentIsAdminTrusted) {
     logForDebugging(
@@ -120,13 +116,14 @@ async function initializeAgentMcpServers(
     return {
       clients: parentClients,
       tools: [],
+      /** 规范化 cleanup 对应的数据或状态。 */
       cleanup: async () => {},
     }
   }
 
   const agentClients: MCPServerConnection[] = []
-  // Track which clients were newly created (inline definitions) vs. shared from parent
-  // Only newly created clients should be cleaned up when the agent finishes
+  // 跟踪哪些客户端是新建的（内联定义）vs. 从父级共享的
+  // 只有当代理结束时才应清理新建的客户端
   const newlyCreatedClients: MCPServerConnection[] = []
   const agentTools: Tool[] = []
 
@@ -136,8 +133,8 @@ async function initializeAgentMcpServers(
     let isNewlyCreated = false
 
     if (typeof spec === 'string') {
-      // Reference by name - look up in existing MCP configs
-      // This uses the memoized connectToServer, so we may get a shared client
+      // 按名称引用——在现有的MCP配置中查找
+      // 这使用记忆化的connectToServer，所以我们可能得到一个共享的客户端
       name = spec
       config = getMcpConfigByName(spec)
       if (!config) {
@@ -148,8 +145,8 @@ async function initializeAgentMcpServers(
         continue
       }
     } else {
-      // Inline definition as { [name]: config }
-      // These are agent-specific servers that should be cleaned up
+      // 内联定义为 { [name]: config }
+      // 这些是代理特定的服务器，应该被清理
       const entries = Object.entries(spec)
       if (entries.length !== 1) {
         logForDebugging(
@@ -167,14 +164,14 @@ async function initializeAgentMcpServers(
       isNewlyCreated = true
     }
 
-    // Connect to the server
+    // 连接到服务器
     const client = await connectToServer(name, config)
     agentClients.push(client)
     if (isNewlyCreated) {
       newlyCreatedClients.push(client)
     }
 
-    // Fetch tools if connected
+    // 如果已连接，则获取工具
     if (client.type === 'connected') {
       const tools = await fetchToolsForClient(client)
       agentTools.push(...tools)
@@ -189,9 +186,9 @@ async function initializeAgentMcpServers(
     }
   }
 
-  // Create cleanup function for agent-specific servers
-  // Only clean up newly created clients (inline definitions), not shared/referenced ones
-  // Shared clients (referenced by string name) are memoized and used by the parent context
+  // 为代理特定服务器创建清理函数
+  // 只清理新建的客户端（内联定义），不清理共享/引用的客户端
+  // 共享的客户端（通过字符串名称引用）是记忆化的，并被父级上下文使用
   const cleanup = async () => {
     for (const client of newlyCreatedClients) {
       if (client.type === 'connected') {
@@ -207,7 +204,7 @@ async function initializeAgentMcpServers(
     }
   }
 
-  // Return merged clients (parent + agent-specific) and agent tools
+  // 返回合并后的客户端（父级+代理特定）和代理工具
   return {
     clients: [...parentClients, ...agentClients],
     tools: agentTools,
@@ -223,8 +220,8 @@ type QueryMessage =
   | TombstoneMessage
 
 /**
- * Type guard to check if a message from query() is a recordable Message type.
- * Matches the types we want to record: assistant, user, progress, or system compact_boundary.
+ * 类型守卫，用于检查来自query()的消息是否为可记录的Message类型。
+ * 匹配我们要记录的类型：assistant、user、progress或system compact_boundary。
  */
 function isRecordableMessage(
   msg: QueryMessage,
@@ -243,6 +240,7 @@ function isRecordableMessage(
   )
 }
 
+/** 执行 run Agent 对应的数据或状态。 */
 export async function* runAgent({
   agentDefinition,
   promptMessages,
@@ -271,8 +269,10 @@ export async function* runAgent({
   toolUseContext: ToolUseContext
   canUseTool: CanUseToolFn
   isAsync: boolean
-  /** Whether this agent can show permission prompts. Defaults to !isAsync.
-   * Set to true for in-process teammates that run async but share the terminal. */
+  /**
+   * 此代理是否可以显示权限提示。默认为 !isAsync。
+   * 对于异步运行但共享终端的进程内队友，设置为true。
+   */
   canShowPermissionPrompts?: boolean
   forkContextMessages?: Message[]
   querySource: QuerySource
@@ -285,53 +285,46 @@ export async function* runAgent({
   }
   model?: ModelAlias
   maxTurns?: number
-  /** Preserve toolUseResult on messages for subagents with viewable transcripts */
+  /** 为具有可查看对话记录的子代理保留消息上的toolUseResult */
   preserveToolUseResults?: boolean
-  /** Precomputed tool pool for the worker agent. Computed by the caller
-   * (AgentTool.tsx) to avoid a circular dependency between runAgent and tools.ts.
-   * Always contains the full tool pool assembled with the worker's own permission
-   * mode, independent of the parent's tool restrictions. */
+  /**
+   * 为工作代理预计算的工具池。由调用者（AgentTool.tsx）计算，以避免runAgent和tools.ts之间的循环依赖。
+   * 始终包含根据工作者自己的权限模式组装的完整工具池，独立于父级的工具限制。
+   */
   availableTools: Tools
-  /** Tool permission rules to add to the agent's session allow rules.
-   * When provided, replaces ALL allow rules so the agent only has what's
-   * explicitly listed (parent approvals don't leak through). */
+  /**
+   * 要添加到代理会话允许规则中的工具权限规则。
+   * 提供时，替换所有允许规则，使代理仅拥有明确列出的权限（父级审批不会渗入）。
+   */
   allowedTools?: string[]
-  /** Optional callback invoked with CacheSafeParams after constructing the agent's
-   * system prompt, context, and tools. Used by background summarization to fork
-   * the agent's conversation for periodic progress summaries. */
+  /**
+   * 在构造代理的系统提示、上下文和工具之后，用CacheSafeParams调用的可选回调。
+   * 由背景摘要使用，以分岔代理的对话用于定期进度摘要。
+   */
   onCacheSafeParams?: (params: CacheSafeParams) => void
-  /** Replacement state reconstructed from a resumed sidechain transcript so
-   * the same tool results are re-replaced (prompt cache stability). When
-   * omitted, createSubagentContext clones the parent's state. */
+  /**
+   * 从恢复的侧链对话记录重建的替换状态，以便相同的工具结果被重新替换（提示缓存稳定性）。
+   * 省略时，createSubagentContext克隆父级状态。
+   */
   contentReplacementState?: ContentReplacementState
-  /** When true, use availableTools directly without filtering through
-   * resolveAgentTools(). Also inherits the parent's thinkingConfig and
-   * isNonInteractiveSession instead of overriding them. Used by the fork
-   * subagent path to produce byte-identical API request prefixes for
-   * prompt cache hits. */
+  /**
+   * 为true时，直接使用availableTools而不通过resolveAgentTools()过滤。还继承父级的thinkingConfig和isNonInteractiveSession，而不是覆盖它们。由fork子代理路径使用，以为提示缓存命中产生字节相同的API请求前缀。
+   */
   useExactTools?: boolean
-  /** Worktree path if the agent was spawned with isolation: "worktree".
-   * Persisted to metadata so resume can restore the correct cwd. */
+  /** 若代理以隔离方式生成："worktree"时的工作树路径。持久化到元数据，以便恢复可以恢复正确的cwd。 */
   worktreePath?: string
-  /** Original task description from AgentTool input. Persisted to metadata
-   * so a resumed agent's notification can show the original description. */
+  /** 来自AgentTool输入的原始任务描述。持久化到元数据，以便恢复的代理通知可以显示原始描述。 */
   description?: string
-  /** Optional subdirectory under subagents/ to group this agent's transcript
-   * with related ones (e.g. workflows/<runId> for workflow subagents). */
+  /** subagents/下的可选子目录，用于将此代理的对话记录与相关的对话记录分组（例如，工作流子代理的workflows/<runId>）。 */
   transcriptSubdir?: string
-  /** Optional callback fired on every message yielded by query() — including
-   * stream_event deltas that runAgent otherwise drops. Use to detect liveness
-   * during long single-block streams (e.g. thinking) where no assistant
-   * message is yielded for >60s. */
+  /** 在query()产生的每条消息上调用的可选回调——包括runAgent否则会丢弃的stream_event增量。用于在长时间的单块流（例如，思考）期间检测活跃性，在此类流中超过60秒没有产生助手消息。 */
   onQueryProgress?: () => void
 }): AsyncGenerator<Message, void> {
-  // Track subagent usage for feature discovery
+  // 跟踪子代理使用情况以进行特性发现
 
   const appState = toolUseContext.getAppState()
   const permissionMode = appState.toolPermissionContext.mode
-  // Always-shared channel to the root AppState store. toolUseContext.setAppState
-  // is a no-op when the *parent* is itself an async agent (nested async→async),
-  // so session-scoped writes (hooks, bash tasks) must go through this instead.
+  // 始终共享到根AppState存储的通道。当*父级*本身是异步代理（嵌套异步→异步）时，toolUseContext.setAppState是无操作，因此会话作用域的写入（钩子、bash任务）必须通过此通道。
   const rootSetAppState =
     toolUseContext.setAppStateForTasks ?? toolUseContext.setAppState
 
@@ -344,20 +337,18 @@ export async function* runAgent({
 
   const agentId = override?.agentId ? override.agentId : createAgentId()
 
-  // Route this agent's transcript into a grouping subdirectory if requested
-  // (e.g. workflow subagents write to subagents/workflows/<runId>/).
+  // 如果请求，将此代理的记录路由到分组子目录中（例如，工作流子代理写入 subagents/workflows/<runId>/）。
   if (transcriptSubdir) {
     setAgentTranscriptSubdir(agentId, transcriptSubdir)
   }
 
-  // Register agent in Perfetto trace for hierarchy visualization
+  // 在 Perfetto 跟踪中注册代理以实现层级可视化。
   if (isPerfettoTracingEnabled()) {
     const parentId = toolUseContext.agentId ?? getSessionId()
     registerPerfettoAgent(agentId, agentDefinition.agentType, parentId)
   }
 
-  // Handle message forking for context sharing
-  // Filter out incomplete tool calls from parent messages to avoid API errors
+  // 处理上下文共享的消息分叉。从父消息中过滤掉不完整的工具调用以避免 API 错误。
   const contextMessages: Message[] = forkContextMessages
     ? filterIncompleteToolCalls(forkContextMessages)
     : []
@@ -373,11 +364,7 @@ export async function* runAgent({
     override?.systemContext ?? getSystemContext(),
   ])
 
-  // Read-only agents (Explore, Plan) don't act on commit/PR/lint rules from
-  // CLAUDE.md — the main agent has full context and interprets their output.
-  // Dropping claudeMd here saves ~5-15 Gtok/week across 34M+ Explore spawns.
-  // Explicit override.userContext from callers is preserved untouched.
-  // Kill-switch defaults true; flip tengu_slim_subagent_claudemd=false to revert.
+  // 只读代理（Explore, Plan）不对来自 CLAUDE.md 的 commit/PR/lint 规则进行操作——主代理拥有完整上下文并解释它们的输出。在此处丢弃 claudeMd 可在 3400 万+ 次 Explore 生成中每周节省约 5-15 Gtok。来自调用者的显式 override.userContext 保持原样。开关默认 true；设置 tengu_slim_subagent_claudemd=false 以还原。
   const shouldOmitClaudeMd =
     agentDefinition.omitClaudeMd &&
     !override?.userContext &&
@@ -388,10 +375,7 @@ export async function* runAgent({
     ? userContextNoClaudeMd
     : baseUserContext
 
-  // Explore/Plan are read-only search agents — the parent-session-start
-  // gitStatus (up to 40KB, explicitly labeled stale) is dead weight. If they
-  // need git info they run `git status` themselves and get fresh data.
-  // Saves ~1-3 Gtok/week fleet-wide.
+  // Explore/Plan 是只读搜索代理——父会话启动时的 gitStatus（最多 40KB，明确标记为过期）是多余的。如果它们需要 git 信息，它们会自己运行 `git status` 并获取新数据。在整个网络中每周节省约 1-3 Gtok。
   const { gitStatus: _omittedGitStatus, ...systemContextNoGit } =
     baseSystemContext
   const resolvedSystemContext =
@@ -400,15 +384,14 @@ export async function* runAgent({
       ? systemContextNoGit
       : baseSystemContext
 
-  // Override permission mode if agent defines one
-  // However, don't override if parent is in bypassPermissions or acceptEdits mode - those should always take precedence
-  // For async agents, also set shouldAvoidPermissionPrompts since they can't show UI
+  // 如果代理定义了权限模式，则覆盖该模式。但是，如果父模式处于 bypassPermissions 或 acceptEdits 模式，则不要覆盖——这些模式应始终优先。对于异步代理，还要设置 shouldAvoidPermissionPrompts，因为它们无法显示 UI。
   const agentPermissionMode = agentDefinition.permissionMode
+  /** 执行 agent Get App State 对应的业务处理。 */
   const agentGetAppState = () => {
     const state = toolUseContext.getAppState()
     let toolPermissionContext = state.toolPermissionContext
 
-    // Override permission mode if agent defines one (unless parent is bypassPermissions, acceptEdits, or auto)
+    // 如果代理定义了权限模式则覆盖（除非父模式是 bypassPermissions, acceptEdits 或 auto）。
     if (
       agentPermissionMode &&
       state.toolPermissionContext.mode !== 'bypassPermissions' &&
@@ -424,10 +407,7 @@ export async function* runAgent({
       }
     }
 
-    // Set flag to auto-deny prompts for agents that can't show UI
-    // Use explicit canShowPermissionPrompts if provided, otherwise:
-    //   - bubble mode: always show prompts (bubbles to parent terminal)
-    //   - default: !isAsync (sync agents show prompts, async agents don't)
+    // 为无法显示 UI 的代理设置自动拒绝提示的标志。如果提供了显式的 canShowPermissionPrompts 则使用它，否则：- bubble 模式：始终显示提示（冒泡到父终端）- 默认：!isAsync（同步代理显示提示，异步代理不显示）。
     const shouldAvoidPrompts =
       canShowPermissionPrompts !== undefined
         ? !canShowPermissionPrompts
@@ -441,11 +421,7 @@ export async function* runAgent({
       }
     }
 
-    // For background agents that can show prompts, await automated checks
-    // (classifier, permission hooks) before showing the permission dialog.
-    // Since these are background agents, waiting is fine — the user should
-    // only be interrupted when automated checks can't resolve the permission.
-    // This applies to bubble mode (always) and explicit canShowPermissionPrompts.
+    // 对于可以显示提示的后台代理，在显示权限对话框之前等待自动检查（分类器，权限钩子）。由于这些是后台代理，等待是可以接受的——只有在自动检查无法解决权限时才应中断用户。这适用于 bubble 模式（始终）和显式的 canShowPermissionPrompts。
     if (isAsync && !shouldAvoidPrompts) {
       toolPermissionContext = {
         ...toolPermissionContext,
@@ -453,23 +429,20 @@ export async function* runAgent({
       }
     }
 
-    // Scope tool permissions: when allowedTools is provided, use them as session rules.
-    // IMPORTANT: Preserve cliArg rules (from SDK's --allowedTools) since those are
-    // explicit permissions from the SDK consumer that should apply to all agents.
-    // Only clear session-level rules from the parent to prevent unintended leakage.
+    // 作用域工具权限：当提供了 allowedTools 时，将它们用作会话规则。重要：保留 cliArg 规则（来自 SDK 的 --allowedTools），因为这些是来自 SDK 消费者的显式权限，应适用于所有代理。仅清除来自父级的会话级规则以防止意外泄漏。
     if (allowedTools !== undefined) {
       toolPermissionContext = {
         ...toolPermissionContext,
         alwaysAllowRules: {
-          // Preserve SDK-level permissions from --allowedTools
+          // 保留来自 --allowedTools 的 SDK 级权限。
           cliArg: state.toolPermissionContext.alwaysAllowRules.cliArg,
-          // Use the provided allowedTools as session-level permissions
+          // 使用提供的 allowedTools 作为会话级权限。
           session: [...allowedTools],
         },
       }
     }
 
-    // Override effort level if agent defines one
+    // 如果代理定义了努力级别则覆盖。
     const effortValue =
       agentDefinition.effort !== undefined
         ? agentDefinition.effort
@@ -496,7 +469,7 @@ export async function* runAgent({
     appState.toolPermissionContext.additionalWorkingDirectories.keys(),
   )
 
-  const agentSystemPrompt = override?.systemPrompt
+  const baseAgentSystemPrompt = override?.systemPrompt
     ? override.systemPrompt
     : asSystemPrompt(
         await getAgentSystemPrompt(
@@ -506,18 +479,21 @@ export async function* runAgent({
           additionalWorkingDirectories,
         ),
       )
+  const agentSystemPrompt = toolUseContext.options.appendSubagentSystemPrompt
+    ? asSystemPrompt([
+        ...baseAgentSystemPrompt,
+        toolUseContext.options.appendSubagentSystemPrompt,
+      ])
+    : baseAgentSystemPrompt
 
-  // Determine abortController:
-  // - Override takes precedence
-  // - Async agents get a new unlinked controller (runs independently)
-  // - Sync agents share parent's controller
+  // 确定 abortController：- 显式覆盖优先 - 异步代理获得新的未链接控制器（独立运行）- 同步代理共享父级的控制器。
   const agentAbortController = override?.abortController
     ? override.abortController
     : isAsync
       ? new AbortController()
       : toolUseContext.abortController
 
-  // Execute SubagentStart hooks and collect additional context
+  // 执行 SubagentStart 钩子并收集额外上下文。
   const additionalContexts: string[] = []
   for await (const hookResult of executeSubagentStartHooks(
     agentId,
@@ -532,7 +508,7 @@ export async function* runAgent({
     }
   }
 
-  // Add SubagentStart hook context as a user message (consistent with SessionStart/UserPromptSubmit)
+  // 将 SubagentStart 钩子上下文作为用户消息添加（与 SessionStart/UserPromptSubmit 一致）。
   if (additionalContexts.length > 0) {
     const contextMessage = createAttachmentMessage({
       type: 'hook_additional_context',
@@ -544,13 +520,7 @@ export async function* runAgent({
     initialMessages.push(contextMessage)
   }
 
-  // Register agent's frontmatter hooks (scoped to agent lifecycle)
-  // Pass isAgent=true to convert Stop hooks to SubagentStop (since subagents trigger SubagentStop)
-  // Same admin-trusted gate for frontmatter hooks: under ["hooks"] alone
-  // (skills/agents not locked), user agents still load — block their
-  // frontmatter-hook REGISTRATION here where source is known, rather than
-  // blanket-blocking all session hooks at execution time (which would
-  // also kill plugin agents' hooks).
+  // 注册代理的前置钩子（作用域于代理生命周期）。传递 isAgent=true 以将 Stop 钩子转换为 SubagentStop（因为子代理触发 SubagentStop）。前置钩子的管理信任门相同：仅在 ["hooks"] 下（技能/代理未锁定），用户代理仍然加载——在此处已知来源处阻止它们的前置钩子注册，而不是在执行时全面阻止所有会话钩子（这也会杀死插件代理的钩子）。
   const hooksAllowedForThisAgent =
     !isRestrictedToPluginOnly('hooks') ||
     isSourceAdminTrusted(agentDefinition.source)
@@ -564,22 +534,19 @@ export async function* runAgent({
     )
   }
 
-  // Preload skills from agent frontmatter
+  // 从代理前置元数据预加载技能。
   const skillsToPreload = agentDefinition.skills ?? []
   if (skillsToPreload.length > 0) {
     const allSkills = await getSkillToolCommands(getProjectRoot())
 
-    // Filter valid skills and warn about missing ones
+    // 过滤有效技能并警告缺失的技能。
     const validSkills: Array<{
       skillName: string
       skill: (typeof allSkills)[0] & { type: 'prompt' }
     }> = []
 
     for (const skillName of skillsToPreload) {
-      // Resolve the skill name, trying multiple strategies:
-      // 1. Exact match (hasCommand checks name, userFacingName, aliases)
-      // 2. Fully-qualified with agent's plugin prefix (e.g., "my-skill" → "plugin:my-skill")
-      // 3. Suffix match on ":skillName" for plugin-namespaced skills
+      // 解析技能名称，尝试多种策略：1. 精确匹配（hasCommand 检查 name, userFacingName, aliases）2. 使用代理的插件前缀完全限定（例如 "my-skill" → "plugin:my-skill"）3. 针对插件命名空间的技能进行 ":skillName" 后缀匹配。
       const resolvedName = resolveSkillName(
         skillName,
         allSkills,
@@ -604,7 +571,7 @@ export async function* runAgent({
       validSkills.push({ skillName, skill })
     }
 
-    // Load all skill contents concurrently and add to initial messages
+    // 同时加载所有技能内容并添加到初始消息中。
     const { formatSkillLoadingMetadata } = await import(
       '../../utils/processUserInput/processSlashCommand.js'
     )
@@ -620,7 +587,7 @@ export async function* runAgent({
         `[Agent: ${agentDefinition.agentType}] Preloaded skill '${skillName}'`,
       )
 
-      // Add command-message metadata so the UI shows which skill is loading
+      // 添加命令消息元数据，以便 UI 显示正在加载哪个技能。
       const metadata = formatSkillLoadingMetadata(
         skillName,
         skill.progressMessage,
@@ -635,7 +602,7 @@ export async function* runAgent({
     }
   }
 
-  // Initialize agent-specific MCP servers (additive to parent's servers)
+  // 初始化代理特定的 MCP 服务器（对父级服务器是叠加的）。
   const {
     clients: mergedMcpClients,
     tools: agentMcpTools,
@@ -645,15 +612,13 @@ export async function* runAgent({
     toolUseContext.options.mcpClients,
   )
 
-  // Merge agent MCP tools with resolved agent tools, deduplicating by name.
-  // resolvedTools is already deduplicated (see resolveAgentTools), so skip
-  // the spread + uniqBy overhead when there are no agent-specific MCP tools.
+  // 合并代理 MCP 工具与已解析的代理工具，按名称去重。resolvedTools 已经去重（请参见 resolveAgentTools），因此当没有代理特定的 MCP 工具时，跳过展开 + uniqBy 的开销。
   const allTools =
     agentMcpTools.length > 0
       ? uniqBy([...resolvedTools, ...agentMcpTools], 'name')
       : resolvedTools
 
-  // Build agent-specific options
+  // 构建特定于代理的选项
   const agentOptions: ToolUseContext['options'] = {
     isNonInteractiveSession: useExactTools
       ? toolUseContext.options.isNonInteractiveSession
@@ -661,32 +626,27 @@ export async function* runAgent({
         ? true
         : (toolUseContext.options.isNonInteractiveSession ?? false),
     appendSystemPrompt: toolUseContext.options.appendSystemPrompt,
+    appendSubagentSystemPrompt:
+      toolUseContext.options.appendSubagentSystemPrompt,
     tools: allTools,
     commands: [],
     debug: toolUseContext.options.debug,
     verbose: toolUseContext.options.verbose,
     mainLoopModel: resolvedAgentModel,
-    // For fork children (useExactTools), inherit thinking config to match the
-    // parent's API request prefix for prompt cache hits. For regular
-    // sub-agents, disable thinking to control output token costs.
+    // 对于分叉子代理（useExactTools路径），继承思维配置以匹配父级的API请求前缀，以便提示缓存命中。对于常规子代理，禁用思维以控制输出token成本。
     thinkingConfig: useExactTools
       ? toolUseContext.options.thinkingConfig
       : { type: 'disabled' as const },
     mcpClients: mergedMcpClients,
     mcpResources: toolUseContext.options.mcpResources,
     agentDefinitions: toolUseContext.options.agentDefinitions,
-    // Fork children (useExactTools path) need querySource on context.options
-    // for the recursive-fork guard at AgentTool.tsx call() — it checks
-    // options.querySource === 'agent:builtin:fork'. This survives autocompact
-    // (which rewrites messages, not context.options). Without this, the guard
-    // reads undefined and only the message-scan fallback fires — which
-    // autocompact defeats by replacing the fork-boilerplate message.
+    // 分叉子代理（useExactTools路径）需要context.options上的querySource，用于AgentTool.tsx call()中的递归分叉防护——它检查options.querySource === 'agent:builtin:fork'。这可在自动压缩（autocompact）中存活（autocompact重写消息，而不是context.options）。没有这个，防护读取undefined，只有消息扫描回退触发——autocompact通过替换分叉样板消息来破坏该回退。
     ...(useExactTools && { querySource }),
   }
 
-  // Create subagent context using shared helper
-  // - Sync agents share setAppState, setResponseLength, abortController with parent
-  // - Async agents are fully isolated (but with explicit unlinked abortController)
+  // 使用共享辅助函数创建子代理上下文
+  // - 同步代理与父级共享setAppState、setResponseLength、abortController
+  // - 异步代理完全隔离（但有显式未链接的abortController）
   const agentToolUseContext = createSubagentContext(toolUseContext, {
     options: agentOptions,
     agentId,
@@ -695,7 +655,7 @@ export async function* runAgent({
     readFileState: agentReadFileState,
     abortController: agentAbortController,
     getAppState: agentGetAppState,
-    // Sync agents share these callbacks with parent
+    // 同步代理与父级共享这些回调
     shareSetAppState: !isAsync,
     shareSetResponseLength: true, // Both sync and async contribute to response metrics
     criticalSystemReminder_EXPERIMENTAL:
@@ -703,12 +663,12 @@ export async function* runAgent({
     contentReplacementState,
   })
 
-  // Preserve tool use results for subagents with viewable transcripts (in-process teammates)
+  // 为具有可查看转录（进程内队友）的子代理保留工具使用结果
   if (preserveToolUseResults) {
     agentToolUseContext.preserveToolUseResults = true
   }
 
-  // Expose cache-safe params for background summarization (prompt cache sharing)
+  // 为后台摘要（提示缓存共享）公开缓存安全参数
   if (onCacheSafeParams) {
     onCacheSafeParams({
       systemPrompt: agentSystemPrompt,
@@ -719,9 +679,7 @@ export async function* runAgent({
     })
   }
 
-  // Record initial messages before the query loop starts, plus the agentType
-  // so resume can route correctly when subagent_type is omitted. Both writes
-  // are fire-and-forget — persistence failure shouldn't block the agent.
+  // 在查询循环开始前记录初始消息，以及agentType，以便在省略subagent_type时恢复可以正确路由。两次写入都是即发即忘——持久化失败不应阻塞代理。
   void recordSidechainTranscript(initialMessages, agentId).catch(_err =>
     logForDebugging(`Failed to record sidechain transcript: ${_err}`),
   )
@@ -731,7 +689,7 @@ export async function* runAgent({
     ...(description && { description }),
   }).catch(_err => logForDebugging(`Failed to write agent metadata: ${_err}`))
 
-  // Track the last recorded message UUID for parent chain continuity
+  // 跟踪最后记录的消息UUID，用于父链连续性
   let lastRecordedUuid: UUID | null = initialMessages.at(-1)?.uuid ?? null
 
   try {
@@ -746,8 +704,7 @@ export async function* runAgent({
       maxTurns: maxTurns ?? agentDefinition.maxTurns,
     })) {
       onQueryProgress?.()
-      // Forward subagent API request starts to parent's metrics display
-      // so TTFT/OTPS update during subagent execution.
+      // 将子代理API请求开始转发到父级的指标显示，以便在子代理执行期间更新TTFT/OTPS。
       if (
         message.type === 'stream_event' &&
         message.event.type === 'message_start' &&
@@ -757,9 +714,9 @@ export async function* runAgent({
         continue
       }
 
-      // Yield attachment messages (e.g., structured_output) without recording them
+      // 产生附件消息（例如structured_output）而不记录它们
       if (message.type === 'attachment') {
-        // Handle max turns reached signal from query.ts
+        // 处理来自query.ts的最大轮次达到信号
         if (message.attachment.type === 'max_turns_reached') {
           logForDebugging(
             `[Agent
@@ -780,7 +737,7 @@ export async function* runAgent({
       }
 
       if (isRecordableMessage(message)) {
-        // Record only the new message with correct parent (O(1) per message)
+        // 仅记录具有正确父级的新消息（每条消息O(1)）
         await recordSidechainTranscript(
           [message],
           agentId,
@@ -799,51 +756,43 @@ export async function* runAgent({
       throw new AbortError()
     }
 
-    // Run callback if provided (only built-in agents have callbacks)
+    // 如果提供了回调则运行（仅内置代理有回调）
     if (isBuiltInAgent(agentDefinition) && agentDefinition.callback) {
       agentDefinition.callback()
     }
   } finally {
-    // Clean up agent-specific MCP servers (runs on normal completion, abort, or error)
+    // 清理特定于代理的MCP服务器（在正常完成、中止或错误时运行）
     await mcpCleanup()
-    // Clean up agent's session hooks
+    // 清理代理的会话钩子
     if (agentDefinition.hooks) {
       clearSessionHooks(rootSetAppState, agentId)
     }
-    // Clean up prompt cache tracking state for this agent
+    // 清理此代理的提示缓存跟踪状态
     if (feature('PROMPT_CACHE_BREAK_DETECTION')) {
       cleanupAgentTracking(agentId)
     }
-    // Release cloned file state cache memory
+    // 释放克隆的文件状态缓存内存
     agentToolUseContext.readFileState.clear()
-    // Release the cloned fork context messages
+    // 释放克隆的分叉上下文消息
     initialMessages.length = 0
-    // Release perfetto agent registry entry
+    // 释放perfetto代理注册表项
     unregisterPerfettoAgent(agentId)
-    // Release transcript subdir mapping
+    // 释放转录子目录映射
     clearAgentTranscriptSubdir(agentId)
-    // Release this agent's todos entry. Without this, every subagent that
-    // called TodoWrite leaves a key in AppState.todos forever (even after all
-    // items complete, the value is [] but the key stays). Whale sessions
-    // spawn hundreds of agents; each orphaned key is a small leak that adds up.
+    // 释放此代理的待办事项条目。没有这个，每个调用TodoWrite的子代理都会在AppState.todos中永久留下一个键（即使所有项目完成，值也是[]但键保留）。鲸鱼会话生成数百个代理；每个孤立键都是一个会累积的小泄漏。
     rootSetAppState(prev => {
       if (!(agentId in prev.todos)) return prev
       const { [agentId]: _removed, ...todos } = prev.todos
       return { ...prev, todos }
     })
-    // Kill any background bash tasks this agent spawned. Without this, a
-    // `run_in_background` shell loop (e.g. test fixture fake-logs.sh) outlives
-    // the agent as a PPID=1 zombie once the main session eventually exits.
+    // 杀死此代理生成的所有后台bash任务。没有这个，一旦主会话最终退出，`run_in_background` shell循环（例如测试夹具fake-logs.sh）会作为PPID=1的僵尸进程存活，超过代理的寿命。
     killShellTasksForAgent(agentId, toolUseContext.getAppState, rootSetAppState)
   }
 }
 
-/**
- * Filters out assistant messages with incomplete tool calls (tool uses without results).
- * This prevents API errors when sending messages with orphaned tool calls.
- */
+/** 过滤掉具有不完整工具调用（使用但无结果）的助手消息。这可以防止在发送带有孤立工具调用的消息时出现API错误。 */
 export function filterIncompleteToolCalls(messages: Message[]): Message[] {
-  // Build a set of tool use IDs that have results
+  // 构建一组有结果的工具使用ID
   const toolUseIdsWithResults = new Set<string>()
 
   for (const message of messages) {
@@ -860,28 +809,29 @@ export function filterIncompleteToolCalls(messages: Message[]): Message[] {
     }
   }
 
-  // Filter out assistant messages that contain tool calls without results
+  // 过滤掉包含无结果工具调用的助手消息
   return messages.filter(message => {
     if (message?.type === 'assistant') {
       const assistantMessage = message as AssistantMessage
       const content = assistantMessage.message.content
       if (Array.isArray(content)) {
-        // Check if this assistant message has any tool uses without results
+        // 检查此助手消息是否包含无结果的工具使用
         const hasIncompleteToolCall = content.some(
           block =>
             block.type === 'tool_use' &&
             block.id &&
             !toolUseIdsWithResults.has(block.id),
         )
-        // Exclude messages with incomplete tool calls
+        // 排除包含不完整工具调用的消息
         return !hasIncompleteToolCall
       }
     }
-    // Keep all non-assistant messages and assistant messages without tool calls
+    // 保留所有非助手消息和不包含工具调用的助手消息
     return true
   })
 }
 
+/** 获取 get Agent System Prompt 对应的数据或状态。 */
 async function getAgentSystemPrompt(
   agentDefinition: AgentDefinition,
   toolUseContext: Pick<ToolUseContext, 'options'>,
@@ -907,28 +857,27 @@ async function getAgentSystemPrompt(
 }
 
 /**
- * Resolve a skill name from agent frontmatter to a registered command name.
+ * 从智能体 frontmatter 中将技能名称解析为已注册的命令名称。
  *
- * Plugin skills are registered with namespaced names (e.g., "my-plugin:my-skill")
- * but agents reference them with bare names (e.g., "my-skill"). This function
- * tries multiple resolution strategies:
+ * 插件技能使用带命名空间的名字注册（例如 "my-plugin:my-skill"），
+ * 但智能体以裸名称引用它们（例如 "my-skill"）。此函数尝试多种解析策略：
  *
- * 1. Exact match via hasCommand (name, userFacingName, aliases)
- * 2. Prefix with agent's plugin name (e.g., "my-skill" → "my-plugin:my-skill")
- * 3. Suffix match — find any command whose name ends with ":skillName"
+ * 1. 通过 hasCommand(name, userFacingName, aliases) 精确匹配
+ * 2. 添加智能体的插件名称作为前缀（例如 "my-skill" → "my-plugin:my-skill"）
+ * 3. 后缀匹配——查找名称以 ":skillName" 结尾的任何命令
  */
 function resolveSkillName(
   skillName: string,
   allSkills: Command[],
   agentDefinition: AgentDefinition,
 ): string | null {
-  // 1. Direct match
+  // 1. 直接匹配
   if (hasCommand(skillName, allSkills)) {
     return skillName
   }
 
-  // 2. Try prefixing with the agent's plugin name
-  // Plugin agents have agentType like "pluginName:agentName"
+  // 2. 尝试添加智能体的插件名称作为前缀
+  // 插件智能体的 agentType 形如 "pluginName:agentName"
   const pluginPrefix = agentDefinition.agentType.split(':')[0]
   if (pluginPrefix) {
     const qualifiedName = `${pluginPrefix}:${skillName}`
@@ -937,8 +886,9 @@ function resolveSkillName(
     }
   }
 
-  // 3. Suffix match — find a skill whose name ends with ":skillName"
+  // 3. 后缀匹配——查找名称以 ":skillName" 结尾的技能
   const suffix = `:${skillName}`
+  /** 执行 match 对应的业务处理。 */
   const match = allSkills.find(cmd => cmd.name.endsWith(suffix))
   if (match) {
     return match.name

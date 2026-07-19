@@ -1,8 +1,8 @@
-// Internal protocol constants are pinned to the schema version in this source
-// tree. Public SDK types are supplied by the maintained Agent SDK dependency.
+// 内部协议常量固定在当前源码的 Schema 版本；公共 SDK 类型由持续维护的
+// Agent SDK 依赖提供。
 export type * from '@anthropic-ai/claude-agent-sdk'
 
-// Const arrays for runtime usage
+// 供运行时 Schema 和钩子注册共同使用的常量数组。
 export const HOOK_EVENTS = [
   'PreToolUse',
   'PostToolUse',

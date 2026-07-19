@@ -195,6 +195,11 @@ try {
       pathToClaudeCodeExecutable: builtCli,
       maxTurns: 1,
       tools: [],
+      systemPrompt: {
+        type: 'preset',
+        preset: 'claude_code',
+        excludeDynamicSections: true,
+      },
       stderr: (data: string) => sdkStderr.push(data),
     },
   })

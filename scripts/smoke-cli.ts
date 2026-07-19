@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -5,8 +6,14 @@ import { StructuredIO } from '../src/cli/structuredIO.js'
 import { ndjsonSafeStringify } from '../src/cli/ndjsonSafeStringify.js'
 import {
   SDKControlInitializeRequestSchema,
+  SDKControlRequestSchema,
   SDKUpdateEnvironmentVariablesMessageSchema,
+  StdoutMessageSchema,
 } from '../src/entrypoints/sdk/controlSchemas.js'
+import { ApiKeySourceSchema } from '../src/entrypoints/sdk/coreSchemas.js'
+import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from '../src/constants/prompts.js'
+import { toSdkApiKeySource } from '../src/utils/messages/systemInit.js'
+import { relocateDynamicSystemPromptSections } from '../src/utils/queryContext.js'
 
 type RunResult = {
   exitCode: number
@@ -74,6 +81,101 @@ assert(
     variables: { INVALID: { nested: true } },
   }).success,
   '环境变量控制协议接受了非字符串值',
+)
+
+const retainedControlRequests = [
+  { subtype: 'end_session', reason: 'host_closed' },
+  { subtype: 'channel_enable', serverName: 'channel-server' },
+  { subtype: 'mcp_authenticate', serverName: 'oauth-server' },
+  {
+    subtype: 'mcp_oauth_callback_url',
+    serverName: 'oauth-server',
+    callbackUrl: 'http://127.0.0.1/callback?code=test',
+  },
+  { subtype: 'mcp_clear_auth', serverName: 'oauth-server' },
+  {
+    subtype: 'generate_session_title',
+    description: '一次完整会话',
+    persist: true,
+  },
+  { subtype: 'side_question', question: '当前进度是什么？' },
+]
+for (const [index, request] of retainedControlRequests.entries()) {
+  assert(
+    SDKControlRequestSchema().safeParse({
+      type: 'control_request',
+      request_id: `retained-${index}`,
+      request,
+    }).success,
+    `仍由 CLI 处理的控制请求未纳入协议 Schema: ${request.subtype}`,
+  )
+}
+assert(
+  !SDKControlRequestSchema().safeParse({
+    type: 'control_request',
+    request_id: 'removed-login',
+    request: { subtype: 'claude_authenticate' },
+  }).success,
+  '已删除的 Claude 账号登录请求仍被控制协议接受',
+)
+assert(
+  !ApiKeySourceSchema().safeParse('oauth').success,
+  'SDK 系统消息仍接受已删除的 Claude OAuth 登录来源',
+)
+assert(
+  StdoutMessageSchema().safeParse({
+    type: 'system',
+    subtype: 'notification',
+    key: 'build-finished',
+    text: '构建完成',
+    priority: 'medium',
+    uuid: randomUUID(),
+    session_id: 'protocol-smoke',
+  }).success,
+  'SDK 标准输出协议拒绝了保留的通知消息',
+)
+assert(
+  !StdoutMessageSchema().safeParse({ arbitrary: true }).success,
+  'SDK 标准输出协议仍允许任意未验证数据',
+)
+assert(
+  !StdoutMessageSchema().safeParse({
+    type: 'rate_limit_event',
+    rate_limit_info: { status: 'allowed' },
+    uuid: randomUUID(),
+    session_id: 'protocol-smoke',
+  }).success,
+  '已移除的 Claude 订阅限流事件仍能通过输出协议',
+)
+assert(
+  toSdkApiKeySource('ANTHROPIC_API_KEY') === 'temporary' &&
+    toSdkApiKeySource('none') === 'temporary',
+  '环境变量或云提供商认证未映射为临时 API 凭据来源',
+)
+
+const relocatedPrompt = relocateDynamicSystemPromptSections(
+  ['静态提示段', SYSTEM_PROMPT_DYNAMIC_BOUNDARY, '动态提示段'],
+  { '工作目录': 'C:\\workspace' },
+)
+assert(
+  relocatedPrompt.defaultSystemPrompt.length === 1 &&
+    relocatedPrompt.defaultSystemPrompt[0] === '静态提示段',
+  '动态提示迁移破坏了可缓存的静态系统提示',
+)
+assert(
+  Object.keys(relocatedPrompt.systemContext).length === 0 &&
+    relocatedPrompt.relocatedContext.includes('动态提示段') &&
+    relocatedPrompt.relocatedContext.includes('# 工作目录\nC:\\workspace'),
+  '动态系统提示或环境上下文在迁移时丢失',
+)
+const promptWithoutBoundary = relocateDynamicSystemPromptSections(
+  ['完整的静态提示'],
+  {},
+)
+assert(
+  promptWithoutBoundary.defaultSystemPrompt[0] === '完整的静态提示' &&
+    promptWithoutBoundary.relocatedContext === '',
+  '无动态边界的提示被错误截断',
 )
 
 const environmentVariableName = 'CLI_SMOKE_DYNAMIC_ENV'

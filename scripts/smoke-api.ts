@@ -116,7 +116,10 @@ try {
     baseEnv,
   )
   assert(!live.timedOut, 'Live API request timed out')
-  assert(live.exitCode === 0, `Live API request failed: ${live.stderr.trim()}`)
+  assert(
+    live.exitCode === 0,
+    `Live API request failed (exit ${live.exitCode}): stderr=${live.stderr.trim() || '<empty>'}; stdout=${live.stdout.trim() || '<empty>'}`,
+  )
   const response = JSON.parse(live.stdout) as { result?: string }
   assert(
     response.result?.trim() === 'CORE_API_SMOKE_OK',

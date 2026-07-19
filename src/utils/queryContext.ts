@@ -1,16 +1,14 @@
 /**
- * Shared helpers for building the API cache-key prefix (systemPrompt,
- * userContext, systemContext) for query() calls.
+ * 用于构建query()调用的API缓存键前缀（systemPrompt, userContext, systemContext）的共享辅助函数。
  *
- * Lives in its own file because it imports from context.ts and
- * constants/prompts.ts, which are high in the dependency graph. Putting
- * these imports in systemPrompt.ts or sideQuestion.ts (both reachable
- * from commands.ts) would create cycles. Only entrypoint-layer files
- * import from here (QueryEngine.ts, cli/print.ts).
+ * 它位于自己的文件中，因为它从context.ts和constants/prompts.ts导入，这些文件在依赖关系图中处于高层。将这些导入放在systemPrompt.ts或sideQuestion.ts（两者都从commands.ts可达）中会产生循环依赖。只有入口层文件从这里导入（QueryEngine.ts, cli/print.ts）。
  */
 
 import type { Command } from '../commands.js'
-import { getSystemPrompt } from '../constants/prompts.js'
+import {
+  getSystemPrompt,
+  SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
+} from '../constants/prompts.js'
 import { getSystemContext, getUserContext } from '../context.js'
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import type { AppState } from '../state/AppStateStore.js'
@@ -28,18 +26,14 @@ import {
 } from './thinking.js'
 
 /**
- * Fetch the three context pieces that form the API cache-key prefix:
- * systemPrompt parts, userContext, systemContext.
+ * 获取构成API缓存键前缀的三个上下文片段：
+ * systemPrompt parts, userContext, systemContext。
  *
- * When customSystemPrompt is set, the default getSystemPrompt build and
- * getSystemContext are skipped — the custom prompt replaces the default
- * entirely, and systemContext would be appended to a default that isn't
- * being used.
+ * 当设置了customSystemPrompt时，默认的getSystemPrompt构建和
+ * getSystemContext会被跳过——自定义提示完全取代默认提示，并且systemContext会附加到一个未被使用的默认提示上。
  *
- * Callers assemble the final systemPrompt from defaultSystemPrompt (or
- * customSystemPrompt) + optional extras + appendSystemPrompt. QueryEngine
- * injects coordinator userContext and memory-mechanics prompt on top;
- * sideQuestion's fallback uses the base result directly.
+ * 调用者从defaultSystemPrompt（或customSystemPrompt）+ 可选附加项 + appendSystemPrompt组装最终的systemPrompt。QueryEngine在之上注入协调器userContext和记忆机制提示；
+ * sideQuestion的备用方案直接使用基础结果。
  */
 export async function fetchSystemPromptParts({
   tools,
@@ -52,7 +46,7 @@ export async function fetchSystemPromptParts({
   mainLoopModel: string
   additionalWorkingDirectories: string[]
   mcpClients: MCPServerConnection[]
-  customSystemPrompt: string | undefined
+  customSystemPrompt: string | string[] | undefined
 }): Promise<{
   defaultSystemPrompt: string[]
   userContext: { [k: string]: string }
@@ -74,16 +68,50 @@ export async function fetchSystemPromptParts({
 }
 
 /**
- * Build CacheSafeParams from raw inputs when getLastCacheSafeParams() is null.
+ * 将默认系统提示词中的会话动态区段迁移为用户上下文文本。
  *
- * Used by the SDK side_question handler (print.ts) on resume before a turn
- * completes — there's no stopHooks snapshot yet. Mirrors the system prompt
- * assembly in QueryEngine.ts:ask() so the rebuilt prefix matches what the
- * main loop will send, preserving the cache hit in the common case.
+ * 边界前内容保持为可跨会话缓存的系统提示词；边界后内容和 systemContext
+ * 合并到返回文本中，由调用方注入首条用户上下文消息。
+ */
+export function relocateDynamicSystemPromptSections(
+  defaultSystemPrompt: string[],
+  systemContext: { [key: string]: string },
+): {
+  defaultSystemPrompt: string[]
+  systemContext: { [key: string]: string }
+  relocatedContext: string
+} {
+  const boundaryIndex = defaultSystemPrompt.indexOf(
+    SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
+  )
+  const dynamicPromptParts =
+    boundaryIndex >= 0 ? defaultSystemPrompt.slice(boundaryIndex + 1) : []
+  const staticPromptParts =
+    boundaryIndex >= 0
+      ? defaultSystemPrompt.slice(0, boundaryIndex)
+      : defaultSystemPrompt
+  const relocatedContext = [
+    ...dynamicPromptParts,
+    Object.entries(systemContext)
+      .map(([key, value]) => `# ${key}\n${value}`)
+      .join('\n\n'),
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  return {
+    defaultSystemPrompt: staticPromptParts,
+    systemContext: {},
+    relocatedContext,
+  }
+}
+
+/**
+ * 当getLastCacheSafeParams()为null时，从原始输入构建CacheSafeParams。
  *
- * May still miss the cache if the main loop applies extras this path doesn't
- * know about (coordinator mode, memory-mechanics prompt). That's acceptable —
- * the alternative is returning null and failing the side question entirely.
+ * 由SDK的side_question处理器（print.ts）在回合完成前的恢复阶段使用——此时还没有stopHooks快照。镜像QueryEngine.ts:ask()中的系统提示组装，以便重建的前缀与主循环将要发送的内容匹配，从而在常见情况下保留缓存命中。
+ *
+ * 如果主循环应用了此路径不知道的附加项（协调器模式、记忆机制提示），仍可能错过缓存。这是可以接受的——
+ * 替代方案是返回null并完全失败该侧面问题。
  */
 export async function buildSideQuestionFallbackParams({
   tools,
@@ -95,6 +123,8 @@ export async function buildSideQuestionFallbackParams({
   setAppState,
   customSystemPrompt,
   appendSystemPrompt,
+  appendSubagentSystemPrompt,
+  excludeDynamicSections,
   thinkingConfig,
   agents,
 }: {
@@ -103,17 +133,21 @@ export async function buildSideQuestionFallbackParams({
   mcpClients: MCPServerConnection[]
   messages: Message[]
   readFileState: FileStateCache
+  /** 获取 get App State 对应的数据或状态。 */
   getAppState: () => AppState
+  /** 设置并保存 set App State 对应的数据或状态。 */
   setAppState: (f: (prev: AppState) => AppState) => void
-  customSystemPrompt: string | undefined
+  customSystemPrompt: string | string[] | undefined
   appendSystemPrompt: string | undefined
+  appendSubagentSystemPrompt: string | undefined
+  excludeDynamicSections: boolean | undefined
   thinkingConfig: ThinkingConfig | undefined
   agents: AgentDefinition[]
 }): Promise<CacheSafeParams> {
   const mainLoopModel = getMainLoopModel()
   const appState = getAppState()
 
-  const { defaultSystemPrompt, userContext, systemContext } =
+  const promptParts =
     await fetchSystemPromptParts({
       tools,
       mainLoopModel,
@@ -124,15 +158,31 @@ export async function buildSideQuestionFallbackParams({
       customSystemPrompt,
     })
 
-  const systemPrompt = asSystemPrompt([
-    ...(customSystemPrompt !== undefined
+  const customPromptParts =
+    typeof customSystemPrompt === 'string'
       ? [customSystemPrompt]
-      : defaultSystemPrompt),
+      : customSystemPrompt
+  let defaultSystemPrompt = promptParts.defaultSystemPrompt
+  let systemContext = promptParts.systemContext
+  const userContext = { ...promptParts.userContext }
+  if (excludeDynamicSections && customPromptParts === undefined) {
+    const relocated = relocateDynamicSystemPromptSections(
+      defaultSystemPrompt,
+      systemContext,
+    )
+    defaultSystemPrompt = relocated.defaultSystemPrompt
+    systemContext = relocated.systemContext
+    if (relocated.relocatedContext) {
+      userContext['Dynamic environment context'] = relocated.relocatedContext
+    }
+  }
+
+  const systemPrompt = asSystemPrompt([
+    ...(customPromptParts ?? defaultSystemPrompt),
     ...(appendSystemPrompt ? [appendSystemPrompt] : []),
   ])
 
-  // Strip in-progress assistant message (stop_reason === null) — same guard
-  // as btw.tsx. The SDK can fire side_question mid-turn.
+  // 剥离正在进行的助手消息（stop_reason === null）——与btw.tsx相同的防护。SDK可以在回合中间触发side_question。
   const last = messages.at(-1)
   const forkContextMessages =
     last?.type === 'assistant' && last.message.stop_reason === null
@@ -155,17 +205,22 @@ export async function buildSideQuestionFallbackParams({
       mcpResources: {},
       isNonInteractiveSession: true,
       agentDefinitions: { activeAgents: agents, allAgents: [] },
-      customSystemPrompt,
+      customSystemPrompt: customPromptParts?.join('\n\n'),
       appendSystemPrompt,
+      appendSubagentSystemPrompt,
     },
     abortController: createAbortController(),
     readFileState,
     getAppState,
     setAppState,
     messages: forkContextMessages,
+    /** 设置并保存 set In Progress Tool Use I Ds 对应的数据或状态。 */
     setInProgressToolUseIDs: () => {},
+    /** 设置并保存 set Response Length 对应的数据或状态。 */
     setResponseLength: () => {},
+    /** 更新 update File History State 对应的数据或状态。 */
     updateFileHistoryState: () => {},
+    /** 更新 update Attribution State 对应的数据或状态。 */
     updateAttributionState: () => {},
   }
 

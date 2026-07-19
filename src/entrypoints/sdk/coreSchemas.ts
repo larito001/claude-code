@@ -4,11 +4,21 @@
  * 这些模式是 SDK 数据类型的唯一事实来源。
  * TypeScript 类型基于这些模式生成并提交，以支持 IDE。
  *
- * @see scripts/generate-sdk-types.ts 类型生成
+ * TypeScript 类型直接从这些 Schema 推导，不再依赖已删除的代码生成脚本。
  */
 
+import type { MessageParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import type {
+  BetaMessage,
+  BetaRawMessageStreamEvent,
+  BetaUsage,
+} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import type { UUID } from 'crypto'
 import { z } from 'zod/v4'
 import { lazySchema } from '../../utils/lazySchema.js'
+import { EXIT_REASONS, HOOK_EVENTS } from './coreTypes.js'
+
+export { EXIT_REASONS, HOOK_EVENTS } from './coreTypes.js'
 
 // ============================================================================
 // 使用与模型类型
@@ -61,7 +71,7 @@ export const OutputFormatSchema = lazySchema(() =>
 
 /** 渲染 Api Key Source Schema 组件。 */
 export const ApiKeySourceSchema = lazySchema(() =>
-  z.enum(['user', 'project', 'org', 'temporary', 'oauth']),
+  z.enum(['user', 'project', 'org', 'temporary']),
 )
 
 /** 渲染 Config Scope Schema 组件。 */
@@ -333,7 +343,14 @@ export const PermissionResultSchema = lazySchema(() =>
 /** 渲染 Permission Mode Schema 组件。 */
 export const PermissionModeSchema = lazySchema(() =>
   z
-    .enum(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk'])
+    .enum([
+      'default',
+      'acceptEdits',
+      'bypassPermissions',
+      'plan',
+      'dontAsk',
+      'auto',
+    ])
     .describe(
       'Permission mode for controlling how tool executions are handled. ' +
         "'default' - Standard behavior, prompts for dangerous operations. " +
@@ -348,36 +365,6 @@ export const PermissionModeSchema = lazySchema(() =>
 // ============================================================================
 // Hook 类型
 // ============================================================================
-
-export const HOOK_EVENTS = [
-  'PreToolUse',
-  'PostToolUse',
-  'PostToolUseFailure',
-  'Notification',
-  'UserPromptSubmit',
-  'SessionStart',
-  'SessionEnd',
-  'Stop',
-  'StopFailure',
-  'SubagentStart',
-  'SubagentStop',
-  'PreCompact',
-  'PostCompact',
-  'PermissionRequest',
-  'PermissionDenied',
-  'Setup',
-  'TeammateIdle',
-  'TaskCreated',
-  'TaskCompleted',
-  'Elicitation',
-  'ElicitationResult',
-  'ConfigChange',
-  'WorktreeCreate',
-  'WorktreeRemove',
-  'InstructionsLoaded',
-  'CwdChanged',
-  'FileChanged',
-] as const
 
 /** 渲染 Hook Event Schema 组件。 */
 export const HookEventSchema = lazySchema(() => z.enum(HOOK_EVENTS))
@@ -769,14 +756,6 @@ export const FileChangedHookInputSchema = lazySchema(() =>
   ),
 )
 
-export const EXIT_REASONS = [
-  'clear',
-  'resume',
-  'prompt_input_exit',
-  'other',
-  'bypass_permissions_disabled',
-] as const
-
 /** 渲染 Exit Reason Schema 组件。 */
 export const ExitReasonSchema = lazySchema(() => z.enum(EXIT_REASONS))
 
@@ -1111,7 +1090,7 @@ export const ModelInfoSchema = lazySchema(() =>
         .optional()
         .describe('Whether this model supports effort levels'),
       supportedEffortLevels: z
-        .array(z.enum(['low', 'medium', 'high', 'max']))
+        .array(z.enum(['low', 'medium', 'high', 'xhigh', 'max']))
         .optional()
         .describe('Available effort levels for this model'),
       supportsAdaptiveThinking: z
@@ -1284,25 +1263,31 @@ export const RewindFilesResultSchema = lazySchema(() =>
 // 不透明外部负载模式
 // ============================================================================
 //
-// 这些模式有意接受外部包拥有的不透明值。
-// 生成脚本使用 TypeOverrideMap 输出正确的 TS 类型引用。
-// 在此处保持运行时验证开放，以保持向前兼容性，同时
-// 生成的 TypeScript 接口保留精确的外部类型。
+// 这些 Schema 有意接受外部包拥有的不透明值。z.custom<T>() 在运行时保持
+// 向前兼容，同时让直接从 Schema 推导的 TypeScript 类型保留精确信息。
 
 /** 来自 @anthropic-ai/sdk 的 APIUserMessage 占位符 */
-export const APIUserMessagePlaceholder = lazySchema(() => z.unknown())
+export const APIUserMessagePlaceholder = lazySchema(() =>
+  z.custom<MessageParam>(),
+)
 
 /** 来自 @anthropic-ai/sdk 的 APIAssistantMessage 占位符 */
-export const APIAssistantMessagePlaceholder = lazySchema(() => z.unknown())
+export const APIAssistantMessagePlaceholder = lazySchema(() =>
+  z.custom<BetaMessage>(),
+)
 
 /** 来自 @anthropic-ai/sdk 的 RawMessageStreamEvent 占位符 */
-export const RawMessageStreamEventPlaceholder = lazySchema(() => z.unknown())
+export const RawMessageStreamEventPlaceholder = lazySchema(() =>
+  z.custom<BetaRawMessageStreamEvent>(),
+)
 
 /** 来自 crypto 的 UUID 占位符 */
-export const UUIDPlaceholder = lazySchema(() => z.string())
+export const UUIDPlaceholder = lazySchema(() => z.custom<UUID>())
 
 /** NonNullableUsage 占位符（基于 Usage 的映射类型） */
-export const NonNullableUsagePlaceholder = lazySchema(() => z.unknown())
+export const NonNullableUsagePlaceholder = lazySchema(() =>
+  z.custom<{ [K in keyof BetaUsage]: NonNullable<BetaUsage[K]> }>(),
+)
 
 // ============================================================================
 // SDK 消息类型
@@ -1323,7 +1308,7 @@ export const SDKAssistantMessageErrorSchema = lazySchema(() =>
 
 /** 渲染 SDK Status Schema 组件。 */
 export const SDKStatusSchema = lazySchema(() =>
-  z.union([z.literal('compacting'), z.null()]),
+  z.union([z.literal('compacting'), z.literal('requesting'), z.null()]),
 )
 
 // 不带 uuid/session_id 的 SDKUserMessage 内容
