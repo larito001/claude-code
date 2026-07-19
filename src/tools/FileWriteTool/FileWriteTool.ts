@@ -1,5 +1,4 @@
-import { dirname, sep } from 'path'
-import { logEvent } from 'src/services/analytics/index.js'
+import { dirname } from 'path'
 import { z } from 'zod/v4'
 import { diagnosticTracker } from '../../services/diagnosticTracking.js'
 import { clearDeliveredDiagnosticsForFile } from '../../services/lsp/LSPDiagnosticRegistry.js'
@@ -22,7 +21,6 @@ import {
   fileHistoryEnabled,
   fileHistoryTrackEdit,
 } from '../../utils/fileHistory.js'
-import { logFileOperation } from '../../utils/fileOperationAnalytics.js'
 import { readFileSyncWithMetadata } from '../../utils/fileRead.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'
 import { lazySchema } from '../../utils/lazySchema.js'
@@ -242,8 +240,7 @@ export const FileWriteTool = buildTool({
     // Ensure parent directory exists before the atomic read-modify-write section.
     // Must stay OUTSIDE the critical section below (a yield between the staleness
     // check and writeTextContent lets concurrent edits interleave), and BEFORE the
-    // write (lazy-mkdir-on-ENOENT would fire a spurious tengu_atomic_write_error
-    // inside writeFileSyncAndFlush_DEPRECATED before ENOENT propagates back).
+    // write so ENOENT cannot surface from inside the atomic write section.
     await getFsImplementation().mkdir(dir)
     if (fileHistoryEnabled()) {
       // Backup captures pre-edit content — safe to call before the staleness
@@ -329,11 +326,6 @@ export const FileWriteTool = buildTool({
       limit: undefined,
     })
 
-    // Log when writing to CLAUDE.md
-    if (fullFilePath.endsWith(`${sep}CLAUDE.md`)) {
-      logEvent('tengu_write_claudemd', {})
-    }
-
     if (oldContent) {
       const patch = getPatchForDisplay({
         filePath: file_path,
@@ -357,12 +349,6 @@ export const FileWriteTool = buildTool({
       // Track lines added and removed for file updates, right before yielding result
       countLinesChanged(patch)
 
-      logFileOperation({
-        operation: 'write',
-        tool: 'FileWriteTool',
-        filePath: fullFilePath,
-        type: 'update',
-      })
 
       return {
         data,
@@ -380,12 +366,6 @@ export const FileWriteTool = buildTool({
     // For creation of new files, count all lines as additions, right before yielding the result
     countLinesChanged([], content)
 
-    logFileOperation({
-      operation: 'write',
-      tool: 'FileWriteTool',
-      filePath: fullFilePath,
-      type: 'create',
-    })
 
     return {
       data,

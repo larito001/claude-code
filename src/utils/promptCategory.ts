@@ -6,8 +6,7 @@ import {
 import { getSettings_DEPRECATED } from './settings/settings.js'
 
 /**
- * Determines the prompt category for agent usage.
- * Used for analytics to track different agent patterns.
+ * Determines the query source for agent execution.
  *
  * @param agentType - The type/name of the agent
  * @param isBuiltInAgent - Whether this is a built-in agent or custom
@@ -28,8 +27,7 @@ export function getQuerySourceForAgent(
 }
 
 /**
- * Determines the prompt category based on output style settings.
- * Used for analytics to track different output style usage.
+ * Determines the query source based on output style settings.
  *
  * @returns The prompt category string or undefined for default
  */

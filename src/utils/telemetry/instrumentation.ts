@@ -52,8 +52,7 @@ import { getProxyUrl, shouldBypassProxy } from '../proxy.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import { jsonStringify } from '../slowOperations.js'
 import { profileCheckpoint } from '../startupProfiler.js'
-import { isBetaTracingEnabled } from './betaSessionTracing.js'
-import { ClaudeCodeDiagLogger } from './logger.js'
+import { TelemetryDiagLogger } from './logger.js'
 import { initializePerfettoTracing } from './perfettoTracing.js'
 import {
   endInteractionSpan,
@@ -294,78 +293,6 @@ export function isTelemetryEnabled() {
   return isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_TELEMETRY)
 }
 
-/**
- * Initialize beta tracing - a separate code path for detailed debugging.
- * Uses BETA_TRACING_ENDPOINT instead of OTEL_EXPORTER_OTLP_ENDPOINT.
- */
-async function initializeBetaTracing(
-  resource: ReturnType<typeof resourceFromAttributes>,
-): Promise<void> {
-  const endpoint = process.env.BETA_TRACING_ENDPOINT
-  if (!endpoint) {
-    return
-  }
-
-  const [{ OTLPTraceExporter }, { OTLPLogExporter }] = await Promise.all([
-    import('@opentelemetry/exporter-trace-otlp-http'),
-    import('@opentelemetry/exporter-logs-otlp-http'),
-  ])
-
-  const httpConfig = {
-    url: `${endpoint}/v1/traces`,
-  }
-
-  const logHttpConfig = {
-    url: `${endpoint}/v1/logs`,
-  }
-
-  // Initialize trace exporter
-  const traceExporter = new OTLPTraceExporter(httpConfig)
-  const spanProcessor = new BatchSpanProcessor(traceExporter, {
-    scheduledDelayMillis: DEFAULT_TRACES_EXPORT_INTERVAL_MS,
-  })
-
-  const tracerProvider = new BasicTracerProvider({
-    resource,
-    spanProcessors: [spanProcessor],
-  })
-
-  trace.setGlobalTracerProvider(tracerProvider)
-  setTracerProvider(tracerProvider)
-
-  // Initialize log exporter
-  const logExporter = new OTLPLogExporter(logHttpConfig)
-  const loggerProvider = new LoggerProvider({
-    resource,
-    processors: [
-      new BatchLogRecordProcessor(logExporter, {
-        scheduledDelayMillis: DEFAULT_LOGS_EXPORT_INTERVAL_MS,
-      }),
-    ],
-  })
-
-  logs.setGlobalLoggerProvider(loggerProvider)
-  setLoggerProvider(loggerProvider)
-
-  // Initialize event logger
-  const eventLogger = logs.getLogger(
-    'com.anthropic.claude_code.events',
-    MACRO.VERSION,
-  )
-  setEventLogger(eventLogger)
-
-  // Setup flush handlers - flush both logs AND traces
-  process.on('beforeExit', async () => {
-    await loggerProvider?.forceFlush()
-    await tracerProvider?.forceFlush()
-  })
-
-  process.on('exit', () => {
-    void loggerProvider?.forceFlush()
-    void tracerProvider?.forceFlush()
-  })
-}
-
 export async function initializeTelemetry() {
   profileCheckpoint('telemetry_init_start')
   bootstrapTelemetry()
@@ -392,7 +319,7 @@ export async function initializeTelemetry() {
     }
   }
 
-  diag.setLogger(new ClaudeCodeDiagLogger(), DiagLogLevel.ERROR)
+  diag.setLogger(new TelemetryDiagLogger(), DiagLogLevel.ERROR)
 
   // Initialize Perfetto tracing (independent of OTEL)
   // Enable via CLAUDE_CODE_PERFETTO_TRACE=1 or CLAUDE_CODE_PERFETTO_TRACE=<path>
@@ -450,60 +377,6 @@ export async function initializeTelemetry() {
     .merge(hostArchResource)
     .merge(envResource)
 
-  // Check if beta tracing is enabled - this is a separate code path
-  // Available to all users who set ENABLE_BETA_TRACING_DETAILED=1 and BETA_TRACING_ENDPOINT
-  if (isBetaTracingEnabled()) {
-    void initializeBetaTracing(resource).catch(e =>
-      logForDebugging(`Beta tracing init failed: ${e}`, { level: 'error' }),
-    )
-    // Still set up meter provider for metrics (but skip regular logs/traces setup)
-    const meterProvider = new MeterProvider({
-      resource,
-      views: [],
-      readers,
-    })
-    setMeterProvider(meterProvider)
-
-    // Register shutdown for beta tracing
-    const shutdownTelemetry = async () => {
-      const timeoutMs = parseInt(
-        process.env.CLAUDE_CODE_OTEL_SHUTDOWN_TIMEOUT_MS || '2000',
-      )
-      try {
-        endInteractionSpan()
-
-        // Force flush + shutdown together inside the timeout. Previously forceFlush
-        // was awaited unbounded BEFORE the race, blocking exit on slow OTLP endpoints.
-        // Each provider's flush→shutdown is chained independently so a slow logger
-        // flush doesn't delay meterProvider/tracerProvider shutdown (no waterfall).
-        const loggerProvider = getLoggerProvider()
-        const tracerProvider = getTracerProvider()
-
-        const chains: Promise<void>[] = [meterProvider.shutdown()]
-        if (loggerProvider) {
-          chains.push(
-            loggerProvider.forceFlush().then(() => loggerProvider.shutdown()),
-          )
-        }
-        if (tracerProvider) {
-          chains.push(
-            tracerProvider.forceFlush().then(() => tracerProvider.shutdown()),
-          )
-        }
-
-        await Promise.race([
-          Promise.all(chains),
-          telemetryTimeout(timeoutMs, 'OpenTelemetry shutdown timeout'),
-        ])
-      } catch {
-        // Ignore shutdown errors
-      }
-    }
-    registerCleanup(shutdownTelemetry)
-
-    return meterProvider.getMeter('com.anthropic.claude_code', MACRO.VERSION)
-  }
-
   const meterProvider = new MeterProvider({
     resource,
     views: [],
@@ -541,7 +414,7 @@ export async function initializeTelemetry() {
 
       // Initialize event logger
       const eventLogger = logs.getLogger(
-        'com.anthropic.claude_code.events',
+        'agent.framework.events',
         MACRO.VERSION,
       )
       setEventLogger(eventLogger)
@@ -638,7 +511,7 @@ Current timeout: ${timeoutMs}ms
   // Always register shutdown (internal metrics are always enabled)
   registerCleanup(shutdownTelemetry)
 
-  return meterProvider.getMeter('com.anthropic.claude_code', MACRO.VERSION)
+  return meterProvider.getMeter('agent.framework', MACRO.VERSION)
 }
 
 /**

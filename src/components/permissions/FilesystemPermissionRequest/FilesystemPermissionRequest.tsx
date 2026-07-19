@@ -93,7 +93,7 @@ export function FilesystemPermissionRequest(t0) {
   const t5 = isReadOnly ? "read" : "write";
   let t6;
   if ($[20] !== content || $[21] !== onDone || $[22] !== onReject || $[23] !== path || $[24] !== t5 || $[25] !== title || $[26] !== toolUseConfirm || $[27] !== toolUseContext || $[28] !== workerBadge) {
-    t6 = <FilePermissionDialog toolUseConfirm={toolUseConfirm} toolUseContext={toolUseContext} onDone={onDone} onReject={onReject} workerBadge={workerBadge} title={title} content={content} path={path} parseInput={parseInput} operationType={t5} completionType="tool_use_single" />;
+    t6 = <FilePermissionDialog toolUseConfirm={toolUseConfirm} toolUseContext={toolUseContext} onDone={onDone} onReject={onReject} workerBadge={workerBadge} title={title} content={content} path={path} parseInput={parseInput} operationType={t5} />;
     $[20] = content;
     $[21] = onDone;
     $[22] = onReject;

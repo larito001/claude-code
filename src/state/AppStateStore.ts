@@ -64,9 +64,7 @@ export type SpeculationState =
       messagesRef: { current: Message[] } // Mutable ref - avoids array spreading per message
       writtenPathsRef: { current: Set<string> } // Mutable ref - relative paths written to overlay
       boundary: CompletionBoundary | null
-      suggestionLength: number
       toolUseCount: number
-      isPipelined: boolean
       contextRef: { current: REPLHookContext }
       pipelinedSuggestion?: {
         text: string

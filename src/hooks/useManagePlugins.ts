@@ -1,10 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import type { Command } from '../commands.js'
 import { useNotifications } from '../context/notifications.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import { reinitializeLspServerManager } from '../services/lsp/manager.js'
 import { useAppState, useSetAppState } from '../state/AppState.js'
 import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
@@ -253,7 +249,7 @@ export function useManagePlugins({
     }
   }, [setAppState, addNotification])
 
-  // Load plugins on mount and emit telemetry
+  // Load plugins on mount.
   useEffect(() => {
     if (!enabled) return
     void initialPluginLoad().then(metrics => {
@@ -262,13 +258,7 @@ export function useManagePlugins({
         ...baseMetrics,
         has_custom_plugin_cache_dir: !!process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR,
       }
-      logEvent('tengu_plugins_loaded', {
-        ...allMetrics,
-        ...(ant_enabled_names !== undefined && {
-          enabled_names: ant_enabled_names,
-        }),
-      })
-      logForDiagnosticsNoPII('info', 'tengu_plugins_loaded', allMetrics)
+      logForDiagnosticsNoPII('info', 'plugins_loaded', allMetrics)
     })
   }, [initialPluginLoad, enabled])
 

@@ -4,8 +4,7 @@
  * This utility ensures forked agents:
  * 1. Share identical cache-critical params with the parent to guarantee prompt cache hits
  * 2. Track full usage metrics across the entire query loop
- * 3. Log metrics via the tengu_fork_agent_query event when complete
- * 4. Isolate mutable state to prevent interference with the main agent loop
+ * 3. Isolate mutable state to prevent interference with the main agent loop
  */
 
 import type { UUID } from 'crypto'
@@ -14,10 +13,6 @@ import type { PromptCommand } from '../commands.js'
 import type { QuerySource } from '../constants/querySource.js'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import { query } from '../query.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import { accumulateUsage, updateUsage } from '../services/api/claude.js'
 import { EMPTY_USAGE, type NonNullableUsage } from '../services/api/logging.js'
 import type { ToolUseContext } from '../Tool.js'
@@ -89,7 +84,7 @@ export type ForkedAgentParams = {
   canUseTool: CanUseToolFn
   /** Source identifier for tracking */
   querySource: QuerySource
-  /** Label for analytics (e.g., 'session_memory', 'supervisor') */
+  /** Stable label for the forked query source. */
   forkLabel: string
   /** Optional overrides for the subagent context (e.g., readFileState from setup phase) */
   overrides?: SubagentContextOverrides
@@ -311,7 +306,7 @@ export type SubagentContextOverrides = {
  * - abortController: new controller linked to parent (parent abort propagates)
  * - getAppState: wrapped to set shouldAvoidPermissionPrompts
  * - All mutation callbacks (setAppState, etc.): no-op
- * - Fresh collections: nestedMemoryAttachmentTriggers, toolDecisions
+ * - Fresh collections: nestedMemoryAttachmentTriggers
  *
  * Callers can:
  * - Override specific fields via the overrides parameter
@@ -382,7 +377,6 @@ export function createSubagentContext(
     nestedMemoryAttachmentTriggers: new Set<string>(),
     loadedNestedMemoryPaths: new Set<string>(),
     dynamicSkillDirTriggers: new Set<string>(),
-    toolDecisions: undefined,
     // Budget decisions: override > clone of parent > undefined (feature off).
     //
     // Clone by default (not fresh): cache-sharing forks process parent
@@ -465,7 +459,6 @@ export function createSubagentContext(
  * This function:
  * 1. Uses identical cache-safe params from parent to enable prompt caching
  * 2. Accumulates usage across all query iterations
- * 3. Logs tengu_fork_agent_query with full usage when complete
  *
  * @example
  * ```typescript
@@ -497,7 +490,6 @@ export async function runForkedAgent({
   skipTranscript,
   skipCacheWrite,
 }: ForkedAgentParams): Promise<ForkedAgentResult> {
-  const startTime = Date.now()
   const outputMessages: Message[] = []
   let totalUsage: NonNullableUsage = { ...EMPTY_USAGE }
 
@@ -605,83 +597,8 @@ export async function runForkedAgent({
     `Forked agent [${forkLabel}] finished: ${outputMessages.length} messages, types=[${outputMessages.map(m => m.type).join(', ')}], totalUsage: input=${totalUsage.input_tokens} output=${totalUsage.output_tokens} cacheRead=${totalUsage.cache_read_input_tokens} cacheCreate=${totalUsage.cache_creation_input_tokens}`,
   )
 
-  const durationMs = Date.now() - startTime
-
-  // Log the fork query metrics with full NonNullableUsage
-  logForkAgentQueryEvent({
-    forkLabel,
-    querySource,
-    durationMs,
-    messageCount: outputMessages.length,
-    totalUsage,
-    queryTracking: toolUseContext.queryTracking,
-  })
-
   return {
     messages: outputMessages,
     totalUsage,
   }
-}
-
-/**
- * Logs the tengu_fork_agent_query event with full NonNullableUsage fields.
- */
-function logForkAgentQueryEvent({
-  forkLabel,
-  querySource,
-  durationMs,
-  messageCount,
-  totalUsage,
-  queryTracking,
-}: {
-  forkLabel: string
-  querySource: QuerySource
-  durationMs: number
-  messageCount: number
-  totalUsage: NonNullableUsage
-  queryTracking?: { chainId: string; depth: number }
-}): void {
-  // Calculate cache hit rate
-  const totalInputTokens =
-    totalUsage.input_tokens +
-    totalUsage.cache_creation_input_tokens +
-    totalUsage.cache_read_input_tokens
-  const cacheHitRate =
-    totalInputTokens > 0
-      ? totalUsage.cache_read_input_tokens / totalInputTokens
-      : 0
-
-  logEvent('tengu_fork_agent_query', {
-    // Metadata
-    forkLabel:
-      forkLabel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    querySource:
-      querySource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    durationMs,
-    messageCount,
-
-    // NonNullableUsage fields
-    inputTokens: totalUsage.input_tokens,
-    outputTokens: totalUsage.output_tokens,
-    cacheReadInputTokens: totalUsage.cache_read_input_tokens,
-    cacheCreationInputTokens: totalUsage.cache_creation_input_tokens,
-    serviceTier:
-      totalUsage.service_tier as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    cacheCreationEphemeral1hTokens:
-      totalUsage.cache_creation.ephemeral_1h_input_tokens,
-    cacheCreationEphemeral5mTokens:
-      totalUsage.cache_creation.ephemeral_5m_input_tokens,
-
-    // Derived metrics
-    cacheHitRate,
-
-    // Query tracking
-    ...(queryTracking
-      ? {
-          queryChainId:
-            queryTracking.chainId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          queryDepth: queryTracking.depth,
-        }
-      : {}),
-  })
 }

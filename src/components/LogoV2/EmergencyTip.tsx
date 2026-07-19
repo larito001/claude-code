@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect, useMemo } from 'react';
 import { Box, Text } from 'src/ink.js';
-import { getDynamicConfig_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
+import { getFeatureValue } from 'src/services/featureConfig.js';
 import { getGlobalConfig, saveGlobalConfig } from 'src/utils/config.js';
 const CONFIG_NAME = 'tengu-top-of-feed-tip';
 export function EmergencyTip(): React.ReactNode {
@@ -53,5 +53,5 @@ const DEFAULT_TIP: TipOfFeed = {
  * Returns cached value immediately, updates in background
  */
 function getTipOfFeed(): TipOfFeed {
-  return getDynamicConfig_CACHED_MAY_BE_STALE<TipOfFeed>(CONFIG_NAME, DEFAULT_TIP);
+  return getFeatureValue<TipOfFeed>(CONFIG_NAME, DEFAULT_TIP);
 }

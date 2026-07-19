@@ -40,14 +40,13 @@ import {
   sep,
 } from 'path'
 import picomatch from 'picomatch'
-import { logEvent } from 'src/services/analytics/index.js'
 import {
   getAdditionalDirectoriesForClaudeMd,
   getOriginalCwd,
 } from '../bootstrap/state.js'
 import { truncateEntrypointContent } from '../memdir/memdir.js'
 import { getAutoMemEntrypoint, isAutoMemoryEnabled } from '../memdir/paths.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import { getFeatureValue } from '../services/featureConfig.js'
 import {
   getCurrentProjectConfig,
   getManagedClaudeRulesDir,
@@ -404,14 +403,6 @@ function handleMemoryFileReadError(error: unknown, filePath: string): void {
   // ENOENT = file doesn't exist, EISDIR = is a directory — both expected
   if (code === 'ENOENT' || code === 'EISDIR') {
     return
-  }
-  // Log permission errors (EACCES) as they're actionable
-  if (code === 'EACCES') {
-    // Don't log the full file path to avoid PII/security issues
-    logEvent('tengu_claude_md_permission_error', {
-      is_access_error: 1,
-      has_home_dir: filePath.includes(getClaudeConfigHomeDir()) ? 1 : 0,
-    })
   }
 }
 
@@ -776,13 +767,7 @@ export async function processMdRules({
     }
 
     return result
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('EACCES')) {
-      logEvent('tengu_claude_rules_md_permission_error', {
-        is_access_error: 1,
-        has_home_dir: rulesDir.includes(getClaudeConfigHomeDir()) ? 1 : 0,
-      })
-    }
+  } catch {
     return []
   }
 }
@@ -1024,19 +1009,6 @@ export const getMemoryFiles = memoize(
 
     if (!hasLoggedInitialLoad) {
       hasLoggedInitialLoad = true
-      logEvent('tengu_claudemd__initial_load', {
-        file_count: result.length,
-        total_content_length: totalContentLength,
-        user_count: typeCounts['User'] ?? 0,
-        project_count: typeCounts['Project'] ?? 0,
-        local_count: typeCounts['Local'] ?? 0,
-        managed_count: typeCounts['Managed'] ?? 0,
-        automem_count: typeCounts['AutoMem'] ?? 0,
-        ...(feature('TEAMMEM')
-          ? { teammem_count: typeCounts['TeamMem'] ?? 0 }
-          : {}),
-        duration_ms: Date.now() - startTime,
-      })
     }
 
     // Fire InstructionsLoaded hook for each instruction file loaded
@@ -1142,7 +1114,7 @@ export function getLargeMemoryFiles(files: MemoryFileInfo[]): MemoryFileInfo[] {
 export function filterInjectedMemoryFiles(
   files: MemoryFileInfo[],
 ): MemoryFileInfo[] {
-  const skipMemoryIndex = getFeatureValue_CACHED_MAY_BE_STALE(
+  const skipMemoryIndex = getFeatureValue(
     'tengu_moth_copse',
     false,
   )
@@ -1155,7 +1127,7 @@ export const getClaudeMds = (
   filter?: (type: MemoryType) => boolean,
 ): string => {
   const memories: string[] = []
-  const skipProjectLevel = getFeatureValue_CACHED_MAY_BE_STALE(
+  const skipProjectLevel = getFeatureValue(
     'tengu_paper_halyard',
     false,
   )

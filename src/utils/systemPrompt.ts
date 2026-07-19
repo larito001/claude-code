@@ -1,8 +1,4 @@
 import { feature } from 'src/utils/features.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import type { ToolUseContext } from '../Tool.js'
 import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
 import { isBuiltInAgent } from '../tools/AgentTool/loadAgentsDir.js'
@@ -81,16 +77,6 @@ export function buildEffectiveSystemPrompt({
         })
       : mainThreadAgentDefinition.getSystemPrompt()
     : undefined
-
-  // Log agent memory loaded event for main loop agents
-  if (mainThreadAgentDefinition?.memory) {
-    logEvent('tengu_agent_memory_loaded', {
-      scope:
-        mainThreadAgentDefinition.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      source:
-        'main-thread' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
-  }
 
   // In proactive mode, agent instructions are appended to the default prompt
   // rather than replacing it. The proactive default prompt is already lean

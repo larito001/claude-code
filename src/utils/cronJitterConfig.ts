@@ -1,7 +1,7 @@
 // Locally configurable cron jitter configuration.
 //
 // Separated from cronScheduler.ts so the scheduler can be bundled in the
-// Agent SDK public build without pulling in analytics/growthbook.ts and
+// Agent SDK public build without pulling in services/featureConfig.ts and
 // its large transitive dependency set (settings/hooks/config cycle).
 //
 // Usage:
@@ -9,7 +9,7 @@
 //   Daemon/SDK: omit getJitterConfig → DEFAULT_CRON_JITTER_CONFIG applies.
 
 import { z } from 'zod/v4'
-import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js'
+import { getFeatureValue } from '../services/featureConfig.js'
 import {
   type CronJitterConfig,
   DEFAULT_CRON_JITTER_CONFIG,
@@ -23,13 +23,13 @@ import { lazySchema } from './lazySchema.js'
 // clears the memoized entry so the next read triggers a background fetch.
 const JITTER_CONFIG_REFRESH_MS = 60 * 1000
 
-// Upper bounds here are defense-in-depth against fat-fingered GrowthBook
+// Upper bounds here are defense-in-depth against fat-fingered local feature configuration
 // pushes. Like pollConfig.ts, Zod rejects the whole object on any violation
 // rather than partially trusting it — a config with one bad field falls back
 // to DEFAULT_CRON_JITTER_CONFIG entirely. oneShotFloorMs shares oneShotMaxMs's
 // ceiling (floor > max would invert the jitter range) and is cross-checked in
 // the refine; the shared ceiling keeps the individual bound explicit in the
-// error path. recurringMaxAgeMs uses .default() so a pre-existing GB config
+// error path. recurringMaxAgeMs uses .default() so an older cached config
 // without the field doesn't get wholesale-rejected — the other fields were
 // added together at config inception and don't need this.
 const HALF_HOUR_MS = 30 * 60 * 1000
@@ -59,13 +59,13 @@ const cronJitterConfigSchema = lazySchema(() =>
  * hit). Refresh window: JITTER_CONFIG_REFRESH_MS.
  *
  * Exported so ops runbooks can point at a single function when documenting
- * the lever, and so tests can spy on it without mocking GrowthBook itself.
+ * the lever, and so tests can spy on it without mocking local feature configuration itself.
  *
  * Pass this as `getJitterConfig` when calling createCronScheduler in REPL
  * contexts. Daemon/SDK callers omit getJitterConfig and get defaults.
  */
 export function getCronJitterConfig(): CronJitterConfig {
-  const raw = getFeatureValue_CACHED_WITH_REFRESH<unknown>(
+  const raw = getFeatureValue<unknown>(
     'cron_jitter_config',
     DEFAULT_CRON_JITTER_CONFIG,
     JITTER_CONFIG_REFRESH_MS,

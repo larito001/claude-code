@@ -1,12 +1,10 @@
 import { feature } from 'src/utils/features.js'
-import { randomBytes } from 'crypto'
 import { unwatchFile, watchFile } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import pickBy from 'lodash-es/pickBy.js'
 import { basename, dirname, join, resolve } from 'path'
 import { getOriginalCwd, getSessionTrustAccepted } from '../bootstrap/state.js'
 import { getAutoMemEntrypoint } from '../memdir/paths.js'
-import { logEvent } from '../services/analytics/index.js'
 import type { McpServerConfig } from '../services/mcp/types.js'
 import { getCwd } from '../utils/cwd.js'
 import { registerCleanup } from './cleanupRegistry.js'
@@ -35,11 +33,6 @@ const teamMemPaths = feature('TEAMMEM')
 /* eslint-enable @typescript-eslint/no-require-imports */
 import type { ImageDimensions } from './imageResizer.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
-
-// 重入防护：防止 getConfig → logEvent → getGlobalConfig → getConfig
-// 当配置文件损坏时无限递归。 logEvent的采样检查
-// 从全局配置中读取 GrowthBook 功能，再次调用 getConfig。
-let insideGetConfig = false
 
 // 用于坐标映射的图像尺寸信息（仅在调整图像大小时设置）
 export type PastedContent = {
@@ -167,7 +160,6 @@ export type GlobalConfig = {
   autoUpdatesProtectedForNative?: boolean
   // 上次显示 Doctor 时的会话计数
   doctorShownAtSession?: number
-  userID?: string
   theme: ThemeSetting
   hasCompletedOnboarding?: boolean
   // 跟踪重置入门的最后一个版本，与 MIN_VERSION_REQUIRING_ONBOARDING_RESET 一起使用
@@ -309,7 +301,7 @@ export type GlobalConfig = {
   // Opus 4.0/4.1 → 当前 Opus 迁移（显示一次性通知）
   legacyOpusMigrationTimestamp?: number
 
-  // 本地功能配置覆盖。环境变量 CLAUDE_CODE_FEATURE_OVERRIDES 优先。
+  // 本地功能配置覆盖。环境变量 FRAMEWORK_FEATURE_OVERRIDES 优先。
   featureOverrides?: { [featureName: string]: unknown }
 
   // 紧急提示跟踪 - 存储最后显示的提示以防止重新显示
@@ -382,7 +374,7 @@ export type GlobalConfig = {
   // undefined = 硬编码 Opus（向后兼容）； null = 领导者模型； string = 模型别名/ID。
   teammateDefaultModel?: string | null
 
-  // PR 状态页脚配置（通过 GrowthBook 进行功能标记）
+  // PR 状态页脚配置（通过 local feature configuration 进行功能标记）
   prStatusFooterEnabled?: boolean // 在页脚中显示 PR 审核状态（默认值：true）
 
   // 从 API 缓存组织级快速模式状态。
@@ -657,7 +649,6 @@ export function saveGlobalConfig(
         'saveGlobalConfig fallback: re-read config lost completed onboarding state; refusing to write.',
         { level: 'error' },
       )
-      logEvent('tengu_config_onboarding_state_loss_prevented', {})
       return
     }
     const config = updater(currentConfig)
@@ -679,40 +670,6 @@ let globalConfigCache: { config: GlobalConfig | null; mtime: number } = {
   config: null,
   mtime: 0,
 }
-
-// Tracking for config file operations (telemetry)
-let lastReadFileStats: { mtime: number; size: number } | null = null
-let configCacheHits = 0
-let configCacheMisses = 0
-// Session-total count of actual disk writes to the global config file.
-// Exposed for local diagnostics so anomalous write rates surface in the UI
-// before they corrupt the global configuration file.
-let globalConfigWriteCount = 0
-
-export function getGlobalConfigWriteCount(): number {
-  return globalConfigWriteCount
-}
-
-export const CONFIG_WRITE_DISPLAY_THRESHOLD = 20
-
-function reportConfigCacheStats(): void {
-  const total = configCacheHits + configCacheMisses
-  if (total > 0) {
-    logEvent('tengu_config_cache_stats', {
-      cache_hits: configCacheHits,
-      cache_misses: configCacheMisses,
-      hit_rate: configCacheHits / total,
-    })
-  }
-  configCacheHits = 0
-  configCacheMisses = 0
-}
-
-// Register cleanup to report cache stats at session end
-// eslint-disable-next-line custom-rules/no-top-level-side-effects
-registerCleanup(async () => {
-  reportConfigCacheStats()
-})
 
 /**
  * Migrates old autoUpdaterStatus to new installMethod and autoUpdates fields
@@ -831,7 +788,6 @@ function startGlobalConfigFreshnessWatcher(): void {
             }),
             mtime: curr.mtimeMs,
           }
-          lastReadFileStats = { mtime: curr.mtimeMs, size: curr.size }
         })
         .catch(() => {})
     },
@@ -847,7 +803,6 @@ function startGlobalConfigFreshnessWatcher(): void {
 // freshness watcher skips re-reading our own write on its next tick.
 function writeThroughGlobalConfigCache(config: GlobalConfig): void {
   globalConfigCache = { config, mtime: Date.now() }
-  lastReadFileStats = null
 }
 
 export function getGlobalConfig(): GlobalConfig {
@@ -859,14 +814,12 @@ export function getGlobalConfig(): GlobalConfig {
   // writes go write-through and other instances' writes are picked up by the
   // background freshness watcher (never blocks this path).
   if (globalConfigCache.config) {
-    configCacheHits++
     return globalConfigCache.config
   }
 
   // Slow path: startup load. Sync I/O here is acceptable because it runs
   // exactly once, before any UI is rendered. Stat before read so any race
   // self-corrects (old mtime + new content → watcher re-reads next tick).
-  configCacheMisses++
   try {
     let stats: { mtimeMs: number; size: number } | null = null
     try {
@@ -881,9 +834,6 @@ export function getGlobalConfig(): GlobalConfig {
       config,
       mtime: stats?.mtimeMs ?? Date.now(),
     }
-    lastReadFileStats = stats
-      ? { mtime: stats.mtimeMs, size: stats.size }
-      : null
     startGlobalConfigFreshnessWatcher()
     return config
   } catch {
@@ -920,9 +870,6 @@ function saveConfig<A extends object>(
       mode: 0o600,
     },
   )
-  if (file === getGlobalClaudeFile()) {
-    globalConfigWriteCount++
-  }
 }
 
 /**
@@ -961,34 +908,6 @@ function saveConfigWithLock<A extends object>(
       logForDebugging(
         'Lock acquisition took longer than expected - another Claude instance may be running',
       )
-      logEvent('tengu_config_lock_contention', {
-        lock_time_ms: lockTime,
-      })
-    }
-
-    // Check for stale write - file changed since we last read it
-    // Only check for global config file since lastReadFileStats tracks that specific file
-    if (lastReadFileStats && file === getGlobalClaudeFile()) {
-      try {
-        const currentStats = fs.statSync(file)
-        if (
-          currentStats.mtimeMs !== lastReadFileStats.mtime ||
-          currentStats.size !== lastReadFileStats.size
-        ) {
-          logEvent('tengu_config_stale_write', {
-            read_mtime: lastReadFileStats.mtime,
-            write_mtime: currentStats.mtimeMs,
-            read_size: lastReadFileStats.size,
-            write_size: currentStats.size,
-          })
-        }
-      } catch (e) {
-        const code = getErrnoCode(e)
-        if (code !== 'ENOENT') {
-          throw e
-        }
-        // File doesn't exist yet, no stale check needed
-      }
     }
 
     // Re-read the current config to get latest state. If the file is
@@ -1000,7 +919,6 @@ function saveConfigWithLock<A extends object>(
         'saveConfigWithLock: re-read config lost completed onboarding state; refusing to write.',
         { level: 'error' },
       )
-      logEvent('tengu_config_onboarding_state_loss_prevented', {})
       return false
     }
 
@@ -1098,9 +1016,6 @@ function saveConfigWithLock<A extends object>(
         mode: 0o600,
       },
     )
-    if (file === getGlobalClaudeFile()) {
-      globalConfigWriteCount++
-    }
     return true
   } finally {
     if (release) {
@@ -1255,31 +1170,7 @@ function getConfig<A>(
         { level: 'error' },
       )
 
-      // Guard: logEvent → shouldSampleEvent → getGlobalConfig → getConfig
-      // causes infinite recursion when the config file is corrupted, because
-      // the sampling check reads a GrowthBook feature from global config.
-      // Only log analytics on the outermost call.
-      if (!insideGetConfig) {
-        insideGetConfig = true
-        try {
-          // Log the error for monitoring
-          logError(error)
-
-          // Log analytics event for config corruption
-          let hasBackup = false
-          try {
-            fs.statSync(`${file}.backup`)
-            hasBackup = true
-          } catch {
-            // No backup
-          }
-          logEvent('tengu_config_parse_error', {
-            has_backup: hasBackup,
-          })
-        } finally {
-          insideGetConfig = false
-        }
-      }
+      logError(error)
 
       process.stderr.write(
         `\nClaude configuration file at ${file} is corrupted: ${error.message}\n`,
@@ -1456,7 +1347,6 @@ export function saveCurrentProjectConfig(
         'saveCurrentProjectConfig fallback: re-read config lost completed onboarding state; refusing to write.',
         { level: 'error' },
       )
-      logEvent('tengu_config_onboarding_state_loss_prevented', {})
       return
     }
     const currentProjectConfig =
@@ -1533,17 +1423,6 @@ export function getAutoUpdaterDisabledReason(): AutoUpdaterDisabledReason | null
     return { type: 'config' }
   }
   return null
-}
-
-export function getOrCreateUserID(): string {
-  const config = getGlobalConfig()
-  if (config.userID) {
-    return config.userID
-  }
-
-  const userID = randomBytes(32).toString('hex')
-  saveGlobalConfig(current => ({ ...current, userID }))
-  return userID
 }
 
 export function recordFirstStartTime(): void {

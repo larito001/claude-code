@@ -1,5 +1,5 @@
 /**
- * Agent context for analytics attribution using AsyncLocalStorage.
+ * Agent execution context using AsyncLocalStorage.
  *
  * This module provides a way to track agent identity across async operations
  * without parameter drilling. Supports two agent types:
@@ -22,7 +22,6 @@
  */
 
 import { AsyncLocalStorage } from 'async_hooks'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/index.js'
 import { isAgentSwarmsEnabled } from './agentSwarmsEnabled.js'
 
 /**
@@ -40,17 +39,6 @@ export type SubagentContext = {
   subagentName?: string
   /** Whether this is a built-in agent (vs user-defined custom agent) */
   isBuiltIn?: boolean
-  /** The request_id in the invoking agent that spawned or resumed this agent.
-   *  For nested subagents this is the immediate invoker, not the root —
-   *  session_id already bundles the whole tree. Updated on each resume. */
-  invokingRequestId?: string
-  /** Whether this invocation is the initial spawn or a subsequent resume
-   *  via SendMessage. Undefined when invokingRequestId is absent. */
-  invocationKind?: 'spawn' | 'resume'
-  /** Mutable flag: has this invocation's edge been emitted to telemetry yet?
-   *  Reset to false on each spawn/resume; flipped true by
-   *  consumeInvokingRequestId() on the first terminal API event. */
-  invocationEmitted?: boolean
 }
 
 /**
@@ -74,14 +62,6 @@ export type TeammateAgentContext = {
   isTeamLead: boolean
   /** Agent type - 'teammate' for swarm teammates */
   agentType: 'teammate'
-  /** The request_id in the invoking agent that spawned or resumed this
-   *  teammate. Undefined for teammates started outside a tool call
-   *  (e.g. session start). Updated on each resume. */
-  invokingRequestId?: string
-  /** See SubagentContext.invocationKind. */
-  invocationKind?: 'spawn' | 'resume'
-  /** Mutable flag: see SubagentContext.invocationEmitted. */
-  invocationEmitted?: boolean
 }
 
 /**
@@ -128,51 +108,4 @@ export function isTeammateAgentContext(
     return context?.agentType === 'teammate'
   }
   return false
-}
-
-/**
- * Get the subagent name suitable for analytics logging.
- * Returns the agent type name for built-in agents, "user-defined" for custom agents,
- * or undefined if not running within a subagent context.
- *
- * Safe for analytics metadata: built-in agent names are code constants,
- * and custom agents are always mapped to the literal "user-defined".
- */
-export function getSubagentLogName():
-  | AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-  | undefined {
-  const context = getAgentContext()
-  if (!isSubagentContext(context) || !context.subagentName) {
-    return undefined
-  }
-  return (
-    context.isBuiltIn ? context.subagentName : 'user-defined'
-  ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-}
-
-/**
- * Get the invoking request_id for the current agent context — once per
- * invocation. Returns the id on the first call after a spawn/resume, then
- * undefined until the next boundary. Also undefined on the main thread or
- * when the spawn path had no request_id.
- *
- * Sparse edge semantics: invokingRequestId appears on exactly one
- * tengu_api_success/error per invocation, so a non-NULL value downstream
- * marks a spawn/resume boundary.
- */
-export function consumeInvokingRequestId():
-  | {
-      invokingRequestId: string
-      invocationKind: 'spawn' | 'resume' | undefined
-    }
-  | undefined {
-  const context = getAgentContext()
-  if (!context?.invokingRequestId || context.invocationEmitted) {
-    return undefined
-  }
-  context.invocationEmitted = true
-  return {
-    invokingRequestId: context.invokingRequestId,
-    invocationKind: context.invocationKind,
-  }
 }

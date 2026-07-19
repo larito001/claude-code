@@ -12,9 +12,7 @@ import {
   MAX_TOOL_RESULT_BYTES,
   MAX_TOOL_RESULTS_PER_MESSAGE_CHARS,
 } from '../constants/toolLimits.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
-import { logEvent } from '../services/analytics/index.js'
-import { sanitizeToolNameForAnalytics } from '../services/analytics/metadata.js'
+import { getFeatureValue } from '../services/featureConfig.js'
 import type { Message } from '../types/message.js'
 import { logForDebugging } from './debug.js'
 import { getErrnoCode, toError } from './errors.js'
@@ -34,7 +32,7 @@ export const PERSISTED_OUTPUT_CLOSING_TAG = '</persisted-output>'
 export const TOOL_RESULT_CLEARED_MESSAGE = '[Old tool result content cleared]'
 
 /**
- * GrowthBook override map: tool name -> persistence threshold (chars).
+ * local feature configuration override map: tool name -> persistence threshold (chars).
  * When a tool name is present in this map, that value is used directly as the
  * effective threshold, bypassing the Math.min() clamp against the 50k default.
  * Tools absent from the map use the hardcoded fallback.
@@ -44,10 +42,10 @@ const PERSIST_THRESHOLD_OVERRIDE_FLAG = 'tengu_satin_quoll'
 
 /**
  * Resolve the effective persistence threshold for a tool.
- * GrowthBook override wins when present; otherwise falls back to the declared
+ * local feature configuration override wins when present; otherwise falls back to the declared
  * per-tool cap clamped by the global default.
  *
- * Defensive: GrowthBook's cache returns `cached !== undefined ? cached : default`,
+ * Defensive: local feature configuration's cache returns `cached !== undefined ? cached : default`,
  * so a flag served as `null` leaks through. We guard with optional chaining and a
  * typeof check so any non-object flag value (null, string, number) falls through
  * to the hardcoded default instead of throwing on index or returning 0.
@@ -58,11 +56,11 @@ export function getPersistenceThreshold(
 ): number {
   // Infinity = hard opt-out. Read self-bounds via maxTokens; persisting its
   // output to a file the model reads back with Read is circular. Checked
-  // before the GB override so tengu_satin_quoll can't force it back on.
+  // before the feature override so it cannot be forced back on.
   if (!Number.isFinite(declaredMaxResultSizeChars)) {
     return declaredMaxResultSizeChars
   }
-  const overrides = getFeatureValue_CACHED_MAY_BE_STALE<Record<
+  const overrides = getFeatureValue<Record<
     string,
     number
   > | null>(PERSIST_THRESHOLD_OVERRIDE_FLAG, {})
@@ -285,9 +283,6 @@ async function maybePersistLargeToolResult(
   // shell commands, MCP servers returning content:[], REPL statements, etc.).
   // Inject a short marker so the model always has something to react to.
   if (isToolResultContentEmpty(content)) {
-    logEvent('tengu_tool_empty_result', {
-      toolName: sanitizeToolNameForAnalytics(toolName),
-    })
     return {
       ...toolResultBlock,
       content: `(${toolName} completed with no output)`,
@@ -319,16 +314,6 @@ async function maybePersistLargeToolResult(
   }
 
   const message = buildLargeToolResultMessage(result)
-
-  // Log analytics
-  logEvent('tengu_tool_result_persisted', {
-    toolName: sanitizeToolNameForAnalytics(toolName),
-    originalSizeBytes: result.originalSize,
-    persistedSizeBytes: message.length,
-    estimatedOriginalTokens: Math.ceil(result.originalSize / BYTES_PER_TOKEN),
-    estimatedPersistedTokens: Math.ceil(message.length / BYTES_PER_TOKEN),
-    thresholdUsed: threshold,
-  })
 
   return { ...toolResultBlock, content: message }
 }
@@ -412,14 +397,14 @@ export function cloneContentReplacementState(
 }
 
 /**
- * Resolve the per-message aggregate budget limit. GrowthBook override
+ * Resolve the per-message aggregate budget limit. local feature configuration override
  * (tengu_hawthorn_window) wins when present and a finite positive number;
  * otherwise falls back to the hardcoded constant. Defensive typeof/finite
- * check: GrowthBook's cache returns `cached !== undefined ? cached : default`,
+ * check: local feature configuration's cache returns `cached !== undefined ? cached : default`,
  * so a flag served as null/string/NaN leaks through.
  */
 export function getPerMessageBudgetLimit(): number {
-  const override = getFeatureValue_CACHED_MAY_BE_STALE<number | null>(
+  const override = getFeatureValue<number | null>(
     'tengu_hawthorn_window',
     null,
   )
@@ -448,7 +433,7 @@ export function provisionContentReplacementState(
   initialMessages?: Message[],
   initialContentReplacements?: ContentReplacementRecord[],
 ): ContentReplacementState | undefined {
-  const enabled = getFeatureValue_CACHED_MAY_BE_STALE(
+  const enabled = getFeatureValue(
     'tengu_hawthorn_steeple',
     false,
   )
@@ -872,16 +857,6 @@ export async function enforceToolResultBudget(
       toolUseId: candidate.toolUseId,
       replacement: replacement.content,
     })
-    logEvent('tengu_tool_result_persisted_message_budget', {
-      originalSizeBytes: replacement.originalSize,
-      persistedSizeBytes: replacement.content.length,
-      estimatedOriginalTokens: Math.ceil(
-        replacement.originalSize / BYTES_PER_TOKEN,
-      ),
-      estimatedPersistedTokens: Math.ceil(
-        replacement.content.length / BYTES_PER_TOKEN,
-      ),
-    })
   }
 
   if (replacementMap.size === 0) {
@@ -894,12 +869,6 @@ export async function enforceToolResultBudget(
         `across ${messagesOverBudget} over-budget message(s), ` +
         `shed ~${formatFileSize(replacedSize)}, ${reappliedCount} re-applied`,
     )
-    logEvent('tengu_message_level_tool_result_budget_enforced', {
-      resultsPersisted: newlyReplaced.length,
-      messagesOverBudget,
-      replacedSizeBytes: replacedSize,
-      reapplied: reappliedCount,
-    })
   }
 
   return {

@@ -1,6 +1,5 @@
 import { feature } from 'src/utils/features.js'
 import chalk from 'chalk'
-import { markPostCompaction } from 'src/bootstrap/state.js'
 import { getSystemPrompt } from '../../constants/prompts.js'
 import { getSystemContext, getUserContext } from '../../context.js'
 import { getShortcutDisplay } from '../../keybindings/shortcutFormat.js'
@@ -60,7 +59,6 @@ export const call: LocalCommandCall = async (args, context) => {
             context.agentId,
           )
         }
-        markPostCompaction()
         // Suppress warning immediately after successful compaction
         suppressCompactWarning()
 

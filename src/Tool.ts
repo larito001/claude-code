@@ -252,14 +252,6 @@ export type ToolUseContext = {
   globLimits?: {
     maxResults?: number
   }
-  toolDecisions?: Map<
-    string,
-    {
-      source: string
-      decision: 'accept' | 'reject'
-      timestamp: number
-    }
-  >
   queryTracking?: QueryChainTracking
   /** 用于向用户请求交互式提示的回调工厂。
    * 返回绑定到给定源名称的提示回调。
@@ -290,7 +282,7 @@ export type ToolUseContext = {
   /**
    * 父渲染的系统提示字节，在回合开始时冻结。
    * 由fork子代理用来共享父级的提示缓存——重新调用
-   * 分叉生成时的 getSystemPrompt() 可能会发散（GrowthBook 冷→热）
+   * 分叉生成时的 getSystemPrompt() 可能会发散（local feature configuration 冷→热）
    * 并破坏缓存。请参阅 forkSubagent.ts。
    */
   renderedSystemPrompt?: SystemPrompt

@@ -3,7 +3,7 @@
  * entries only register if {marketplace, plugin} is on this list. server:
  * entries always fail (schema is plugin-only). The
  * --dangerously-load-development-channels flag bypasses for both kinds.
- * Lives in GrowthBook so it can be updated without a release.
+ * Lives in local feature configuration so it can be updated without a release.
  *
  * Plugin-level granularity: if a plugin is approved, all its channel
  * servers are. Per-server gating was overengineering — a plugin that
@@ -18,7 +18,7 @@
 import { z } from 'zod/v4'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
+import { getFeatureValue } from '../featureConfig.js'
 
 export type ChannelAllowlistEntry = {
   marketplace: string
@@ -35,7 +35,7 @@ const ChannelAllowlistSchema = lazySchema(() =>
 )
 
 export function getChannelAllowlist(): ChannelAllowlistEntry[] {
-  const raw = getFeatureValue_CACHED_MAY_BE_STALE<unknown>(
+  const raw = getFeatureValue<unknown>(
     'tengu_harbor_ledger',
     [],
   )
@@ -46,10 +46,10 @@ export function getChannelAllowlist(): ChannelAllowlistEntry[] {
 /**
  * Overall channels on/off. Checked before any per-server gating —
  * when false, --channels is a no-op and no handlers register.
- * Default false; GrowthBook 5-min refresh.
+ * Default false; local feature configuration 5-min refresh.
  */
 export function isChannelsEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_harbor', false)
+  return getFeatureValue('tengu_harbor', false)
 }
 
 /**

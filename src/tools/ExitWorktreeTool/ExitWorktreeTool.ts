@@ -6,7 +6,6 @@ import {
   setProjectRoot,
 } from '../../bootstrap/state.js'
 import { clearSystemPromptSections } from '../../constants/systemPromptSections.js'
-import { logEvent } from '../../services/analytics/index.js'
 import type { Tool } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { count } from '../../utils/array.js'
@@ -249,10 +248,10 @@ export const ExitWorktreeTool: Tool<InputSchema, Output> = buildTool({
     // cd. Can't use session.worktreePath — it's join()'d, not realpath'd.)
     const projectRootIsWorktree = getProjectRoot() === getOriginalCwd()
 
-    // Re-count at execution time for accurate analytics and output — the
+    // Re-count at execution time for accurate output — the
     // worktree state at validateInput time may not match now. Null (git
     // failure) falls back to 0/0; safety gating already happened in
-    // validateInput, so this only affects analytics + messaging.
+    // validateInput, so this only affects user-facing messaging.
     const { changedFiles, commits } = (await countWorktreeChanges(
       worktreePath,
       originalHeadCommit,
@@ -262,11 +261,6 @@ export const ExitWorktreeTool: Tool<InputSchema, Output> = buildTool({
       await keepWorktree()
       restoreSessionToOriginalCwd(originalCwd, projectRootIsWorktree)
 
-      logEvent('tengu_worktree_kept', {
-        mid_session: true,
-        commits,
-        changed_files: changedFiles,
-      })
 
       const tmuxNote = tmuxSessionName
         ? ` Tmux session ${tmuxSessionName} is still running; reattach with: tmux attach -t ${tmuxSessionName}`
@@ -290,11 +284,6 @@ export const ExitWorktreeTool: Tool<InputSchema, Output> = buildTool({
     await cleanupWorktree()
     restoreSessionToOriginalCwd(originalCwd, projectRootIsWorktree)
 
-    logEvent('tengu_worktree_removed', {
-      mid_session: true,
-      commits,
-      changed_files: changedFiles,
-    })
 
     const discardParts: string[] = []
     if (commits > 0) {

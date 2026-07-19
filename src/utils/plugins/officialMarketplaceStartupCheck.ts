@@ -9,8 +9,7 @@
  */
 
 import { join } from 'path'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import { logEvent } from '../../services/analytics/index.js'
+import { getFeatureValue } from '../../services/featureConfig.js'
 import { getGlobalConfig, saveGlobalConfig } from '../config.js'
 import { logForDebugging } from '../debug.js'
 import { isEnvTruthy } from '../envUtils.js'
@@ -171,11 +170,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
         officialMarketplaceAutoInstalled: false,
         officialMarketplaceAutoInstallFailReason: 'policy_blocked',
       }))
-      logEvent('tengu_official_marketplace_auto_install', {
-        installed: false,
-        skipped: true,
-        policy_blocked: true,
-      })
       return { installed: false, skipped: true, reason: 'policy_blocked' }
     }
 
@@ -205,11 +199,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
         officialMarketplaceAutoInstalled: false,
         officialMarketplaceAutoInstallFailReason: 'policy_blocked',
       }))
-      logEvent('tengu_official_marketplace_auto_install', {
-        installed: false,
-        skipped: true,
-        policy_blocked: true,
-      })
       return { installed: false, skipped: true, reason: 'policy_blocked' }
     }
 
@@ -242,17 +231,12 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
         officialMarketplaceAutoInstallLastAttemptTime: undefined,
         officialMarketplaceAutoInstallNextRetryTime: undefined,
       }))
-      logEvent('tengu_official_marketplace_auto_install', {
-        installed: true,
-        skipped: false,
-        via_gcs: true,
-      })
       return { installed: true, skipped: false }
     }
     // GCS failed (404 until backend writes, or network). Fall through to git
     // ONLY if the kill-switch allows — same gate as refreshMarketplace().
     if (
-      !getFeatureValue_CACHED_MAY_BE_STALE(
+      !getFeatureValue(
         'tengu_plugin_official_mkt_git_fallback',
         true,
       )
@@ -275,12 +259,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
         officialMarketplaceAutoInstallLastAttemptTime: now,
         officialMarketplaceAutoInstallNextRetryTime: nextRetryTime,
       }))
-      logEvent('tengu_official_marketplace_auto_install', {
-        installed: false,
-        skipped: true,
-        gcs_unavailable: true,
-        retry_count: retryCount,
-      })
       return { installed: false, skipped: true, reason: 'gcs_unavailable' }
     }
 
@@ -318,12 +296,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
           { level: 'error' },
         )
       }
-      logEvent('tengu_official_marketplace_auto_install', {
-        installed: false,
-        skipped: true,
-        git_unavailable: true,
-        retry_count: retryCount,
-      })
       return {
         installed: false,
         skipped: true,
@@ -350,11 +322,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
       officialMarketplaceAutoInstallLastAttemptTime: undefined,
       officialMarketplaceAutoInstallNextRetryTime: undefined,
     }))
-    logEvent('tengu_official_marketplace_auto_install', {
-      installed: true,
-      skipped: false,
-      retry_count: previousRetryCount,
-    })
     return { installed: true, skipped: false }
   } catch (error) {
     // Handle installation failure
@@ -372,12 +339,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
       logForDebugging(
         'Official marketplace auto-install: git is a non-functional macOS xcrun shim, treating as git_unavailable',
       )
-      logEvent('tengu_official_marketplace_auto_install', {
-        installed: false,
-        skipped: true,
-        git_unavailable: true,
-        macos_xcrun_shim: true,
-      })
       return {
         installed: false,
         skipped: true,
@@ -422,12 +383,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
       // Still return the failure result even if config save failed
       // This ensures we report the installation failure correctly
     }
-    logEvent('tengu_official_marketplace_auto_install', {
-      installed: false,
-      skipped: true,
-      failed: true,
-      retry_count: retryCount,
-    })
 
     return {
       installed: false,

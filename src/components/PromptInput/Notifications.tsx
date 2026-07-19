@@ -2,7 +2,6 @@ import { c as _c } from "react/compiler-runtime";
 import * as React from 'react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { type Notification, useNotifications } from 'src/context/notifications.js';
-import { logEvent } from 'src/services/analytics/index.js';
 import { useAppState } from 'src/state/AppState.js';
 import type { VerificationStatus } from '../../hooks/useApiKeyVerification.js';
 import { useIdeConnectionStatus } from '../../hooks/useIdeConnectionStatus.js';
@@ -130,7 +129,6 @@ export function Notifications(t0) {
   if ($[10] !== addNotification || $[11] !== removeNotification || $[12] !== shouldShowExternalEditorHint) {
     t9 = () => {
       if (shouldShowExternalEditorHint && editor) {
-        logEvent("tengu_external_editor_hint_shown", {});
         addNotification({
           key: "external-editor-hint",
           jsx: <Text dimColor={true}><ConfigurableShortcutHint action="chat:externalEditor" context="Chat" fallback="ctrl+g" description={`edit in ${toIDEDisplayName(editor)}`} /></Text>,

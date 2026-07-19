@@ -4,9 +4,7 @@ import figures from 'figures';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useTheme } from '../../../ink.js';
 import { useKeybinding } from '../../../keybindings/useKeybinding.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../../services/analytics/growthbook.js';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../../services/analytics/index.js';
-import { sanitizeToolNameForAnalytics } from '../../../services/analytics/metadata.js';
+import { getFeatureValue } from '../../../services/featureConfig.js';
 import { useAppState } from '../../../state/AppState.js';
 import { BashTool } from '../../../tools/BashTool/BashTool.js';
 import { getFirstWordPrefix, getSimpleCommandPrefix } from '../../../tools/BashTool/bashPermissions.js';
@@ -21,7 +19,7 @@ import { SandboxManager } from '../../../utils/sandbox/sandbox-adapter.js';
 import { Select } from '../../CustomSelect/select.js';
 import { ShimmerChar } from '../../Spinner/ShimmerChar.js';
 import { useShimmerAnimation } from '../../Spinner/useShimmerAnimation.js';
-import { type UnaryEvent, usePermissionRequestLogging } from '../hooks.js';
+import { usePermissionPromptTracking } from '../hooks.js';
 import { PermissionDecisionDebugInfo } from '../PermissionDecisionDebugInfo.js';
 import { PermissionDialog } from '../PermissionDialog.js';
 import { PermissionExplainerContent, usePermissionExplainerUI } from '../PermissionExplanation.js';
@@ -29,7 +27,6 @@ import type { PermissionRequestProps } from '../PermissionRequest.js';
 import { PermissionRuleExplanation } from '../PermissionRuleExplanation.js';
 import { SedEditPermissionRequest } from '../SedEditPermissionRequest/SedEditPermissionRequest.js';
 import { useShellPermissionFeedback } from '../useShellPermissionFeedback.js';
-import { logUnaryPermissionEvent } from '../utils.js';
 import { bashToolUseOptions } from './bashToolUseOptions.js';
 const CHECKING_TEXT = 'Attempting to auto-approve\u2026';
 
@@ -270,7 +267,7 @@ function BashPermissionRequestInner({
     sandboxingEnabled: sandboxingEnabled_0,
     isSandboxed: isSandboxed_0
   } = useMemo(() => {
-    const destructiveWarning = getFeatureValue_CACHED_MAY_BE_STALE('tengu_destructive_command_warning', false) ? getDestructiveCommandWarning(command) : null;
+    const destructiveWarning = getFeatureValue('tengu_destructive_command_warning', false) ? getDestructiveCommandWarning(command) : null;
     const sandboxingEnabled = SandboxManager.isSandboxingEnabled();
     const isSandboxed = sandboxingEnabled && shouldUseSandbox(toolUseConfirm.input);
     return {
@@ -279,11 +276,7 @@ function BashPermissionRequestInner({
       isSandboxed
     };
   }, [command, toolUseConfirm.input]);
-  const unaryEvent = useMemo<UnaryEvent>(() => ({
-    completion_type: 'tool_use_single',
-    language_name: 'none'
-  }), []);
-  usePermissionRequestLogging(toolUseConfirm, unaryEvent);
+  usePermissionPromptTracking(toolUseConfirm);
   const existingAllowDescriptions = useMemo(() => getBashPromptAllowDescriptions(toolPermissionContext), [toolPermissionContext]);
   const options = useMemo(() => bashToolUseOptions({
     suggestions: toolUseConfirm.permissionResult.behavior === 'ask' ? toolUseConfirm.permissionResult.suggestions : undefined,
@@ -317,30 +310,8 @@ function BashPermissionRequestInner({
     isActive: feature('BASH_CLASSIFIER') ? !!toolUseConfirm.classifierAutoApproved : false
   });
   function onSelect(value_0: string) {
-    // Map options to numeric values for analytics (strings not allowed in logEvent)
-    let optionIndex: Record<string, number> = {
-      yes: 1,
-      'yes-apply-suggestions': 2,
-      'yes-prefix-edited': 2,
-      no: 3
-    };
-    if (feature('BASH_CLASSIFIER')) {
-      optionIndex = {
-        yes: 1,
-        'yes-apply-suggestions': 2,
-        'yes-prefix-edited': 2,
-        'yes-classifier-reviewed': 3,
-        no: 4
-      };
-    }
-    logEvent('tengu_permission_request_option_selected', {
-      option_index: optionIndex[value_0],
-      explainer_visible: explainerState.visible
-    });
-    const toolNameForAnalytics = sanitizeToolNameForAnalytics(toolUseConfirm.tool.name) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
     if (value_0 === 'yes-prefix-edited') {
       const trimmedPrefix = (editablePrefix ?? '').trim();
-      logUnaryPermissionEvent('tool_use_single', toolUseConfirm, 'accept');
       if (!trimmedPrefix) {
         toolUseConfirm.onAllow(toolUseConfirm.input, []);
       } else {
@@ -360,7 +331,6 @@ function BashPermissionRequestInner({
     }
     if (feature('BASH_CLASSIFIER') && value_0 === 'yes-classifier-reviewed') {
       const trimmedDescription = classifierDescription.trim();
-      logUnaryPermissionEvent('tool_use_single', toolUseConfirm, 'accept');
       if (!trimmedDescription) {
         toolUseConfirm.onAllow(toolUseConfirm.input, []);
       } else {
@@ -382,22 +352,12 @@ function BashPermissionRequestInner({
       case 'yes':
         {
           const trimmedFeedback_0 = acceptFeedback.trim();
-          logUnaryPermissionEvent('tool_use_single', toolUseConfirm, 'accept');
-          // Log accept submission with feedback context
-          logEvent('tengu_accept_submitted', {
-            toolName: toolNameForAnalytics,
-            isMcp: toolUseConfirm.tool.isMcp ?? false,
-            has_instructions: !!trimmedFeedback_0,
-            instructions_length: trimmedFeedback_0.length,
-            entered_feedback_mode: yesFeedbackModeEntered
-          });
           toolUseConfirm.onAllow(toolUseConfirm.input, [], trimmedFeedback_0 || undefined);
           onDone();
           break;
         }
       case 'yes-apply-suggestions':
         {
-          logUnaryPermissionEvent('tool_use_single', toolUseConfirm, 'accept');
           // Extract suggestions if present (works for both 'ask' and 'passthrough' behaviors)
           const permissionUpdates_0 = 'suggestions' in toolUseConfirm.permissionResult ? toolUseConfirm.permissionResult.suggestions || [] : [];
           toolUseConfirm.onAllow(toolUseConfirm.input, permissionUpdates_0);
@@ -407,16 +367,6 @@ function BashPermissionRequestInner({
       case 'no':
         {
           const trimmedFeedback = rejectFeedback.trim();
-
-          // Log reject submission with feedback context
-          logEvent('tengu_reject_submitted', {
-            toolName: toolNameForAnalytics,
-            isMcp: toolUseConfirm.tool.isMcp ?? false,
-            has_instructions: !!trimmedFeedback,
-            instructions_length: trimmedFeedback.length,
-            entered_feedback_mode: noFeedbackModeEntered
-          });
-
           // Process rejection (with or without feedback)
           handleReject(trimmedFeedback || undefined);
           break;

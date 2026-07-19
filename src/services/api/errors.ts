@@ -27,11 +27,7 @@ import { isEnvTruthy } from '../../utils/envUtils.js'
 import { formatFileSize } from '../../utils/format.js'
 import { ImageResizeError } from '../../utils/imageResizer.js'
 import { ImageSizeError } from '../../utils/imageValidation.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../analytics/index.js'
-import { extractConnectionErrorDetails, formatAPIError } from './errorUtils.js'
+import { formatAPIError } from './errorUtils.js'
 
 export const API_ERROR_MESSAGE_PREFIX = 'API Error'
 
@@ -314,21 +310,7 @@ function logToolUseToolResultMismatch(
       }
     }
 
-    // Log to Statsig
-    logEvent('tengu_tool_use_tool_result_mismatch_error', {
-      toolUseId:
-        toolUseId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      normalizedSequence: normalizedSeq.join(
-        ', ',
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      preNormalizedSequence: preNormalizedSeq.join(
-        ', ',
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      normalizedMessageCount: messagesForAPI.length,
-      originalMessageCount: messages.length,
-      normalizedToolUseIndex: normalizedIndex,
-      originalToolUseIndex: originalIndex,
-    })
+    // Log to local feature configuration
   } catch (_) {
     // Ignore errors in debug logging
   }
@@ -555,7 +537,7 @@ export function getAssistantMessageFromError(
       '`tool_use` ids were found without `tool_result` blocks immediately after',
     )
   ) {
-    // Log to Statsig if we have the message context
+    // Log to local feature configuration if we have the message context
     if (options?.messages && options?.messagesForAPI) {
       const toolUseIdMatch = error.message.match(/toolu_[a-zA-Z0-9]+/)
       const toolUseId = toolUseIdMatch ? toolUseIdMatch[0] : null
@@ -578,14 +560,6 @@ export function getAssistantMessageFromError(
     })
   }
 
-  if (
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.includes('unexpected `tool_use_id` found in `tool_result`')
-  ) {
-    logEvent('tengu_unexpected_tool_result', {})
-  }
-
   // Duplicate tool_use IDs (CC-1212). ensureToolResultPairing strips these
   // before send, so hitting this means a new corruption path slipped through.
   // Log for root-causing, and give users a recovery path instead of deadlock.
@@ -594,7 +568,6 @@ export function getAssistantMessageFromError(
     error.status === 400 &&
     error.message.includes('`tool_use` ids must be unique')
   ) {
-    logEvent('tengu_duplicate_tool_use_id', {})
     const rewindInstruction = getIsNonInteractiveSession()
       ? ''
       : ' Run /rewind to recover the conversation.'
@@ -738,190 +711,6 @@ function get3PModelFallbackSuggestion(model: string): string | undefined {
   return undefined
 }
 
-/**
- * Classifies an API error into a specific error type for analytics tracking.
- * Returns a standardized error type string suitable for Datadog tagging.
- */
-export function classifyAPIError(error: unknown): string {
-  // Aborted requests
-  if (error instanceof Error && error.message === 'Request was aborted.') {
-    return 'aborted'
-  }
-
-  // Timeout errors
-  if (
-    error instanceof APIConnectionTimeoutError ||
-    (error instanceof APIConnectionError &&
-      error.message.toLowerCase().includes('timeout'))
-  ) {
-    return 'api_timeout'
-  }
-
-  // Check for repeated 529 errors
-  if (
-    error instanceof Error &&
-    error.message.includes(REPEATED_529_ERROR_MESSAGE)
-  ) {
-    return 'repeated_529'
-  }
-
-  // Check for emergency capacity off switch
-  if (
-    error instanceof Error &&
-    error.message.includes(CUSTOM_OFF_SWITCH_MESSAGE)
-  ) {
-    return 'capacity_off_switch'
-  }
-
-  // Rate limiting
-  if (error instanceof APIError && error.status === 429) {
-    return 'rate_limit'
-  }
-
-  // Server overload (529)
-  if (
-    error instanceof APIError &&
-    (error.status === 529 ||
-      error.message?.includes('"type":"overloaded_error"'))
-  ) {
-    return 'server_overload'
-  }
-
-  // Prompt/content size errors
-  if (
-    error instanceof Error &&
-    error.message
-      .toLowerCase()
-      .includes(PROMPT_TOO_LONG_ERROR_MESSAGE.toLowerCase())
-  ) {
-    return 'prompt_too_long'
-  }
-
-  // PDF errors
-  if (
-    error instanceof Error &&
-    /maximum of \d+ PDF pages/.test(error.message)
-  ) {
-    return 'pdf_too_large'
-  }
-
-  if (
-    error instanceof Error &&
-    error.message.includes('The PDF specified is password protected')
-  ) {
-    return 'pdf_password_protected'
-  }
-
-  // Image size errors
-  if (
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.includes('image exceeds') &&
-    error.message.includes('maximum')
-  ) {
-    return 'image_too_large'
-  }
-
-  // Many-image dimension errors
-  if (
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.includes('image dimensions exceed') &&
-    error.message.includes('many-image')
-  ) {
-    return 'image_too_large'
-  }
-
-  // Tool use errors (400)
-  if (
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.includes(
-      '`tool_use` ids were found without `tool_result` blocks immediately after',
-    )
-  ) {
-    return 'tool_use_mismatch'
-  }
-
-  if (
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.includes('unexpected `tool_use_id` found in `tool_result`')
-  ) {
-    return 'unexpected_tool_result'
-  }
-
-  if (
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.includes('`tool_use` ids must be unique')
-  ) {
-    return 'duplicate_tool_use_id'
-  }
-
-  // Invalid model errors (400)
-  if (
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.toLowerCase().includes('invalid model name')
-  ) {
-    return 'invalid_model'
-  }
-
-  // Credit/billing errors
-  if (
-    error instanceof Error &&
-    error.message
-      .toLowerCase()
-      .includes(CREDIT_BALANCE_TOO_LOW_ERROR_MESSAGE.toLowerCase())
-  ) {
-    return 'credit_balance_low'
-  }
-
-  // Authentication errors
-  if (
-    error instanceof Error &&
-    error.message.toLowerCase().includes('x-api-key')
-  ) {
-    return 'invalid_api_key'
-  }
-
-  // Generic auth errors
-  if (
-    error instanceof APIError &&
-    (error.status === 401 || error.status === 403)
-  ) {
-    return 'auth_error'
-  }
-
-  // Bedrock-specific errors
-  if (
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) &&
-    error instanceof Error &&
-    error.message.toLowerCase().includes('model id')
-  ) {
-    return 'bedrock_model_access'
-  }
-
-  // Status code based fallbacks
-  if (error instanceof APIError) {
-    const status = error.status
-    if (status >= 500) return 'server_error'
-    if (status >= 400) return 'client_error'
-  }
-
-  // Connection errors - check for SSL/TLS issues first
-  if (error instanceof APIConnectionError) {
-    const connectionDetails = extractConnectionErrorDetails(error)
-    if (connectionDetails?.isSSLError) {
-      return 'ssl_cert_error'
-    }
-    return 'connection_error'
-  }
-
-  return 'unknown'
-}
-
 export function categorizeRetryableAPIError(
   error: APIError,
 ): SDKAssistantMessageError {
@@ -951,7 +740,6 @@ export function getErrorMessageIfRefusal(
     return
   }
 
-  logEvent('tengu_refusal_api_response', {})
 
   const baseMessage = getIsNonInteractiveSession()
     ? `${API_ERROR_MESSAGE_PREFIX}: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Try rephrasing the request or attempting a different approach.`

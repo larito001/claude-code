@@ -35,19 +35,13 @@ const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
 
 import { resolve } from 'path'
 import {
-  checkSecurityRestrictionGate,
-  checkStatsigFeatureGate_CACHED_MAY_BE_STALE,
-  getDynamicConfig_BLOCKS_ON_INIT,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from 'src/services/analytics/growthbook.js'
+  isFeatureEnabled,
+  getFeatureValue,
+} from 'src/services/featureConfig.js'
 import {
   addDirHelpMessage,
   validateDirectoryForWorkspace,
 } from '../../commands/add-dir/validation.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
 import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -693,9 +687,9 @@ export function initialPermissionModeFromCLI({
 }): { mode: PermissionMode; notification?: string } {
   const settings = getSettings_DEPRECATED() || {}
 
-  // Check GrowthBook gate first - highest precedence
-  const growthBookDisableBypassPermissionsMode =
-    checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
+  // Check local feature configuration gate first - highest precedence
+  const featureConfigDisableBypassPermissionsMode =
+    isFeatureEnabled(
       'tengu_disable_bypass_permissions_mode',
     )
 
@@ -703,12 +697,12 @@ export function initialPermissionModeFromCLI({
   const settingsDisableBypassPermissionsMode =
     settings.permissions?.disableBypassPermissionsMode === 'disable'
 
-  // Statsig gate takes precedence over settings
+  // local feature configuration gate takes precedence over settings
   const disableBypassPermissionsMode =
-    growthBookDisableBypassPermissionsMode ||
+    featureConfigDisableBypassPermissionsMode ||
     settingsDisableBypassPermissionsMode
 
-  // Sync circuit-breaker check (cached GB read). Prevents the
+  // Synchronous cached circuit-breaker check. Prevents the
   // AutoModeOptInDialog from showing in showSetupScreens() when auto can't
   // actually be entered. autoModeFlagCli still carries intent through to
   // verifyAutoModeGateAccess, which notifies the user why.
@@ -759,8 +753,8 @@ export function initialPermissionModeFromCLI({
 
   for (const mode of orderedModes) {
     if (mode === 'bypassPermissions' && disableBypassPermissionsMode) {
-      if (growthBookDisableBypassPermissionsMode) {
-        logForDebugging('bypassPermissions mode is disabled by Statsig gate', {
+      if (featureConfigDisableBypassPermissionsMode) {
+        logForDebugging('bypassPermissions mode is disabled by local feature configuration gate', {
           level: 'warn',
         })
         notification =
@@ -910,10 +904,10 @@ export async function initializeToolPermissionContext({
     })
   }
 
-  // Check if bypassPermissions mode is available (not disabled by Statsig gate or settings)
+  // Check if bypassPermissions mode is available (not disabled by local feature configuration gate or settings)
   // Use cached values to avoid blocking on startup
-  const growthBookDisableBypassPermissionsMode =
-    checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
+  const featureConfigDisableBypassPermissionsMode =
+    isFeatureEnabled(
       'tengu_disable_bypass_permissions_mode',
     )
   const settings = getSettings_DEPRECATED() || {}
@@ -922,7 +916,7 @@ export async function initializeToolPermissionContext({
   const isBypassPermissionsModeAvailable =
     (permissionMode === 'bypassPermissions' ||
       allowDangerouslySkipPermissions) &&
-    !growthBookDisableBypassPermissionsMode &&
+    !featureConfigDisableBypassPermissionsMode &&
     !settingsDisableBypassPermissionsMode
 
   // Load all permission rules from disk
@@ -1014,7 +1008,7 @@ export async function initializeToolPermissionContext({
 export type AutoModeGateCheckResult = {
   // Transform function (not a pre-computed context) so callers can apply it
   // inside setAppState(prev => ...) against the CURRENT context. Pre-computing
-  // the context here captured a stale snapshot: the async GrowthBook await
+  // the context here captured a stale snapshot: the async local feature configuration await
   // below can be outrun by a mid-turn shift-tab, and returning
   // { ...currentContext, ... } would overwrite the user's mode change.
   updateContext: (ctx: ToolPermissionContext) => ToolPermissionContext
@@ -1046,7 +1040,7 @@ export function getAutoModeUnavailableNotification(
  *
  * Returns a transform function (not a pre-computed context) that callers
  * apply inside setAppState(prev => ...) against the CURRENT context. This
- * prevents the async GrowthBook await from clobbering mid-turn mode changes
+ * prevents the async local feature configuration await from clobbering mid-turn mode changes
  * (e.g., user shift-tabs to acceptEdits while this check is in flight).
  *
  * The transform re-checks mode/prePlanMode against the fresh ctx to avoid
@@ -1062,16 +1056,16 @@ export async function verifyAutoModeGateAccess(
 ): Promise<AutoModeGateCheckResult> {
   // Auto-mode config — runs in ALL builds (circuit breaker, carousel, kick-out)
   // Fresh read of tengu_auto_mode_config.enabled — this async check runs once
-  // after GrowthBook initialization and is the authoritative source for
+  // after local feature configuration initialization and is the authoritative source for
   // isAutoModeAvailable. The sync startup path uses stale cache; this
   // corrects it. Circuit breaker (enabled==='disabled') takes effect here.
-  const autoModeConfig = await getDynamicConfig_BLOCKS_ON_INIT<{
+  const autoModeConfig = await getFeatureValue<{
     enabled?: AutoModeEnabledState
     disableFastMode?: boolean
   }>('tengu_auto_mode_config', {})
   const enabledState = parseAutoModeEnabledState(autoModeConfig?.enabled)
   const disabledBySettings = isAutoModeDisabledBySettings()
-  // Treat settings-disable the same as GrowthBook 'disabled' for circuit-breaker
+  // Treat settings-disable the same as local feature configuration 'disabled' for circuit-breaker
   // semantics — blocks SDK/explicit re-entry via isAutoModeGateEnabled().
   autoModeStateModule?.setAutoModeCircuitBroken(
     enabledState === 'disabled' || disabledBySettings,
@@ -1104,7 +1098,7 @@ export async function verifyAutoModeGateAccess(
   const autoModeFlagCli = autoModeStateModule?.getAutoModeFlagCli() ?? false
 
   // Return a transform function that re-evaluates context-dependent conditions
-  // against the CURRENT context at setAppState time. The async GrowthBook
+  // against the CURRENT context at setAppState time. The async local feature configuration
   // results above (canEnterAuto, carouselAvailable, enabledState, reason) are
   // closure-captured — those don't depend on context. But mode, prePlanMode,
   // and isAutoModeAvailable checks MUST use the fresh ctx or a mid-await
@@ -1232,10 +1226,10 @@ export async function verifyAutoModeGateAccess(
 }
 
 /**
- * Core logic to check if bypassPermissions should be disabled based on Statsig gate
+ * Check whether local feature configuration disables bypass permissions.
  */
-export function shouldDisableBypassPermissions(): Promise<boolean> {
-  return checkSecurityRestrictionGate('tengu_disable_bypass_permissions_mode')
+export function shouldDisableBypassPermissions(): boolean {
+  return isFeatureEnabled('tengu_disable_bypass_permissions_mode')
 }
 
 function isAutoModeDisabledBySettings(): boolean {
@@ -1273,7 +1267,7 @@ export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null
 }
 
 /**
- * The `enabled` field in the tengu_auto_mode_config GrowthBook JSON config.
+ * The `enabled` field in the tengu_auto_mode_config local feature configuration JSON config.
  * Controls auto mode availability in UI surfaces (CLI, IDE, Desktop).
  * - 'enabled': auto mode is available in the shift-tab carousel (or equivalent)
  * - 'disabled': auto mode is fully unavailable — circuit breaker for incident response
@@ -1293,12 +1287,12 @@ function parseAutoModeEnabledState(value: unknown): AutoModeEnabledState {
 
 /**
  * Reads the `enabled` field from tengu_auto_mode_config (cached, may be stale).
- * Defaults to 'disabled' if GrowthBook is unavailable or the field is unset.
+ * Defaults to 'disabled' if local feature configuration is unavailable or the field is unset.
  * Other surfaces (IDE, Desktop) should call this to decide whether to surface
  * auto mode in their mode pickers.
  */
 export function getAutoModeEnabledState(): AutoModeEnabledState {
-  const config = getFeatureValue_CACHED_MAY_BE_STALE<{
+  const config = getFeatureValue<{
     enabled?: AutoModeEnabledState
   }>('tengu_auto_mode_config', {})
   return parseAutoModeEnabledState(config?.enabled)
@@ -1308,7 +1302,7 @@ const NO_CACHED_AUTO_MODE_CONFIG = Symbol('no-cached-auto-mode-config')
 
 /**
  * Like getAutoModeEnabledState but returns undefined when no cached value
- * exists (cold start, before GrowthBook init). Used by the sync
+ * exists (cold start, before local feature configuration init). Used by the sync
  * circuit-breaker check in initialPermissionModeFromCLI, which must not
  * conflate "not yet fetched" with "fetched and disabled" — the former
  * defers to verifyAutoModeGateAccess, the latter blocks immediately.
@@ -1316,7 +1310,7 @@ const NO_CACHED_AUTO_MODE_CONFIG = Symbol('no-cached-auto-mode-config')
 export function getAutoModeEnabledStateIfCached():
   | AutoModeEnabledState
   | undefined {
-  const config = getFeatureValue_CACHED_MAY_BE_STALE<
+  const config = getFeatureValue<
     { enabled?: AutoModeEnabledState } | typeof NO_CACHED_AUTO_MODE_CONFIG
   >('tengu_auto_mode_config', NO_CACHED_AUTO_MODE_CONFIG)
   if (config === NO_CACHED_AUTO_MODE_CONFIG) return undefined
@@ -1337,12 +1331,12 @@ export function hasAutoModeOptInAnySource(): boolean {
 }
 
 /**
- * Checks if bypassPermissions mode is currently disabled by Statsig gate or settings.
- * This is a synchronous version that uses cached Statsig values.
+ * Checks if bypassPermissions mode is currently disabled by local feature configuration gate or settings.
+ * This is a synchronous version that uses cached local feature configuration values.
  */
 export function isBypassPermissionsModeDisabled(): boolean {
-  const growthBookDisableBypassPermissionsMode =
-    checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
+  const featureConfigDisableBypassPermissionsMode =
+    isFeatureEnabled(
       'tengu_disable_bypass_permissions_mode',
     )
   const settings = getSettings_DEPRECATED() || {}
@@ -1350,7 +1344,7 @@ export function isBypassPermissionsModeDisabled(): boolean {
     settings.permissions?.disableBypassPermissionsMode === 'disable'
 
   return (
-    growthBookDisableBypassPermissionsMode ||
+    featureConfigDisableBypassPermissionsMode ||
     settingsDisableBypassPermissionsMode
   )
 }
@@ -1377,7 +1371,7 @@ export function createDisabledBypassPermissionsContext(
 }
 
 /**
- * Asynchronously checks if the bypassPermissions mode should be disabled based on Statsig gate
+ * Asynchronously checks if the bypassPermissions mode should be disabled based on local feature configuration gate
  * and returns an updated toolPermissionContext if needed
  */
 export async function checkAndDisableBypassPermissions(
@@ -1395,7 +1389,7 @@ export async function checkAndDisableBypassPermissions(
 
   // Gate is enabled, need to disable bypassPermissions mode
   logForDebugging(
-    'bypassPermissions mode is being disabled by Statsig gate (async check)',
+    'bypassPermissions mode is being disabled by local feature configuration gate (async check)',
     { level: 'warn' },
   )
 

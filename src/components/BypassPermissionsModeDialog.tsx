@@ -1,6 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useCallback } from 'react';
-import { logEvent } from 'src/services/analytics/index.js';
 import { Box, Link, Newline, Text } from '../ink.js';
 import { gracefulShutdownSync } from '../utils/gracefulShutdown.js';
 import { updateSettingsForSource } from '../utils/settings/settings.js';
@@ -28,7 +27,6 @@ export function BypassPermissionsModeDialog(t0) {
       bb3: switch (value) {
         case "accept":
           {
-            logEvent("tengu_bypass_permissions_mode_dialog_accept", {});
             updateSettingsForSource("userSettings", {
               skipDangerousModePermissionPrompt: true
             });
@@ -82,5 +80,4 @@ function _temp2() {
   gracefulShutdownSync(0);
 }
 function _temp() {
-  logEvent("tengu_bypass_permissions_mode_dialog_shown", {});
 }

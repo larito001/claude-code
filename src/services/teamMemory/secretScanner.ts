@@ -21,7 +21,7 @@
 import { capitalize } from '../../utils/stringUtils.js'
 
 type SecretRule = {
-  /** Gitleaks rule ID (kebab-case), used in labels and analytics */
+  /** Gitleaks rule ID (kebab-case), used in labels. */
   id: string
   /** Regex source, lazily compiled on first scan */
   source: string

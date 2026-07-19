@@ -1,9 +1,9 @@
 import { feature } from 'src/utils/features.js'
 import memoize from 'lodash-es/memoize.js'
 import {
-  checkStatsigFeatureGate_CACHED_MAY_BE_STALE,
-  getFeatureValue_CACHED_MAY_BE_STALE,
-} from 'src/services/analytics/growthbook.js'
+  isFeatureEnabled,
+  getFeatureValue,
+} from 'src/services/featureConfig.js'
 import { getIsNonInteractiveSession, getSdkBetas } from '../bootstrap/state.js'
 import {
   BEDROCK_EXTRA_PARAMS_HEADERS,
@@ -148,16 +148,16 @@ export function modelSupportsAutoMode(model: string): boolean {
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     const m = getCanonicalName(model)
     // First-party only: PI probes are not wired for
-    // Bedrock/Vertex/Foundry yet). Checked before allowModels so the GB
+    // Bedrock/Vertex/Foundry yet). Checked before allowModels so a feature
     // override can't enable auto mode on unsupported providers.
     if (getAPIProvider() !== 'firstParty') {
       return false
     }
-    // GrowthBook override: tengu_auto_mode_config.allowModels force-enables
+    // local feature configuration override: tengu_auto_mode_config.allowModels force-enables
     // auto mode for listed models, bypassing the denylist/allowlist below.
     // Exact model IDs (e.g. "claude-strudel-v6-p") match only that model;
     // canonical names (e.g. "claude-strudel") match the whole family.
-    const config = getFeatureValue_CACHED_MAY_BE_STALE<{
+    const config = getFeatureValue<{
       allowModels?: string[]
     }>('tengu_auto_mode_config', {})
     const rawLower = model.toLowerCase()
@@ -201,7 +201,7 @@ export function shouldIncludeFirstPartyOnlyBetas(): boolean {
 
 /**
  * Global-scope prompt caching is firstParty only. Foundry is excluded because
- * GrowthBook never bucketed Foundry users into the rollout experiment — the
+ * local feature configuration never bucketed Foundry users into the rollout experiment — the
  * treatment data is firstParty-only.
  */
 export function shouldUseGlobalCacheScope(): boolean {
@@ -266,12 +266,12 @@ export const getAllModelBetas = memoize((model: string): string[] => {
   // firstParty but forward to Vertex reject this header with 400.
   // github.com/deshaw/anthropic-issues/issues/5
   const strictToolsEnabled =
-    checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_tool_pear')
+    isFeatureEnabled('tengu_tool_pear')
   // 3P default: false. API rejects strict + token-efficient-tools together
   // (tool_use.py:139), so these are mutually exclusive — strict wins.
   const tokenEfficientToolsEnabled =
     !strictToolsEnabled &&
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_amber_json_tools', false)
+    getFeatureValue('tengu_amber_json_tools', false)
   if (
     includeFirstPartyOnlyBetas &&
     modelSupportsStructuredOutputs(model) &&

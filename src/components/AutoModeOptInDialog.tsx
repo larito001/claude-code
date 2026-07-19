@@ -1,6 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
 import React from 'react';
-import { logEvent } from 'src/services/analytics/index.js';
 import { Box, Link, Text } from '../ink.js';
 import { updateSettingsForSource } from '../utils/settings/settings.js';
 import { Select } from './CustomSelect/index.js';
@@ -35,7 +34,6 @@ export function AutoModeOptInDialog(t0) {
       bb3: switch (value) {
         case "accept":
           {
-            logEvent("tengu_auto_mode_opt_in_dialog_accept", {});
             updateSettingsForSource("userSettings", {
               skipAutoPermissionPrompt: true
             });
@@ -44,7 +42,6 @@ export function AutoModeOptInDialog(t0) {
           }
         case "accept-default":
           {
-            logEvent("tengu_auto_mode_opt_in_dialog_accept_default", {});
             updateSettingsForSource("userSettings", {
               skipAutoPermissionPrompt: true,
               permissions: {
@@ -56,7 +53,6 @@ export function AutoModeOptInDialog(t0) {
           }
         case "decline":
           {
-            logEvent("tengu_auto_mode_opt_in_dialog_decline", {});
             onDecline();
           }
       }
@@ -137,5 +133,4 @@ export function AutoModeOptInDialog(t0) {
   return t10;
 }
 function _temp() {
-  logEvent("tengu_auto_mode_opt_in_dialog_shown", {});
 }

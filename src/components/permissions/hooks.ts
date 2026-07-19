@@ -1,27 +1,12 @@
 import { useEffect, useRef } from 'react'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
-import { sanitizeToolNameForAnalytics } from 'src/services/analytics/metadata.js'
-import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js'
 import type { ToolUseConfirm } from '../../components/permissions/PermissionRequest.js'
 import { useSetAppState } from '../../state/AppState.js'
-import { env } from '../../utils/env.js'
-import { type CompletionType, logUnaryEvent } from '../../utils/unaryLogging.js'
-
-export type UnaryEvent = {
-  completion_type: CompletionType
-  language_name: string | Promise<string>
-}
 
 /**
- * Logs permission request events using analytics and unary logging.
- * Handles both the analytics event and the unary event logging.
+ * Count a permission prompt once for commit attribution.
  */
-export function usePermissionRequestLogging(
+export function usePermissionPromptTracking(
   toolUseConfirm: ToolUseConfirm,
-  unaryEvent: UnaryEvent,
 ): void {
   const setAppState = useSetAppState()
   // Guard against effect re-firing if toolUseConfirm's object reference
@@ -48,26 +33,5 @@ export function usePermissionRequestLogging(
         permissionPromptCount: prev.attribution.permissionPromptCount + 1,
       },
     }))
-
-    // Log analytics event
-    logEvent('tengu_tool_use_show_permission_request', {
-      messageID: toolUseConfirm.assistantMessage.message
-        .id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      toolName: sanitizeToolNameForAnalytics(toolUseConfirm.tool.name),
-      isMcp: toolUseConfirm.tool.isMcp ?? false,
-      decisionReasonType: toolUseConfirm.permissionResult.decisionReason
-        ?.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      sandboxEnabled: SandboxManager.isSandboxingEnabled(),
-    })
-
-    void logUnaryEvent({
-      completion_type: unaryEvent.completion_type,
-      event: 'response',
-      metadata: {
-        language_name: unaryEvent.language_name,
-        message_id: toolUseConfirm.assistantMessage.message.id,
-        platform: env.platform,
-      },
-    })
-  }, [toolUseConfirm, unaryEvent, setAppState])
+  }, [toolUseConfirm, setAppState])
 }

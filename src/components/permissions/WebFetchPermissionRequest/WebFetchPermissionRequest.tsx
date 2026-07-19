@@ -4,11 +4,10 @@ import { Box, Text, useTheme } from '../../../ink.js';
 import { WebFetchTool } from '../../../tools/WebFetchTool/WebFetchTool.js';
 import { shouldShowAlwaysAllowOptions } from '../../../utils/permissions/permissionsLoader.js';
 import { type OptionWithDescription, Select } from '../../CustomSelect/select.js';
-import { type UnaryEvent, usePermissionRequestLogging } from '../hooks.js';
+import { usePermissionPromptTracking } from '../hooks.js';
 import { PermissionDialog } from '../PermissionDialog.js';
 import type { PermissionRequestProps } from '../PermissionRequest.js';
 import { PermissionRuleExplanation } from '../PermissionRuleExplanation.js';
-import { logUnaryPermissionEvent } from '../utils.js';
 function inputToPermissionRuleContent(input: {
   [k: string]: unknown;
 }): string {
@@ -50,18 +49,7 @@ export function WebFetchPermissionRequest(t0) {
     t1 = $[1];
   }
   const hostname = t1.hostname;
-  let t2;
-  if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
-    t2 = {
-      completion_type: "tool_use_single",
-      language_name: "none"
-    };
-    $[2] = t2;
-  } else {
-    t2 = $[2];
-  }
-  const unaryEvent = t2;
-  usePermissionRequestLogging(toolUseConfirm, unaryEvent);
+  usePermissionPromptTracking(toolUseConfirm);
   let t3;
   if ($[3] === Symbol.for("react.memo_cache_sentinel")) {
     t3 = shouldShowAlwaysAllowOptions();
@@ -121,14 +109,12 @@ export function WebFetchPermissionRequest(t0) {
       bb8: switch (newValue) {
         case "yes":
           {
-            logUnaryPermissionEvent("tool_use_single", toolUseConfirm, "accept");
             toolUseConfirm.onAllow(toolUseConfirm.input, []);
             onDone();
             break bb8;
           }
         case "yes-dont-ask-again-domain":
           {
-            logUnaryPermissionEvent("tool_use_single", toolUseConfirm, "accept");
             const ruleContent = inputToPermissionRuleContent(toolUseConfirm.input);
             const ruleValue = {
               toolName: toolUseConfirm.tool.name,
@@ -145,7 +131,6 @@ export function WebFetchPermissionRequest(t0) {
           }
         case "no":
           {
-            logUnaryPermissionEvent("tool_use_single", toolUseConfirm, "reject");
             toolUseConfirm.onReject();
             onReject();
             onDone();

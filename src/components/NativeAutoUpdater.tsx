@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { logEvent } from 'src/services/analytics/index.js';
 import { logForDebugging } from 'src/utils/debug.js';
 import { logError } from 'src/utils/log.js';
 import { useInterval } from 'usehooks-ts';
@@ -13,33 +12,6 @@ import { installLatest } from '../utils/nativeInstaller/index.js';
 import { gt } from '../utils/semver.js';
 import { getInitialSettings } from '../utils/settings/settings.js';
 
-/**
- * Categorize error messages for analytics
- */
-function getErrorType(errorMessage: string): string {
-  if (errorMessage.includes('timeout')) {
-    return 'timeout';
-  }
-  if (errorMessage.includes('Checksum mismatch')) {
-    return 'checksum_mismatch';
-  }
-  if (errorMessage.includes('ENOENT') || errorMessage.includes('not found')) {
-    return 'not_found';
-  }
-  if (errorMessage.includes('EACCES') || errorMessage.includes('permission')) {
-    return 'permission_denied';
-  }
-  if (errorMessage.includes('ENOSPC')) {
-    return 'disk_full';
-  }
-  if (errorMessage.includes('npm')) {
-    return 'npm_error';
-  }
-  if (errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ENOTFOUND')) {
-    return 'network_error';
-  }
-  return 'unknown';
-}
 type Props = {
   isUpdating: boolean;
   onChangeIsUpdating: (isUpdating: boolean) => void;
@@ -82,10 +54,6 @@ export function NativeAutoUpdater({
       return;
     }
     onChangeIsUpdating(true);
-    const startTime = Date.now();
-
-    // Log the start of an auto-update check for funnel analysis
-    logEvent('tengu_native_auto_updater_start', {});
     try {
       // Check if current version is above the max allowed version
       const maxVersion = await getMaxVersion();
@@ -95,13 +63,8 @@ export function NativeAutoUpdater({
       }
       const result = await installLatest(channel);
       const currentVersion = MACRO.VERSION;
-      const latencyMs = Date.now() - startTime;
-
       // Handle lock contention gracefully - just return without treating as error
       if (result.lockFailed) {
-        logEvent('tengu_native_auto_updater_lock_contention', {
-          latency_ms: latencyMs
-        });
         return; // Silently skip this update check, will try again later
       }
 
@@ -111,34 +74,13 @@ export function NativeAutoUpdater({
         latest: result.latestVersion
       });
       if (result.wasUpdated) {
-        logEvent('tengu_native_auto_updater_success', {
-          latency_ms: latencyMs
-        });
         onAutoUpdaterResult({
           version: result.latestVersion,
           status: 'success'
         });
-      } else {
-        // Already up to date
-        logEvent('tengu_native_auto_updater_up_to_date', {
-          latency_ms: latencyMs
-        });
       }
     } catch (error) {
-      const latencyMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : String(error);
       logError(error);
-      const errorType = getErrorType(errorMessage);
-      logEvent('tengu_native_auto_updater_fail', {
-        latency_ms: latencyMs,
-        error_timeout: errorType === 'timeout',
-        error_checksum: errorType === 'checksum_mismatch',
-        error_not_found: errorType === 'not_found',
-        error_permission: errorType === 'permission_denied',
-        error_disk_full: errorType === 'disk_full',
-        error_npm: errorType === 'npm_error',
-        error_network: errorType === 'network_error'
-      });
       onAutoUpdaterResult({
         version: null,
         status: 'install_failed'

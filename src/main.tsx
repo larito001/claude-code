@@ -72,9 +72,7 @@ const getTeammateModeSnapshot = () => require('./utils/swarm/backends/teammateMo
 const coordinatorModeModule = feature('COORDINATOR_MODE') ? require('./coordinator/coordinatorMode.js') as typeof import('./coordinator/coordinatorMode.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { resolve } from 'path';
-import { isAnalyticsDisabled } from 'src/services/analytics/config.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
+import { getFeatureValue } from 'src/services/featureConfig.js';
 import { getOriginalCwd, setAdditionalDirectoriesForClaudeMd, setMainLoopModelOverride, setMainThreadAgentType } from './bootstrap/state.js';
 import { getCommands } from './commands.js';
 import type { StatsStore } from './context/stats.js';
@@ -92,12 +90,11 @@ import type { Message as MessageType } from './types/message.js';
 import { assertMinVersion } from './utils/autoUpdater.js';
 import { getContextWindowForModel } from './utils/context.js';
 import { loadConversationForResume } from './utils/conversationRecovery.js';
-import { hasNodeOption, isBareMode, isEnvTruthy } from './utils/envUtils.js';
+import { isBareMode, isEnvTruthy } from './utils/envUtils.js';
 import { refreshExampleCommands } from './utils/exampleCommands.js';
 import type { FpsMetrics } from './utils/fpsTracker.js';
 import { getWorktreePaths } from './utils/getWorktreePaths.js';
-import { getBranch, getIsGit, getWorktreeCount } from './utils/git.js';
-import { getGhAuthStatus } from './utils/github/ghAuthStatus.js';
+import { getBranch } from './utils/git.js';
 import { safeParseJSON } from './utils/json.js';
 import { logError } from './utils/log.js';
 import { getModelDeprecationWarning } from './utils/model/deprecation.js';
@@ -107,19 +104,14 @@ import { PERMISSION_MODES } from './utils/permissions/PermissionMode.js';
 import { checkAndDisableBypassPermissions, getAutoModeEnabledStateIfCached, initializeToolPermissionContext, initialPermissionModeFromCLI, isDefaultPermissionModeAuto, parseToolListFromCLI, stripDangerousPermissionsForAutoMode, verifyAutoModeGateAccess } from './utils/permissions/permissionSetup.js';
 import { cleanupOrphanedPluginVersionsInBackground } from './utils/plugins/cacheUtils.js';
 import { initializeVersionedPlugins } from './utils/plugins/installedPluginsManager.js';
-import { getManagedPluginNames } from './utils/plugins/managedPlugins.js';
 import { getGlobExclusionsForPluginCache } from './utils/plugins/orphanedPluginFilter.js';
-import { getPluginSeedDirs } from './utils/plugins/pluginDirectories.js';
-import { countFilesRoundedRg } from './utils/ripgrep.js';
 import { processSessionStartHooks, processSetupHooks } from './utils/sessionStart.js';
 import { cacheSessionTitle, getSessionIdFromLog, loadTranscriptFromFile, saveAgentSetting, saveMode, searchSessionsByCustomTitle, sessionIdExists } from './utils/sessionStorage.js';
 import { ensureMdmSettingsLoaded } from './utils/settings/mdm/settings.js';
-import { getInitialSettings, getManagedSettingsKeysForLogging, getSettingsForSource, getSettingsWithErrors } from './utils/settings/settings.js';
+import { getInitialSettings, getSettingsWithErrors } from './utils/settings/settings.js';
 import { resetSettingsCache } from './utils/settings/settingsCache.js';
 import type { ValidationError } from './utils/settings/validation.js';
 import { DEFAULT_TASKS_MODE_TASK_LIST_ID } from './utils/tasks.js';
-import { logPluginLoadErrors, logPluginsEnabledForSession } from './utils/telemetry/pluginTelemetry.js';
-import { logSkillsLoaded } from './utils/telemetry/skillLoadedEvent.js';
 import { generateTempFilePath } from './utils/tempfile.js';
 import { validateUuid } from './utils/uuid.js';
 // 插件启动检查现在在 REPL.tsx 中以非阻塞方式处理
@@ -129,11 +121,10 @@ import { registerMcpXaaIdpCommand } from 'src/commands/mcp/xaaIdpCommand.js';
 import { areMcpConfigsAllowedWithEnterpriseMcpConfig, doesEnterpriseMcpConfigExist, filterMcpServersByPolicy, getClaudeCodeMcpConfigs, parseMcpConfig, parseMcpConfigFromFilePath } from 'src/services/mcp/config.js';
 import { isXaaEnabled } from 'src/services/mcp/xaaIdpLogin.js';
 import { getRelevantTips } from 'src/services/tips/tipRegistry.js';
-import { logContextMetrics } from 'src/utils/api.js';
 import { registerCleanup } from 'src/utils/cleanupRegistry.js';
 import { eagerParseCliFlag } from 'src/utils/cliArgs.js';
 import { createEmptyAttributionState } from 'src/utils/commitAttribution.js';
-import { countConcurrentSessions, registerSession, updateSessionName } from 'src/utils/concurrentSessions.js';
+import { registerSession, updateSessionName } from 'src/utils/concurrentSessions.js';
 import { getCwd } from 'src/utils/cwd.js';
 import { logForDebugging, setHasFormattedOutput } from 'src/utils/debug.js';
 import { errorMessage, getErrnoCode, isENOENT, toError } from 'src/utils/errors.js';
@@ -169,7 +160,7 @@ import { filterAllowedSdkBetas } from './utils/betas.js';
 import { isInBundledMode } from './utils/bundledMode.js';
 import { logForDiagnosticsNoPII } from './utils/diagLogs.js';
 import { filterExistingPaths, getKnownPathsForRepo } from './utils/githubRepoPathMapping.js';
-import { clearPluginCache, loadAllPluginsCacheOnly } from './utils/plugins/pluginLoader.js';
+import { clearPluginCache } from './utils/plugins/pluginLoader.js';
 import { migrateChangelogFromConfig } from './utils/releaseNotes.js';
 import { SandboxManager } from './utils/sandbox/sandbox-adapter.js';
 import { shouldEnableThinkingByDefault, type ThinkingConfig } from './utils/thinking.js';
@@ -179,76 +170,10 @@ import { getTmuxInstallInstructions, isTmuxAvailable, parsePRReference } from '.
 profileCheckpoint('main_tsx_imports_loaded');
 
 /**
- * 将托管设置密钥记录到 Statsig 以进行分析。
+ * 将托管设置密钥记录到 local feature configuration 以进行分析。
  * 这在 init() 完成后调用，以确保加载设置
  * 和环境变量在模型解析之前应用。
  */
-function logManagedSettings(): void {
-  try {
-    const policySettings = getSettingsForSource('policySettings');
-    if (policySettings) {
-      const allKeys = getManagedSettingsKeysForLogging(policySettings);
-      logEvent('tengu_managed_settings_loaded', {
-        keyCount: allKeys.length,
-        keys: allKeys.join(',') as unknown as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      });
-    }
-  } catch {
-    // 默默地忽略错误 - 这仅用于分析
-  }
-}
-
-// 检查是否在调试/检查模式下运行
-/**
- * 每会话技能/插件遥测。从交互路径调用
- * 和 headless -p 路径（在 runHeadless 之前）——都经过
- * main.tsx 但在交互式启动路径之前分支，因此需要两个
- * 在此处调用站点，而不是在此处调用站点 + QueryEngine 中的站点。
- */
-function logSessionTelemetry(): void {
-  const model = parseUserSpecifiedModel(getInitialMainLoopModel() ?? getDefaultMainLoopModel());
-  void logSkillsLoaded(getCwd(), getContextWindowForModel(model, getSdkBetas()));
-  void loadAllPluginsCacheOnly().then(({
-    enabled,
-    errors
-  }) => {
-    const managedNames = getManagedPluginNames();
-    logPluginsEnabledForSession(enabled, managedNames, getPluginSeedDirs());
-    logPluginLoadErrors(errors, managedNames);
-  }).catch(err => logError(err));
-}
-function getCertEnvVarTelemetry(): Record<string, boolean> {
-  const result: Record<string, boolean> = {};
-  if (process.env.NODE_EXTRA_CA_CERTS) {
-    result.has_node_extra_ca_certs = true;
-  }
-  if (process.env.CLAUDE_CODE_CLIENT_CERT) {
-    result.has_client_cert = true;
-  }
-  if (hasNodeOption('--use-system-ca')) {
-    result.has_use_system_ca = true;
-  }
-  if (hasNodeOption('--use-openssl-ca')) {
-    result.has_use_openssl_ca = true;
-  }
-  return result;
-}
-async function logStartupTelemetry(): Promise<void> {
-  if (isAnalyticsDisabled()) return;
-  const [isGit, worktreeCount, ghAuthStatus] = await Promise.all([getIsGit(), getWorktreeCount(), getGhAuthStatus()]);
-  logEvent('tengu_startup_telemetry', {
-    is_git: isGit,
-    worktree_count: worktreeCount,
-    gh_auth_status: ghAuthStatus as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    sandbox_enabled: SandboxManager.isSandboxingEnabled(),
-    are_unsandboxed_commands_allowed: SandboxManager.areUnsandboxedCommandsAllowed(),
-    is_auto_bash_allowed_if_sandbox_enabled: SandboxManager.isAutoAllowBashIfSandboxedEnabled(),
-    auto_updater_disabled: isAutoUpdaterDisabled(),
-    prefers_reduced_motion: getInitialSettings().prefersReducedMotion ?? false,
-    ...getCertEnvVarTelemetry()
-  });
-}
-
 // @[MODEL LAUNCH]：考虑模型字符串可能需要的任何迁移。有关示例，请参阅 migrateSonnet1mToSonnet45.ts。
 // 添加新的同步迁移时请更改此设置，以便现有用户重新运行该集。
 const CURRENT_MIGRATION_VERSION = 11;
@@ -333,9 +258,7 @@ export function startDeferredPrefetches(): void {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) && !isEnvTruthy(process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH)) {
     void prefetchGcpCredentialsIfSafe();
   }
-  void countFilesRoundedRg(getCwd(), AbortSignal.timeout(3000), []);
-
-  // 分析和功能标志初始化
+  // 后台能力预取
   void prefetchOfficialMcpUrls();
   void refreshModelCapabilities();
 
@@ -600,11 +523,7 @@ async function run(): Promise<CommanderCommand> {
       process.title = 'claude';
     }
 
-    // Attach logging sinks so subcommand handlers can use logEvent/logError.
-    // Before PR #11106 logEvent dispatched directly; after, events queue until
-    // a sink attaches. setup() attaches sinks for the default command, but
-    // subcommands (doctor, mcp, plugin, auth) never call setup() and would
-    // silently drop events on process.exit(). Both inits are idempotent.
+    // Attach the error sink for subcommands that bypass setup().
     const {
       initSinks
     } = await import('./utils/sinks.js');
@@ -677,17 +596,9 @@ async function run(): Promise<CommanderCommand> {
 
     // Ignore "code" as a prompt - treat it the same as no prompt
     if (prompt === 'code') {
-      logEvent('tengu_code_prompt_ignored', {});
       // biome-ignore lint/suspicious/noConsole:: intentional console output
       console.warn(chalk.yellow('Tip: You can launch Claude Code with just `claude`'));
       prompt = undefined;
-    }
-
-    // Log event for any single-word prompt
-    if (prompt && typeof prompt === 'string' && !/\s/.test(prompt) && prompt.length > 0) {
-      logEvent('tengu_single_word_prompt', {
-        length: prompt.length
-      });
     }
 
     const {
@@ -1056,7 +967,7 @@ async function run(): Promise<CommanderCommand> {
     if (feature('MCP_CHANNELS')) {
       // Parse plugin:name@marketplace / server:Y tags into typed entries.
       // Tag decides trust model downstream: plugin-kind hits marketplace
-      // verification + GrowthBook allowlist, server-kind always fails
+      // verification + local feature configuration allowlist, server-kind always fails
       // allowlist (schema is plugin-only) unless dev flag is set.
       // Untagged or marketplace-less plugin entries are hard errors —
       // silently not-matching in the gate would look like channels are
@@ -1112,24 +1023,6 @@ async function run(): Promise<CommanderCommand> {
         if (rawDev && rawDev.length > 0) {
           devChannels = parseChannelEntries(rawDev, '--dangerously-load-development-channels');
         }
-      }
-      // Flag-usage telemetry. Plugin identifiers are logged (same tier as
-      // tengu_plugin_installed — public-registry-style names); server-kind
-      // names are not (MCP-server-name tier, opt-in-only elsewhere).
-      // Per-server gate outcomes land in tengu_mcp_channel_gate once
-      // servers connect. Dev entries go through a confirmation dialog after
-      // this — dev_plugins captures what was typed, not what was accepted.
-      if (channelEntries.length > 0 || (devChannels?.length ?? 0) > 0) {
-        const joinPluginIds = (entries: ChannelEntry[]) => {
-          const ids = entries.flatMap(e => e.kind === 'plugin' ? [`${e.name}@${e.marketplace}`] : []);
-          return ids.length > 0 ? ids.sort().join(',') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS : undefined;
-        };
-        logEvent('tengu_mcp_channel_flags', {
-          channels_count: channelEntries.length,
-          dev_count: devChannels?.length ?? 0,
-          plugins: joinPluginIds(channelEntries),
-          dev_plugins: joinPluginIds(devChannels ?? [])
-        });
       }
     }
 
@@ -1244,14 +1137,6 @@ async function run(): Promise<CommanderCommand> {
         // This tool is excluded from normal filtering (see tools.ts) because it's
         // an implementation detail for structured output, not a user-controlled tool.
         tools = [...tools, syntheticOutputResult.tool];
-        logEvent('tengu_structured_output_enabled', {
-          schema_property_count: Object.keys(jsonSchema.properties as Record<string, unknown> || {}).length as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          has_required_fields: Boolean(jsonSchema.required) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
-      } else {
-        logEvent('tengu_structured_output_failure', {
-          error: 'Invalid JSON schema' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
       }
     }
 
@@ -1386,16 +1271,6 @@ async function run(): Promise<CommanderCommand> {
     // Store the main thread agent type in bootstrap state so hooks can access it
     setMainThreadAgentType(mainThreadAgentDefinition?.agentType);
 
-    // Log agent flag usage — only log agent name for built-in agents to avoid leaking custom agent names
-    if (mainThreadAgentDefinition) {
-      logEvent('tengu_agent_flag', {
-        agentType: isBuiltInAgent(mainThreadAgentDefinition) ? mainThreadAgentDefinition.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS : 'custom' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        ...(agentCli && {
-          source: 'cli' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        })
-      });
-    }
-
     // Persist agent setting to session transcript for resume view display and restoration
     if (mainThreadAgentDefinition?.agentType) {
       saveAgentSetting(mainThreadAgentDefinition.agentType);
@@ -1475,14 +1350,6 @@ async function run(): Promise<CommanderCommand> {
           customPrompt = customAgent.getSystemPrompt();
         }
 
-        // Log agent memory loaded event for tmux teammates
-        if (customAgent.memory) {
-          logEvent('tengu_agent_memory_loaded', {
-            agent_type: customAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            scope: customAgent.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            source: 'teammate' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-          });
-        }
         if (customPrompt) {
           const customInstructions = `\n# Custom Agent Instructions\n${customPrompt}`;
           appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${customInstructions}` : customInstructions;
@@ -1522,10 +1389,6 @@ async function run(): Promise<CommanderCommand> {
       // from REPL's first render (the old location) included however long
       // the user sat on trust/OAuth/onboarding/resume-picker — p99 was ~70s
       // dominated by dialog-wait time, not code-path startup.
-      logEvent('tengu_timer', {
-        event: 'startup' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        durationMs: Math.round(process.uptime() * 1000)
-      });
       logForDebugging('[STARTUP] Running showSetupScreens()...');
       const setupScreensStart = Date.now();
       await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, commands, devChannels);
@@ -1569,13 +1432,13 @@ async function run(): Promise<CommanderCommand> {
     // --bare / SIMPLE: skip — these are cache-warms for the REPL's
     // first-turn responsiveness. Fast
     // mode doesn't apply to the Agent SDK anyway (see getFastModeUnavailableReason).
-    const bgRefreshThrottleMs = getFeatureValue_CACHED_MAY_BE_STALE('tengu_cicada_nap_ms', 0);
+    const bgRefreshThrottleMs = getFeatureValue('tengu_cicada_nap_ms', 0);
     const lastPrefetched = getGlobalConfig().startupPrefetchedAt ?? 0;
     const skipStartupPrefetches = isBareMode() || bgRefreshThrottleMs > 0 && Date.now() - lastPrefetched < bgRefreshThrottleMs;
     if (!skipStartupPrefetches) {
       const lastPrefetchedInfo = lastPrefetched > 0 ? ` last ran ${Math.round((Date.now() - lastPrefetched) / 1000)}s ago` : '';
       logForDebugging(`Starting background startup prefetches${lastPrefetchedInfo}`);
-      if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_miraculo_the_bard', false)) {
+      if (!getFeatureValue('tengu_miraculo_the_bard', false)) {
         void prefetchFastModeStatus();
       } else {
         // Kill switch skips the network call, not org-policy enforcement.
@@ -1696,36 +1559,8 @@ async function run(): Promise<CommanderCommand> {
     registerCleanup(async () => {
       logForDiagnosticsNoPII('info', 'exited');
     });
-    void logTenguInit({
-      hasInitialPrompt: Boolean(prompt),
-      hasStdin: Boolean(inputPrompt),
-      verbose,
-      debug,
-      debugToStderr,
-      print: print ?? false,
-      outputFormat: outputFormat ?? 'text',
-      inputFormat: inputFormat ?? 'text',
-      numAllowedTools: allowedTools.length,
-      numDisallowedTools: disallowedTools.length,
-      mcpClientCount: Object.keys(allMcpConfigs).length,
-      worktreeEnabled,
-      skipWebFetchPreflight: getInitialSettings().skipWebFetchPreflight,
-      githubActionInputs: process.env.GITHUB_ACTION_INPUTS,
-      dangerouslySkipPermissionsPassed: dangerouslySkipPermissions ?? false,
-      permissionMode,
-      modeIsBypass: permissionMode === 'bypassPermissions',
-      allowDangerouslySkipPermissionsPassed: allowDangerouslySkipPermissions,
-      systemPromptFlag: systemPrompt ? options.systemPromptFile ? 'file' : 'flag' : undefined,
-      appendSystemPromptFlag: appendSystemPrompt ? options.appendSystemPromptFile ? 'file' : 'flag' : undefined,
-      thinkingConfig
-    });
-
-    // Log context metrics once at initialization
-    void logContextMetrics(regularMcpConfigs, toolPermissionContext);
-    logManagedSettings();
-
     // Register PID file for concurrent-session detection (~/.claude/sessions/)
-    // and fire multi-clauding telemetry. Lives here (not init.ts) so only the
+    // for the interactive path. Lives here (not init.ts) so only the
     // REPL path registers — not subcommands like `claude doctor`. Chained:
     // count must run after register's write completes or it misses our own file.
     void registerSession().then(registered => {
@@ -1733,13 +1568,6 @@ async function run(): Promise<CommanderCommand> {
       if (sessionNameArg) {
         void updateSessionName(sessionNameArg);
       }
-      void countConcurrentSessions().then(count => {
-        if (count >= 2) {
-          logEvent('tengu_concurrent_sessions', {
-            num_sessions: count
-          });
-        }
-      });
     });
 
     // Initialize versioned plugins system (triggers V1→V2 migration if
@@ -1753,14 +1581,12 @@ async function run(): Promise<CommanderCommand> {
     // are install/upgrade bookkeeping that scripted calls don't need —
     // the next interactive session will reconcile. The await here was
     // blocking -p on a marketplace round-trip.
-    if (isBareMode()) {
-      // skip — no-op
-    } else if (isNonInteractiveSession) {
+    if (!isBareMode() && isNonInteractiveSession) {
       // In headless mode, await to ensure plugin sync completes before CLI exits
       await initializeVersionedPlugins();
       profileCheckpoint('action_after_plugins_init');
       void cleanupOrphanedPluginVersionsInBackground().then(() => getGlobExclusionsForPluginCache());
-    } else {
+    } else if (!isBareMode()) {
       // In interactive mode, fire-and-forget — this is purely bookkeeping
       // that doesn't affect runtime behavior of the current session
       void initializeVersionedPlugins().then(async () => {
@@ -1834,7 +1660,7 @@ async function run(): Promise<CommanderCommand> {
       // Init app state
       const headlessStore = createStore(headlessInitialState, onChangeAppState);
 
-      // Check if bypassPermissions should be disabled based on Statsig gate
+      // Check if bypassPermissions should be disabled based on local feature configuration gate
       // This runs in parallel to the code below, to avoid blocking the main loop.
       if (toolPermissionContext.mode === 'bypassPermissions' || allowDangerouslySkipPermissions) {
         void checkAndDisableBypassPermissions(toolPermissionContext);
@@ -1916,7 +1742,6 @@ async function run(): Promise<CommanderCommand> {
         startDeferredPrefetches();
         void import('./utils/backgroundHousekeeping.js').then(m => m.startBackgroundHousekeeping());
       }
-      logSessionTelemetry();
       profileCheckpoint('before_print_import');
       const {
         runHeadless
@@ -1955,12 +1780,6 @@ async function run(): Promise<CommanderCommand> {
     }
 
     // Log model config at startup
-    logEvent('tengu_startup_manual_model_config', {
-      cli_flag: options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      env_var: process.env.ANTHROPIC_MODEL as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      settings_file: (getInitialSettings() || {}).model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      agent: agentSetting as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-    });
 
     // Get deprecation warning for the initial model (resolvedInitialModel computed earlier for hooks parallelization)
     const deprecationWarning = getModelDeprecationWarning(resolvedInitialModel);
@@ -2088,10 +1907,6 @@ async function run(): Promise<CommanderCommand> {
       ...current,
       numStartups: (current.numStartups ?? 0) + 1
     }));
-    setImmediate(() => {
-      void logStartupTelemetry();
-      logSessionTelemetry();
-    });
 
     const sessionConfig = {
       debug: debug || debugToStderr,
@@ -2120,7 +1935,6 @@ async function run(): Promise<CommanderCommand> {
     };
     if (options.continue) {
       // Continue the most recent conversation directly
-      let resumeSucceeded = false;
       try {
         const resumeStart = performance.now();
 
@@ -2131,9 +1945,6 @@ async function run(): Promise<CommanderCommand> {
         clearSessionCaches();
         const result = await loadConversationForResume(undefined /* sessionId */, undefined /* sourceFile */);
         if (!result) {
-          logEvent('tengu_continue', {
-            success: false
-          });
           return await exitWithError(root, 'No conversation found to continue');
         }
         const loaded = await processResumedConversation(result, {
@@ -2145,11 +1956,6 @@ async function run(): Promise<CommanderCommand> {
           mainThreadAgentDefinition = loaded.restoredAgentDef;
         }
         maybeActivateProactive(options);
-        logEvent('tengu_continue', {
-          success: true,
-          resume_duration_ms: Math.round(performance.now() - resumeStart)
-        });
-        resumeSucceeded = true;
         await launchRepl(root, {
           getFpsMetrics,
           stats,
@@ -2164,11 +1970,6 @@ async function run(): Promise<CommanderCommand> {
           initialAgentColor: loaded.agentColor
         }, renderAndRun);
       } catch (error) {
-        if (!resumeSucceeded) {
-          logEvent('tengu_continue', {
-            success: false
-          });
-        }
         logError(error);
         process.exit(1);
       }
@@ -2238,18 +2039,9 @@ async function run(): Promise<CommanderCommand> {
               if (processedResume.restoredAgentDef) {
                 mainThreadAgentDefinition = processedResume.restoredAgentDef;
               }
-              logEvent('tengu_session_resumed', {
-                entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                success: true,
-                resume_duration_ms: Math.round(performance.now() - resumeStart)
-              });
             }
           }
         } catch (error) {
-          logEvent('tengu_session_resumed', {
-            entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            success: false
-          });
           logError(error);
           await exitWithError(root, `Unable to load transcript from file: ${options.resume}`, () => gracefulShutdown(1));
         }
@@ -2265,10 +2057,6 @@ async function run(): Promise<CommanderCommand> {
           // Otherwise fall back to sessionId string (for direct UUID resume)
           const result = await loadConversationForResume(matchedLog ?? sessionId, undefined);
           if (!result) {
-            logEvent('tengu_session_resumed', {
-              entrypoint: 'cli_flag' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              success: false
-            });
             return await exitWithError(root, `No conversation found with session ID: ${sessionId}`);
           }
           const fullPath = matchedLog?.fullPath ?? result.fullPath;
@@ -2280,16 +2068,7 @@ async function run(): Promise<CommanderCommand> {
           if (processedResume.restoredAgentDef) {
             mainThreadAgentDefinition = processedResume.restoredAgentDef;
           }
-          logEvent('tengu_session_resumed', {
-            entrypoint: 'cli_flag' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            success: true,
-            resume_duration_ms: Math.round(performance.now() - resumeStart)
-          });
         } catch (error) {
-          logEvent('tengu_session_resumed', {
-            entrypoint: 'cli_flag' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            success: false
-          });
           logError(error);
           await exitWithError(root, `Failed to resume session ${sessionId}`);
         }
@@ -2391,7 +2170,7 @@ async function run(): Promise<CommanderCommand> {
   program.addOption(new Option('--team-name <name>', 'Team name for swarm coordination').hideHelp());
   program.addOption(new Option('--agent-color <color>', 'Teammate UI color').hideHelp());
   program.addOption(new Option('--plan-mode-required', 'Require plan mode before implementation').hideHelp());
-  program.addOption(new Option('--parent-session-id <id>', 'Parent session ID for analytics correlation').hideHelp());
+  program.addOption(new Option('--parent-session-id <id>', 'Parent session ID for agent coordination').hideHelp());
   program.addOption(new Option('--teammate-mode <mode>', 'How to spawn teammates: "tmux", "in-process", or "auto"').choices(['auto', 'tmux', 'in-process']).hideHelp());
   program.addOption(new Option('--agent-type <type>', 'Custom agent type for this teammate').hideHelp());
 
@@ -2616,7 +2395,7 @@ async function run(): Promise<CommanderCommand> {
   });
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     // Skip when tengu_auto_mode_config.enabled === 'disabled' (circuit breaker).
-    // Reads from disk cache — GrowthBook isn't initialized at registration time.
+    // Reads from disk cache — local feature configuration isn't initialized at registration time.
     if (getAutoModeEnabledStateIfCached() !== 'disabled') {
       const autoModeCmd = program.command('auto-mode').description('Inspect auto mode classifier configuration');
       autoModeCmd.command('defaults').description('Print the default auto mode environment, allow, and deny rules as JSON').action(async () => {
@@ -2683,92 +2462,9 @@ async function run(): Promise<CommanderCommand> {
   // Record final checkpoint for total_time calculation
   profileCheckpoint('main_after_run');
 
-  // Log startup perf to Statsig (sampled) and output detailed report if enabled
+  // Log startup perf to local feature configuration (sampled) and output detailed report if enabled
   profileReport();
   return program;
-}
-async function logTenguInit({
-  hasInitialPrompt,
-  hasStdin,
-  verbose,
-  debug,
-  debugToStderr,
-  print,
-  outputFormat,
-  inputFormat,
-  numAllowedTools,
-  numDisallowedTools,
-  mcpClientCount,
-  worktreeEnabled,
-  skipWebFetchPreflight,
-  githubActionInputs,
-  dangerouslySkipPermissionsPassed,
-  permissionMode,
-  modeIsBypass,
-  allowDangerouslySkipPermissionsPassed,
-  systemPromptFlag,
-  appendSystemPromptFlag,
-  thinkingConfig
-}: {
-  hasInitialPrompt: boolean;
-  hasStdin: boolean;
-  verbose: boolean;
-  debug: boolean;
-  debugToStderr: boolean;
-  print: boolean;
-  outputFormat: string;
-  inputFormat: string;
-  numAllowedTools: number;
-  numDisallowedTools: number;
-  mcpClientCount: number;
-  worktreeEnabled: boolean;
-  skipWebFetchPreflight: boolean | undefined;
-  githubActionInputs: string | undefined;
-  dangerouslySkipPermissionsPassed: boolean;
-  permissionMode: string;
-  modeIsBypass: boolean;
-  allowDangerouslySkipPermissionsPassed: boolean;
-  systemPromptFlag: 'file' | 'flag' | undefined;
-  appendSystemPromptFlag: 'file' | 'flag' | undefined;
-  thinkingConfig: ThinkingConfig;
-}): Promise<void> {
-  try {
-    logEvent('tengu_init', {
-      entrypoint: 'claude' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      hasInitialPrompt,
-      hasStdin,
-      verbose,
-      debug,
-      debugToStderr,
-      print,
-      outputFormat: outputFormat as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      inputFormat: inputFormat as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      numAllowedTools,
-      numDisallowedTools,
-      mcpClientCount,
-      worktree: worktreeEnabled,
-      skipWebFetchPreflight,
-      ...(githubActionInputs && {
-        githubActionInputs: githubActionInputs as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      dangerouslySkipPermissionsPassed,
-      permissionMode: permissionMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      modeIsBypass,
-      allowDangerouslySkipPermissionsPassed,
-      thinkingType: thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...(systemPromptFlag && {
-        systemPromptFlag: systemPromptFlag as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      ...(appendSystemPromptFlag && {
-        appendSystemPromptFlag: appendSystemPromptFlag as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      is_simple: isBareMode() || undefined,
-      is_coordinator: feature('COORDINATOR_MODE') && coordinatorModeModule?.isCoordinatorMode() ? true : undefined,
-      autoUpdatesChannel: (getInitialSettings().autoUpdatesChannel ?? 'latest') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-    });
-  } catch (error) {
-    logError(error);
-  }
 }
 function maybeActivateProactive(options: unknown): void {
   if ((feature('PROACTIVE')) && ((options as {

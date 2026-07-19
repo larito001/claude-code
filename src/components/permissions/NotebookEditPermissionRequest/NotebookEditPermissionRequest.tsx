@@ -15,7 +15,6 @@ export function NotebookEditPermissionRequest(props) {
   let T0;
   let T1;
   let T2;
-  let language;
   let notebook_path;
   let parsed;
   let t0;
@@ -33,11 +32,9 @@ export function NotebookEditPermissionRequest(props) {
     parsed = parseInput(props.toolUseConfirm.input);
     const {
       notebook_path: t11,
-      edit_mode,
-      cell_type
+      edit_mode
     } = parsed;
     notebook_path = t11;
-    language = cell_type === "markdown" ? "markdown" : "python";
     const editTypeText = edit_mode === "insert" ? "insert this cell into" : edit_mode === "delete" ? "delete this cell from" : "make this edit to";
     T2 = FilePermissionDialog;
     t5 = props.toolUseConfirm;
@@ -61,7 +58,6 @@ export function NotebookEditPermissionRequest(props) {
     $[5] = T0;
     $[6] = T1;
     $[7] = T2;
-    $[8] = language;
     $[9] = notebook_path;
     $[10] = parsed;
     $[11] = t0;
@@ -79,7 +75,6 @@ export function NotebookEditPermissionRequest(props) {
     T0 = $[5];
     T1 = $[6];
     T2 = $[7];
-    language = $[8];
     notebook_path = $[9];
     parsed = $[10];
     t0 = $[11];
@@ -132,10 +127,9 @@ export function NotebookEditPermissionRequest(props) {
     t14 = $[39];
   }
   let t15;
-  if ($[40] !== T2 || $[41] !== language || $[42] !== notebook_path || $[43] !== t10 || $[44] !== t12 || $[45] !== t14 || $[46] !== t5 || $[47] !== t6 || $[48] !== t7 || $[49] !== t8 || $[50] !== t9) {
-    t15 = <T2 toolUseConfirm={t5} toolUseContext={t6} onDone={t7} onReject={t8} workerBadge={t9} title={t10} question={t12} content={t14} path={notebook_path} completionType="tool_use_single" languageName={language} parseInput={parseInput} />;
+  if ($[40] !== T2 || $[42] !== notebook_path || $[43] !== t10 || $[44] !== t12 || $[45] !== t14 || $[46] !== t5 || $[47] !== t6 || $[48] !== t7 || $[49] !== t8 || $[50] !== t9) {
+    t15 = <T2 toolUseConfirm={t5} toolUseContext={t6} onDone={t7} onReject={t8} workerBadge={t9} title={t10} question={t12} content={t14} path={notebook_path} parseInput={parseInput} />;
     $[40] = T2;
-    $[41] = language;
     $[42] = notebook_path;
     $[43] = t10;
     $[44] = t12;

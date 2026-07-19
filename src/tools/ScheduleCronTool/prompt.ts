@@ -14,14 +14,14 @@ export const DEFAULT_MAX_AGE_DAYS =
  * imperative setup, never at module scope — so the disk cache has had a
  * chance to populate.
  *
- * The default is `true` — /loop is GA (announced in changelog). GrowthBook
+ * The default is `true` — /loop is GA (announced in changelog). local feature configuration
  * is disabled for Bedrock/Vertex/Foundry and when DISABLE_TELEMETRY /
  * CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC are set; a `false` default would
- * break /loop for those users (GH #31759). The GB gate now serves purely as
+ * break /loop for those users (GH #31759). The feature gate serves as
  * a fleet-wide kill switch — flipping it to `false` stops already-running
  * schedulers on their next isKilled poll tick, not just new ones.
  *
- * `CLAUDE_CODE_DISABLE_CRON` is a local override that wins over GB.
+ * `CLAUDE_CODE_DISABLE_CRON` is the highest-priority local override.
  */
 export function isCronSchedulingEnabled(): boolean {
   return (

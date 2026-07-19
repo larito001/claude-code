@@ -25,10 +25,6 @@ import {
 import omit from 'lodash-es/omit.js'
 import reject from 'lodash-es/reject.js'
 import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
-import {
   getClaudeCodeMcpConfigs,
   isMcpServerDisabled,
   setMcpServerEnabled,
@@ -36,7 +32,6 @@ import {
 import type { AppState } from 'src/state/AppState.js'
 import type { PluginError } from 'src/types/plugin.js'
 import { logForDebugging } from 'src/utils/debug.js'
-import { getAllowedChannels } from '../../bootstrap/state.js'
 import { useNotifications } from '../../context/notifications.js'
 import {
   useAppState,
@@ -51,7 +46,6 @@ import {
   CHANNEL_PERMISSION_METHOD,
   ChannelMessageNotificationSchema,
   ChannelPermissionNotificationSchema,
-  findChannelEntry,
   gateChannelServer,
   wrapChannelMessage,
 } from './channelNotification.js'
@@ -159,7 +153,7 @@ export function useManageMCPConnections(
     if (feature('MCP_CHANNELS')) {
       const callbacks = channelPermCallbacksRef.current
       if (!callbacks) return
-      // GrowthBook runtime gate — separate from channels so channels can
+      // local feature configuration runtime gate — separate from channels so channels can
       // ship without this. Checked at mount; mid-session flips need restart.
       // If off, callbacks never go into AppState → interactiveHandler sees
       // undefined → never sends → intercept has nothing pending → "yes tbxkq"
@@ -455,31 +449,6 @@ export function useManageMCPConnections(
               client.capabilities,
               client.config.pluginSource,
             )
-            const entry = findChannelEntry(client.name, getAllowedChannels())
-            // Plugin identifier for telemetry — log name@marketplace for any
-            // plugin-kind entry (same tier as tengu_plugin_installed, which
-            // logs arbitrary plugin_id+marketplace_name ungated). server-kind
-            // names are MCP-server-name tier; those are opt-in-only elsewhere
-            // (see isAnalyticsToolDetailsLoggingEnabled in metadata.ts) and
-            // stay unlogged here. is_dev/entry_kind segment the rest.
-            const pluginId =
-              entry?.kind === 'plugin'
-                ? (`${entry.name}@${entry.marketplace}` as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-                : undefined
-            // Skip capability-miss — every non-channel MCP server trips it.
-            if (gate.action === 'register' || gate.kind !== 'capability') {
-              logEvent('tengu_mcp_channel_gate', {
-                registered: gate.action === 'register',
-                skip_kind:
-                  gate.action === 'skip'
-                    ? (gate.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-                    : undefined,
-                entry_kind:
-                  entry?.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                is_dev: entry?.dev ?? false,
-                plugin: pluginId,
-              })
-            }
             switch (gate.action) {
               case 'register':
                 logMCPDebug(client.name, 'Channel notifications registered')
@@ -491,14 +460,6 @@ export function useManageMCPConnections(
                       client.name,
                       `notifications/claude/channel: ${content.slice(0, 80)}`,
                     )
-                    logEvent('tengu_mcp_channel_message', {
-                      content_length: content.length,
-                      meta_key_count: Object.keys(meta ?? {}).length,
-                      entry_kind:
-                        entry?.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                      is_dev: entry?.dev ?? false,
-                      plugin: pluginId,
-                    })
                     enqueue({
                       mode: 'prompt',
                       value: wrapChannelMessage(client.name, content, meta),
@@ -602,35 +563,8 @@ export function useManageMCPConnections(
                   `Received tools/list_changed notification, refreshing tools`,
                 )
                 try {
-                  // Grab cached promise before invalidating to log previous count
-                  const previousToolsPromise = fetchToolsForClient.cache.get(
-                    client.name,
-                  )
                   fetchToolsForClient.cache.delete(client.name)
                   const newTools = await fetchToolsForClient(client)
-                  const newCount = newTools.length
-                  if (previousToolsPromise) {
-                    previousToolsPromise.then(
-                      (previousTools: Tool[]) => {
-                        logEvent('tengu_mcp_list_changed', {
-                          type: 'tools' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                          previousCount: previousTools.length,
-                          newCount,
-                        })
-                      },
-                      () => {
-                        logEvent('tengu_mcp_list_changed', {
-                          type: 'tools' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                          newCount,
-                        })
-                      },
-                    )
-                  } else {
-                    logEvent('tengu_mcp_list_changed', {
-                      type: 'tools' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                      newCount,
-                    })
-                  }
                   updateServer({ ...client, tools: newTools })
                 } catch (error) {
                   logMCPError(
@@ -650,9 +584,6 @@ export function useManageMCPConnections(
                   client.name,
                   `Received prompts/list_changed notification, refreshing prompts`,
                 )
-                logEvent('tengu_mcp_list_changed', {
-                  type: 'prompts' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                })
                 try {
                   // Skills come from resources, not prompts — don't invalidate their
                   // cache here. fetchMcpSkillsForClient returns the cached result.
@@ -682,9 +613,6 @@ export function useManageMCPConnections(
                   client.name,
                   `Received resources/list_changed notification, refreshing resources`,
                 )
-                logEvent('tengu_mcp_list_changed', {
-                  type: 'resources' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                })
                 try {
                   fetchResourcesForClient.cache.delete(client.name)
                   const newResources = await fetchResourcesForClient(client)
@@ -850,9 +778,6 @@ export function useManageMCPConnections(
         else if (serverConfig.scope === 'local') counts.user++
         else if (serverConfig.scope === 'dynamic') counts.plugin++
       }
-      logEvent('tengu_mcp_servers', {
-        ...counts,
-      })
     }
 
     void loadAndConnectMcpConfigs()

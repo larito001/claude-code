@@ -105,9 +105,7 @@ export function GenerateStep(): ReactNode {
       goToStep(6);
     } catch (err) {
       // Don't show error if it was cancelled (already set in escape handler)
-      if (err instanceof APIUserAbortError) {
-        // User cancelled - no error to show
-      } else if (err instanceof Error && !err.message.includes('No assistant message found')) {
+      if (!(err instanceof APIUserAbortError) && err instanceof Error && !err.message.includes('No assistant message found')) {
         setError(err.message || 'Failed to generate agent');
       }
       updateWizardData({

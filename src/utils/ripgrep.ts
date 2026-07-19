@@ -2,9 +2,7 @@ import type { ChildProcess, ExecFileException } from 'child_process'
 import { execFile, spawn } from 'child_process'
 import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
-import { homedir } from 'os'
 import * as path from 'path'
-import { logEvent } from 'src/services/analytics/index.js'
 import { fileURLToPath } from 'url'
 import { isInBundledMode } from './bundledMode.js'
 import { logForDebugging } from './debug.js'
@@ -237,55 +235,6 @@ function ripGrepRaw(
 }
 
 /**
- * Stream-count lines from `rg --files` without buffering stdout.
- *
- * On large repos (e.g. 247k files, 16MB of paths), calling `ripGrep()` just
- * to read `.length` materializes the full stdout string plus a 247k-element
- * array. This counts newline bytes per chunk instead; peak memory is one
- * stream chunk (~64KB).
- *
- * Intentionally minimal: the only caller is telemetry (countFilesRoundedRg),
- * which swallows all errors. No EAGAIN retry, no stderr capture, no internal
- * timeout (callers pass AbortSignal.timeout; spawn's signal option kills rg).
- */
-async function ripGrepFileCount(
-  args: string[],
-  target: string,
-  abortSignal: AbortSignal,
-): Promise<number> {
-  await codesignRipgrepIfNecessary()
-  const { rgPath, rgArgs, argv0 } = ripgrepCommand()
-
-  return new Promise<number>((resolve, reject) => {
-    const child = spawn(rgPath, [...rgArgs, ...args, target], {
-      argv0,
-      signal: abortSignal,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-
-    let lines = 0
-    child.stdout?.on('data', (chunk: Buffer) => {
-      lines += countCharInString(chunk, '\n')
-    })
-
-    // On Windows, both 'close' and 'error' can fire for the same process.
-    let settled = false
-    child.on('close', code => {
-      if (settled) return
-      settled = true
-      if (code === 0 || code === 1) resolve(lines)
-      else reject(new Error(`rg --files exited ${code}`))
-    })
-    child.on('error', err => {
-      if (settled) return
-      settled = true
-      reject(err)
-    })
-  })
-}
-
-/**
  * Stream lines from ripgrep as they arrive, calling `onLines` per stdout chunk.
  *
  * Unlike `ripGrep()` which buffers the entire stdout, this flushes complete
@@ -400,7 +349,6 @@ export async function ripGrep(
         logForDebugging(
           `rg EAGAIN error detected, retrying with single-threaded mode (-j 1)`,
         )
-        logEvent('tengu_ripgrep_eagain_retry', {})
         ripGrepRaw(
           args,
           target,
@@ -466,72 +414,6 @@ export async function ripGrep(
     })
   })
 }
-
-/**
- * Count files in a directory recursively using ripgrep and round to the nearest power of 10 for privacy
- *
- * This is much more efficient than using native Node.js methods for counting files
- * in large directories since it uses ripgrep's highly optimized file traversal.
- *
- * @param path Directory path to count files in
- * @param abortSignal AbortSignal to cancel the operation
- * @param ignorePatterns Optional additional patterns to ignore (beyond .gitignore)
- * @returns Approximate file count rounded to the nearest power of 10
- */
-export const countFilesRoundedRg = memoize(
-  async (
-    dirPath: string,
-    abortSignal: AbortSignal,
-    ignorePatterns: string[] = [],
-  ): Promise<number | undefined> => {
-    // Skip file counting if we're in the home directory to avoid triggering
-    // macOS TCC permission dialogs for Desktop, Downloads, Documents, etc.
-    if (path.resolve(dirPath) === path.resolve(homedir())) {
-      return undefined
-    }
-
-    try {
-      // Build ripgrep arguments:
-      // --files: List files that would be searched (rather than searching them)
-      // --count: Only print a count of matching lines for each file
-      // --no-ignore-parent: Don't respect ignore files in parent directories
-      // --hidden: Search hidden files and directories
-      const args = ['--files', '--hidden']
-
-      // Add ignore patterns if provided
-      ignorePatterns.forEach(pattern => {
-        args.push('--glob', `!${pattern}`)
-      })
-
-      const count = await ripGrepFileCount(args, dirPath, abortSignal)
-
-      // Round to nearest power of 10 for privacy
-      if (count === 0) return 0
-
-      const magnitude = Math.floor(Math.log10(count))
-      const power = Math.pow(10, magnitude)
-
-      // Round to nearest power of 10
-      // e.g., 8 -> 10, 42 -> 100, 350 -> 100, 750 -> 1000
-      return Math.round(count / power) * power
-    } catch (error) {
-      // AbortSignal.timeout firing is expected on large/slow repos, not an error.
-      if ((error as Error)?.name !== 'AbortError') logError(error)
-    }
-  },
-  // lodash memoize's default resolver only uses the first argument.
-  // ignorePatterns affect the result, so include them in the cache key.
-  // abortSignal is intentionally excluded — it doesn't affect the count.
-  (dirPath, _abortSignal, ignorePatterns = []) =>
-    `${dirPath}|${ignorePatterns.join(',')}`,
-)
-
-// Singleton to store ripgrep availability status
-let ripgrepStatus: {
-  working: boolean
-  lastTested: number
-  config: RipgrepConfig
-} | null = null
 
 /**
  * Get ripgrep status and configuration info
@@ -607,10 +489,6 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
     )
 
     // Log telemetry for actual ripgrep availability
-    logEvent('tengu_ripgrep_availability', {
-      working: working ? 1 : 0,
-      using_system: config.mode === 'system' ? 1 : 0,
-    })
   } catch (error) {
     ripgrepStatus = {
       working: false,

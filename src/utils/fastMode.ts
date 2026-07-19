@@ -1,13 +1,9 @@
 import axios from 'axios'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
+import { getFeatureValue } from 'src/services/featureConfig.js'
 import {
   getIsNonInteractiveSession,
   preferThirdPartyAuthentication,
 } from '../bootstrap/state.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import { getAnthropicApiKey } from './auth.js'
 import { isInBundledMode } from './bundledMode.js'
 import { getGlobalConfig, saveGlobalConfig } from './config.js'
@@ -75,11 +71,11 @@ export function getFastModeUnavailableReason(): string | null {
     return 'Fast mode requires the Anthropic API or an explicitly compatible endpoint'
   }
 
-  const statigReason = getFeatureValue_CACHED_MAY_BE_STALE(
+  const statigReason = getFeatureValue(
     'tengu_penguins_off',
     null,
   )
-  // Statsig reason has priority over other reasons.
+  // local feature configuration reason has priority over other reasons.
   if (statigReason !== null) {
     logForDebugging(`Fast mode unavailable: ${statigReason}`)
     return statigReason
@@ -89,7 +85,7 @@ export function getFastModeUnavailableReason(): string | null {
   // longer necessary, but we keep this option behind a flag just in case.
   if (
     !isInBundledMode() &&
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_marble_sandcastle', false)
+    getFeatureValue('tengu_marble_sandcastle', false)
   ) {
     return 'Fast mode requires the native binary · Install from: https://claude.com/product/claude-code'
   }
@@ -210,11 +206,6 @@ export function triggerFastModeCooldown(
   logForDebugging(
     `Fast mode cooldown triggered (${reason}), duration ${Math.round(cooldownDurationMs / 1000)}s`,
   )
-  logEvent('tengu_fast_mode_fallback_triggered', {
-    cooldown_duration_ms: cooldownDurationMs,
-    cooldown_reason:
-      reason as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
   cooldownTriggered.emit(resetTimestamp, reason)
 }
 
@@ -408,7 +399,6 @@ export async function prefetchFastModeStatus(): Promise<void> {
         `Failed to fetch org fast mode status, defaulting to ${orgStatus.status === 'enabled' ? 'enabled (cached)' : 'disabled (network_error)'}: ${err}`,
         { level: 'error' },
       )
-      logEvent('tengu_org_penguin_mode_fetch_failed', {})
     } finally {
       inflightPrefetch = null
     }

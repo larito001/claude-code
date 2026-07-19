@@ -31,16 +31,6 @@ export type Input = z.infer<ReturnType<typeof inputSchema>>
 // This schema is used to validate the MCP permission prompt tool
 // so we maintain it as a subset of the real PermissionDecision type
 
-// Matches PermissionDecisionClassificationSchema in entrypoints/sdk/coreSchemas.ts.
-// Malformed values fall through to undefined (same pattern as updatedPermissions
-// below) so a bad string from the SDK host doesn't reject the whole decision.
-const decisionClassificationField = lazySchema(() =>
-  z
-    .enum(['user_temporary', 'user_permanent', 'user_reject'])
-    .optional()
-    .catch(undefined),
-)
-
 const PermissionAllowResultSchema = lazySchema(() =>
   z.object({
     behavior: z.literal('allow'),
@@ -56,9 +46,8 @@ const PermissionAllowResultSchema = lazySchema(() =>
           { level: 'warn' },
         )
         return undefined
-      }),
+    }),
     toolUseID: z.string().optional(),
-    decisionClassification: decisionClassificationField(),
   }),
 )
 
@@ -68,7 +57,6 @@ const PermissionDenyResultSchema = lazySchema(() =>
     message: z.string(),
     interrupt: z.boolean().optional(),
     toolUseID: z.string().optional(),
-    decisionClassification: decisionClassificationField(),
   }),
 )
 

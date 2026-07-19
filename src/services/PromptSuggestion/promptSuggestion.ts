@@ -18,11 +18,7 @@ import {
 } from '../../utils/messages.js'
 import { getInitialSettings } from '../../utils/settings/settings.js'
 import { isTeammate } from '../../utils/teammate.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../analytics/index.js'
+import { getFeatureValue } from '../featureConfig.js'
 import { isSpeculationEnabled, startSpeculation } from './speculation.js'
 
 let currentAbortController: AbortController | null = null
@@ -37,58 +33,28 @@ export function shouldEnablePromptSuggestion(): boolean {
   // Env var overrides everything (for testing)
   const envOverride = process.env.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION
   if (isEnvDefinedFalsy(envOverride)) {
-    logEvent('tengu_prompt_suggestion_init', {
-      enabled: false,
-      source:
-        'env' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
     return false
   }
   if (isEnvTruthy(envOverride)) {
-    logEvent('tengu_prompt_suggestion_init', {
-      enabled: true,
-      source:
-        'env' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
     return true
   }
 
   // Keep default in sync with Config.tsx (settings toggle visibility)
-  if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_chomp_inflection', false)) {
-    logEvent('tengu_prompt_suggestion_init', {
-      enabled: false,
-      source:
-        'growthbook' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
+  if (!getFeatureValue('tengu_chomp_inflection', false)) {
     return false
   }
 
   // Disable in non-interactive mode (print mode, piped input, SDK)
   if (getIsNonInteractiveSession()) {
-    logEvent('tengu_prompt_suggestion_init', {
-      enabled: false,
-      source:
-        'non_interactive' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
     return false
   }
 
   // Disable for swarm teammates (only leader should show suggestions)
   if (isAgentSwarmsEnabled() && isTeammate()) {
-    logEvent('tengu_prompt_suggestion_init', {
-      enabled: false,
-      source:
-        'swarm_teammate' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
     return false
   }
 
   const enabled = getInitialSettings()?.promptSuggestionEnabled !== false
-  logEvent('tengu_prompt_suggestion_init', {
-    enabled,
-    source:
-      'setting' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
   return enabled
 }
 
@@ -121,38 +87,32 @@ export async function tryGenerateSuggestion(
   messages: Message[],
   getAppState: () => AppState,
   cacheSafeParams: CacheSafeParams,
-  source?: 'cli' | 'sdk',
 ): Promise<{
   suggestion: string
   promptId: PromptVariant
   generationRequestId: string | null
 } | null> {
   if (abortController.signal.aborted) {
-    logSuggestionSuppressed('aborted', undefined, undefined, source)
     return null
   }
 
   const assistantTurnCount = count(messages, m => m.type === 'assistant')
   if (assistantTurnCount < 2) {
-    logSuggestionSuppressed('early_conversation', undefined, undefined, source)
     return null
   }
 
   const lastAssistantMessage = getLastAssistantMessage(messages)
   if (lastAssistantMessage?.isApiErrorMessage) {
-    logSuggestionSuppressed('last_response_error', undefined, undefined, source)
     return null
   }
   const cacheReason = getParentCacheSuppressReason(lastAssistantMessage)
   if (cacheReason) {
-    logSuggestionSuppressed(cacheReason, undefined, undefined, source)
     return null
   }
 
   const appState = getAppState()
   const suppressReason = getSuggestionSuppressReason(appState)
   if (suppressReason) {
-    logSuggestionSuppressed(suppressReason, undefined, undefined, source)
     return null
   }
 
@@ -163,14 +123,12 @@ export async function tryGenerateSuggestion(
     cacheSafeParams,
   )
   if (abortController.signal.aborted) {
-    logSuggestionSuppressed('aborted', undefined, undefined, source)
     return null
   }
   if (!suggestion) {
-    logSuggestionSuppressed('empty', undefined, promptId, source)
     return null
   }
-  if (shouldFilterSuggestion(suggestion, promptId, source)) return null
+  if (shouldFilterSuggestion(suggestion)) return null
 
   return { suggestion, promptId, generationRequestId }
 }
@@ -190,7 +148,6 @@ export async function executePromptSuggestion(
       context.messages,
       context.toolUseContext.getAppState,
       cacheSafeParams,
-      'cli',
     )
     if (!result) return
 
@@ -210,7 +167,6 @@ export async function executePromptSuggestion(
         result.suggestion,
         context,
         context.toolUseContext.setAppState,
-        false,
         cacheSafeParams,
       )
     }
@@ -219,7 +175,6 @@ export async function executePromptSuggestion(
       error instanceof Error &&
       (error.name === 'AbortError' || error.name === 'APIUserAbortError')
     ) {
-      logSuggestionSuppressed('aborted', undefined, undefined, 'cli')
       return
     }
     logError(toError(error))
@@ -347,11 +302,8 @@ export async function generateSuggestion(
 
 export function shouldFilterSuggestion(
   suggestion: string | null,
-  promptId: PromptVariant,
-  source?: 'cli' | 'sdk',
 ): boolean {
   if (!suggestion) {
-    logSuggestionSuppressed('empty', undefined, promptId, source)
     return true
   }
 
@@ -439,68 +391,11 @@ export function shouldFilterSuggestion(
     ],
   ]
 
-  for (const [reason, check] of filters) {
+  for (const [, check] of filters) {
     if (check()) {
-      logSuggestionSuppressed(reason, suggestion, promptId, source)
       return true
     }
   }
 
   return false
-}
-
-/**
- * Log acceptance/ignoring of a prompt suggestion. Used by the SDK push path
- * to track outcomes when the next user message arrives.
- */
-export function logSuggestionOutcome(
-  suggestion: string,
-  userInput: string,
-  emittedAt: number,
-  promptId: PromptVariant,
-  generationRequestId: string | null,
-): void {
-  const similarity =
-    Math.round((userInput.length / (suggestion.length || 1)) * 100) / 100
-  const wasAccepted = userInput === suggestion
-  const timeMs = Math.max(0, Date.now() - emittedAt)
-
-  logEvent('tengu_prompt_suggestion', {
-    source: 'sdk' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    outcome: (wasAccepted
-      ? 'accepted'
-      : 'ignored') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    prompt_id:
-      promptId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    ...(generationRequestId && {
-      generationRequestId:
-        generationRequestId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    }),
-    ...(wasAccepted && {
-      timeToAcceptMs: timeMs,
-    }),
-    ...(!wasAccepted && { timeToIgnoreMs: timeMs }),
-    similarity,
-  })
-}
-
-export function logSuggestionSuppressed(
-  reason: string,
-  suggestion?: string,
-  promptId?: PromptVariant,
-  source?: 'cli' | 'sdk',
-): void {
-  const resolvedPromptId = promptId ?? getPromptVariant()
-  logEvent('tengu_prompt_suggestion', {
-    ...(source && {
-      source:
-        source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    }),
-    outcome:
-      'suppressed' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    reason:
-      reason as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    prompt_id:
-      resolvedPromptId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
 }

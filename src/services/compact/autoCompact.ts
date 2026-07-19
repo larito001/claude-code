@@ -1,5 +1,4 @@
 import { feature } from 'src/utils/features.js'
-import { markPostCompaction } from 'src/bootstrap/state.js'
 import { getSdkBetas } from '../../bootstrap/state.js'
 import type { QuerySource } from '../../constants/querySource.js'
 import type { ToolUseContext } from '../../Tool.js'
@@ -64,8 +63,7 @@ export const ERROR_THRESHOLD_BUFFER_TOKENS = 20_000
 export const MANUAL_COMPACT_BUFFER_TOKENS = 3_000
 
 // Stop trying autocompact after this many consecutive failures.
-// BQ 2026-03-10: 1,279 sessions had 50+ consecutive failures (up to 3,272)
-// in a single session, wasting ~250K API calls/day globally.
+// Bound retries to avoid runaway API calls when compaction repeatedly fails.
 const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3
 
 export function getAutoCompactThreshold(model: string): number {
@@ -243,12 +241,9 @@ export async function autoCompactIfNeeded(
     runPostCompactCleanup(querySource)
     // Reset cache read baseline so the post-compact drop isn't flagged as a
     // break. compactConversation does this internally; SM-compact doesn't.
-    // BQ 2026-03-01: missing this made 20% of tengu_prompt_cache_break events
-    // false positives (systemPromptChanged=true, timeSinceLastAssistantMsg=-1).
     if (feature('PROMPT_CACHE_BREAK_DETECTION')) {
       notifyCompaction(querySource ?? 'compact', toolUseContext.agentId)
     }
-    markPostCompaction()
     return {
       wasCompacted: true,
       compactionResult: sessionMemoryResult,

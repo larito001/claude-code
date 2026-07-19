@@ -17,7 +17,7 @@ import { microcompactMessages } from '../services/compact/microCompact.js'
 // new module-graph cost.
 //
 // Scope is intentionally narrow (4 deps) to prove the pattern. Followup
-// PRs can add runTools, handleStopHooks, logEvent, queue ops, etc.
+// Additional dependencies can be introduced as the query boundary evolves.
 export type QueryDeps = {
   // -- model
   callModel: typeof queryModelWithStreaming

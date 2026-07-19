@@ -1,7 +1,3 @@
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
 import { logForDebugging } from './debug.js'
 import { isEnvTruthy } from './envUtils.js'
 
@@ -60,8 +56,7 @@ export function initializeWarningHandler(): void {
       const count = warningCounts.get(warningKey) || 0
 
       // Bound the map to prevent unbounded memory growth from unique warning keys.
-      // Once the cap is reached, new unique keys are not tracked — their
-      // occurrence_count will always be reported as 1 in analytics.
+      // Once the cap is reached, new unique keys are not retained.
       if (
         warningCounts.has(warningKey) ||
         warningCounts.size < MAX_WARNING_KEYS
@@ -73,12 +68,6 @@ export function initializeWarningHandler(): void {
 
       // Emit only the warning class and bounded occurrence count. Full details
       // may contain code or paths and stay in the explicit debug log.
-      logEvent('tengu_node_warning', {
-        is_internal: isKnownNoisy ? 1 : 0,
-        occurrence_count: count + 1,
-        classname:
-          warning.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
 
       // In debug mode, show all warnings with context
       if (isEnvTruthy(process.env.CLAUDE_DEBUG)) {

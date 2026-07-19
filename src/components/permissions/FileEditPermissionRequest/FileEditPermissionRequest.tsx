@@ -158,7 +158,7 @@ export function FileEditPermissionRequest(props) {
   }
   let t16;
   if ($[39] !== T2 || $[40] !== file_path || $[41] !== t10 || $[42] !== t12 || $[43] !== t15 || $[44] !== t4 || $[45] !== t5 || $[46] !== t6 || $[47] !== t7 || $[48] !== t8 || $[49] !== t9) {
-    t16 = <T2 toolUseConfirm={t4} toolUseContext={t5} onDone={t6} onReject={t7} workerBadge={t8} title={t9} subtitle={t10} question={t12} content={t15} path={file_path} completionType="str_replace_single" parseInput={parseInput} ideDiffSupport={ideDiffSupport} />;
+    t16 = <T2 toolUseConfirm={t4} toolUseContext={t5} onDone={t6} onReject={t7} workerBadge={t8} title={t9} subtitle={t10} question={t12} content={t15} path={file_path} parseInput={parseInput} ideDiffSupport={ideDiffSupport} />;
     $[39] = T2;
     $[40] = file_path;
     $[41] = t10;

@@ -53,7 +53,7 @@ export function useScheduledTasks({
   useEffect(() => {
     // Runtime gate checked here (not at the hook call site) so the hook
     // stays unconditionally mounted — rules-of-hooks forbid wrapping the
-    // call in a dynamic condition. getFeatureValue_CACHED_WITH_REFRESH
+    // call in a dynamic condition. getFeatureValue
     // reads from disk; the 5-min TTL fires a background refetch but the
     // effect won't re-run on value flip (assistantMode is the only dep),
     // so this guard alone is launch-grain. The mid-session killswitch is

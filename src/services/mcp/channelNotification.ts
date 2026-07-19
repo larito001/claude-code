@@ -112,7 +112,7 @@ export function wrapChannelMessage(
 /**
  * Effective allowlist for the current session. Team/enterprise orgs can set
  * allowedChannelPlugins in managed settings — when set, it REPLACES the
- * GrowthBook ledger (admin owns the trust decision). Undefined falls back
+ * local feature configuration ledger (admin owns the trust decision). Undefined falls back
  * to the ledger. Unmanaged users always get the ledger.
  *
  */

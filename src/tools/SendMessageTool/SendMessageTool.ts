@@ -686,7 +686,6 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
                 prompt: input.message,
                 toolUseContext: context,
                 canUseTool,
-                invokingRequestId: assistantMessage?.requestId,
               })
               return {
                 data: {
@@ -713,7 +712,6 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
                 prompt: input.message,
                 toolUseContext: context,
                 canUseTool,
-                invokingRequestId: assistantMessage?.requestId,
               })
               return {
                 data: {

@@ -12,7 +12,7 @@ import {
 } from 'src/tools/FileEditTool/constants.js'
 import type { z } from 'zod/v4'
 import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js'
-import { checkStatsigFeatureGate_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
+import { isFeatureEnabled } from '../../services/featureConfig.js'
 import type { AnyObject, Tool, ToolPermissionContext } from '../../Tool.js'
 import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js'
 import { getCwd } from '../cwd.js'
@@ -292,10 +292,10 @@ function isProjectDirPath(absolutePath: string): boolean {
 /**
  * Checks if the scratchpad directory feature is enabled.
  * The scratchpad is a per-session directory for Claude to write temporary files.
- * Controlled by the tengu_scratch Statsig gate.
+ * Controlled by the tengu_scratch local feature configuration gate.
  */
 export function isScratchpadEnabled(): boolean {
-  return checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_scratch')
+  return isFeatureEnabled('tengu_scratch')
 }
 
 /**

@@ -8,10 +8,6 @@
 import { randomBytes } from 'crypto'
 import { rename, rm } from 'fs/promises'
 import { dirname, join, resolve, sep } from 'path'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
 import { getCwd } from '../cwd.js'
 import { toError } from '../errors.js'
 import { getFsImplementation } from '../fsOperations.js'
@@ -20,7 +16,6 @@ import {
   getSettingsForSource,
   updateSettingsForSource,
 } from '../settings/settings.js'
-import { buildPluginTelemetryFields } from '../telemetry/pluginTelemetry.js'
 import { clearAllCaches } from './cacheUtils.js'
 import {
   formatDependencyCountSuffix,
@@ -276,7 +271,7 @@ export function parsePluginId(
 
 /**
  * Structured result from the install core. Wrappers format messages and
- * handle analytics/error-catching around this.
+ * handle error reporting around this.
  */
 export type InstallCoreResult =
   | { ok: true; closure: string[]; depNote: string }
@@ -338,7 +333,7 @@ export function formatResolutionError(
  *   4. Caches each closure member (downloads/copies sources as needed).
  *   5. Clears memoization caches.
  *
- * Returns a structured result. Message formatting, analytics, and top-level
+ * Returns a structured result. Message formatting and top-level
  * error wrapping stay in the caller-specific wrappers.
  *
  * @param marketplaceInstallLocation Pass this if the caller already has it
@@ -500,7 +495,7 @@ export type InstallPluginParams = {
 /**
  * Install a single plugin from a marketplace with the specified scope.
  * Interactive-UI wrapper around `installResolvedPlugin` — adds try/catch,
- * analytics, and UI-style message formatting.
+ * error reporting, and UI-style message formatting.
  */
 export async function installPluginFromMarketplace({
   pluginId,
@@ -553,25 +548,6 @@ export async function installPluginFromMarketplace({
       }
     }
 
-    logEvent('tengu_plugin_installed', {
-      plugin_id: (isOfficialMarketplaceName(marketplaceName)
-        ? pluginId
-        : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      trigger:
-        trigger as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      install_source: (trigger === 'hint'
-        ? 'ui-suggestion'
-        : 'ui-discover') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...buildPluginTelemetryFields(
-        entry.name,
-        marketplaceName,
-        getManagedPluginNames(),
-      ),
-      ...(entry.version && {
-        version:
-          entry.version as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      }),
-    })
 
     return {
       success: true,

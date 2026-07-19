@@ -43,11 +43,10 @@ export function buildInheritedCliFlags(options?: {
 
   // Propagate permission mode to teammates, but NOT if plan mode is required
   // Plan mode takes precedence over bypass permissions for safety
-  if (planModeRequired) {
-    // Don't inherit bypass permissions when plan mode is required
-  } else if (
-    permissionMode === 'bypassPermissions' ||
-    getSessionBypassPermissionsMode()
+  if (
+    !planModeRequired &&
+    (permissionMode === 'bypassPermissions' ||
+      getSessionBypassPermissionsMode())
   ) {
     flags.push('--dangerously-skip-permissions')
   } else if (permissionMode === 'acceptEdits') {

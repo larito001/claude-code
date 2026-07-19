@@ -6,7 +6,6 @@ import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js';
 import type { AppState } from 'src/state/AppState.js';
 import { z } from 'zod/v4';
 import { TOOL_SUMMARY_MAX_LENGTH } from '../../constants/toolLimits.js';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../services/analytics/index.js';
 import type { SetToolJSXFn, Tool, ToolCallProgress, ValidationResult } from '../../Tool.js';
 import { buildTool, type ToolDef } from '../../Tool.js';
 import { backgroundExistingForegroundTask, markTaskNotified, registerForeground, spawnShellTask, unregisterForeground } from '../../tasks/LocalShellTask/LocalShellTask.js';
@@ -35,7 +34,6 @@ import { buildLargeToolResultMessage, ensureToolResultsDir, generatePreview, get
 import { shouldUseSandbox } from '../BashTool/shouldUseSandbox.js';
 import { BackgroundHint } from '../BashTool/UI.js';
 import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeShellImageOutput, stdErrAppendShellResetMessage, stripEmptyLines } from '../BashTool/utils.js';
-import { trackGitOperations } from '../shared/gitOperationTracking.js';
 import { interpretCommandResult } from './commandSemantics.js';
 import { powershellToolHasPermission } from './powershellPermissions.js';
 import { getDefaultTimeoutMs, getMaxTimeoutMs, getPrompt } from './prompt.js';
@@ -230,15 +228,15 @@ export type Out = z.infer<OutputSchema>;
 import type { PowerShellProgress } from '../../types/tools.js';
 export type { PowerShellProgress } from '../../types/tools.js';
 const COMMON_BACKGROUND_COMMANDS = ['npm', 'yarn', 'pnpm', 'node', 'python', 'python3', 'go', 'cargo', 'make', 'docker', 'terraform', 'webpack', 'vite', 'jest', 'pytest', 'curl', 'Invoke-WebRequest', 'build', 'test', 'serve', 'watch', 'dev'] as const;
-function getCommandTypeForLogging(command: string): AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {
+function getCommandTypeForLogging(command: string): string {
   const trimmed = command.trim();
   const firstWord = trimmed.split(/\s+/)[0] || '';
   for (const cmd of COMMON_BACKGROUND_COMMANDS) {
     if (firstWord.toLowerCase() === cmd.toLowerCase()) {
-      return cmd as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
+      return cmd;
     }
   }
-  return 'other' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
+  return 'other';
 }
 export const PowerShellTool = buildTool({
   name: POWERSHELL_TOOL_NAME,
@@ -444,24 +442,6 @@ export const PowerShellTool = buildTool({
       } while (!generatorResult.done);
       const result = generatorResult.value;
 
-      // Feed git/PR usage metrics (same counters as BashTool). PS invokes
-      // git/gh/glab/curl as external binaries with identical syntax, so the
-      // shell-agnostic regex detection in trackGitOperations works as-is.
-      // Called before the backgroundTaskId early-return so backgrounded
-      // commands are counted too (matches BashTool.tsx:912).
-      //
-      // Pre-flight sentinel guard: the two PS pre-flight paths (pwsh-not-found,
-      // exec-spawn-catch) return code: 0 + empty stdout + stderr so call() can
-      // surface stderr gracefully instead of throwing ShellError. But
-      // gitOperationTracking.ts:48 treats code 0 as success and would
-      // regex-match the command, mis-counting a command that never ran.
-      // BashTool is safe — its pre-flight goes through createFailedCommand
-      // (code: 1) so tracking early-returns. Skip tracking on this sentinel.
-      const isPreFlightSentinel = result.code === 0 && !result.stdout && result.stderr && !result.backgroundTaskId;
-      if (!isPreFlightSentinel) {
-        trackGitOperations(input.command, result.code, result.stdout);
-      }
-
       // Distinguish user-driven interrupt (new message submitted) from other
       // interrupted states. Only user-interrupt should suppress ShellError —
       // timeout-kill or process-kill with isError should still throw.
@@ -591,13 +571,6 @@ export const PowerShellTool = buildTool({
         }
       }
       const finalStderr = [result.stderr || '', stderrForShellReset].filter(Boolean).join('\n');
-      logEvent('tengu_powershell_tool_command_executed', {
-        command_type: getCommandTypeForLogging(input.command),
-        stdout_length: compressedStdout.length,
-        stderr_length: finalStderr.length,
-        exit_code: result.code,
-        interrupted: result.interrupted
-      });
       return {
         data: {
           stdout: compressedStdout,
@@ -736,8 +709,8 @@ async function* runPowerShellCommand({
     return handle.taskId;
   }
 
-  // Helper to start backgrounding with logging
-  function startBackgrounding(eventName: string, backgroundFn?: (shellId: string) => void): void {
+  // Helper to start backgrounding
+  function startBackgrounding(backgroundFn?: (shellId: string) => void): void {
     // If a foreground task is already registered (via registerForeground in the
     // progress loop), background it in-place instead of re-spawning. Re-spawning
     // would overwrite tasks[taskId], emit a duplicate task_started SDK event,
@@ -747,9 +720,6 @@ async function* runPowerShellCommand({
         return;
       }
       backgroundShellId = foregroundTaskId;
-      logEvent(eventName, {
-        command_type: getCommandTypeForLogging(command)
-      });
       backgroundFn?.(foregroundTaskId);
       return;
     }
@@ -767,9 +737,6 @@ async function* runPowerShellCommand({
         resolveProgress = null;
         resolve();
       }
-      logEvent(eventName, {
-        command_type: getCommandTypeForLogging(command)
-      });
       if (backgroundFn) {
         backgroundFn(shellId);
       }
@@ -779,7 +746,7 @@ async function* runPowerShellCommand({
   // Set up auto-backgrounding on timeout if enabled
   if (shellCommand.onTimeout && shouldAutoBackground) {
     shellCommand.onTimeout(backgroundFn => {
-      startBackgrounding('tengu_powershell_command_timeout_backgrounded', backgroundFn);
+      startBackgrounding(backgroundFn);
     });
   }
 
@@ -788,9 +755,6 @@ async function* runPowerShellCommand({
   // regardless of the command type (isAutobackgroundingAllowed only applies to automatic backgrounding)
   if (run_in_background === true && !isBackgroundTasksDisabled) {
     const shellId = await spawnBackgroundTask();
-    logEvent('tengu_powershell_command_explicitly_backgrounded', {
-      command_type: getCommandTypeForLogging(command)
-    });
     return {
       stdout: '',
       stderr: '',
@@ -869,7 +833,7 @@ async function* runPowerShellCommand({
       if (abortController.signal.aborted && abortController.signal.reason === 'interrupt' && !interruptBackgroundingStarted) {
         interruptBackgroundingStarted = true;
         if (!isBackgroundTasksDisabled) {
-          startBackgrounding('tengu_powershell_command_interrupt_backgrounded');
+          startBackgrounding();
           // Reloop so the backgroundShellId check (above) catches the sync
           // foregroundTaskId→background path. Without this, we fall through
           // to the Ctrl+B check below, which matches status==='backgrounded'

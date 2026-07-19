@@ -51,12 +51,6 @@ type State = {
   totalAPIDuration: number
   totalAPIDurationWithoutRetries: number
   totalToolDuration: number
-  turnHookDurationMs: number
-  turnToolDurationMs: number
-  turnClassifierDurationMs: number
-  turnToolCount: number
-  turnHookCount: number
-  turnClassifierCount: number
   startTime: number
   lastInteractionTime: number
   totalLinesAdded: number
@@ -83,12 +77,8 @@ type State = {
   // Telemetry state
   meter: Meter | null
   sessionCounter: AttributedCounter | null
-  locCounter: AttributedCounter | null
-  prCounter: AttributedCounter | null
-  commitCounter: AttributedCounter | null
   costCounter: AttributedCounter | null
   tokenCounter: AttributedCounter | null
-  codeEditToolDecisionCounter: AttributedCounter | null
   activeTimeCounter: AttributedCounter | null
   statsStore: { observe(name: string, value: number): void } | null
   sessionId: SessionId
@@ -186,7 +176,7 @@ type State = {
   hasDevChannels: boolean
   // Dir containing the session's `.jsonl`; null = derive from originalCwd.
   sessionProjectDir: string | null
-  // Cached prompt cache 1h TTL allowlist from GrowthBook (session-stable)
+  // Cached prompt cache 1h TTL allowlist from local feature configuration (session-stable)
   promptCache1hAllowlist: string[] | null
   // Cached 1h TTL user eligibility (session-stable). Latched on first
   // evaluation so mid-session overage flips don't change the cache_control
@@ -205,20 +195,14 @@ type State = {
   // benefit to keeping thinking). Once latched, stays on so the newly-warmed
   // thinking-cleared cache isn't busted by flipping back to keep:'all'.
   thinkingClearLatched: boolean | null
-  // Current prompt ID (UUID) correlating a user prompt with subsequent OTel events
+  // Current prompt ID persisted with user messages.
   promptId: string | null
   // Last API requestId for the main conversation chain (not subagents).
   // Updated after each successful API response for main-session queries.
   // Read at shutdown to send cache eviction hints to inference.
   lastMainRequestId: string | undefined
-  // Timestamp (Date.now()) of the last successful API call completion.
-  // Used to compute timeSinceLastApiCallMs in tengu_api_success for
-  // correlating cache misses with idle time (cache TTL is ~5min).
+  // Timestamp of the last successful API call, used by cache management.
   lastApiCompletionTimestamp: number | null
-  // Set to true after compaction (auto or manual /compact). Consumed by
-  // logAPISuccess to tag the first post-compaction API call so we can
-  // distinguish compaction-induced cache misses from TTL expiry.
-  pendingPostCompaction: boolean
 }
 
 // ALSO HERE - THINK THRICE BEFORE MODIFYING
@@ -246,12 +230,6 @@ function getInitialState(): State {
     totalAPIDuration: 0,
     totalAPIDurationWithoutRetries: 0,
     totalToolDuration: 0,
-    turnHookDurationMs: 0,
-    turnToolDurationMs: 0,
-    turnClassifierDurationMs: 0,
-    turnToolCount: 0,
-    turnHookCount: 0,
-    turnClassifierCount: 0,
     startTime: Date.now(),
     lastInteractionTime: Date.now(),
     totalLinesAdded: 0,
@@ -280,12 +258,8 @@ function getInitialState(): State {
     // Telemetry state
     meter: null,
     sessionCounter: null,
-    locCounter: null,
-    prCounter: null,
-    commitCounter: null,
     costCounter: null,
     tokenCounter: null,
-    codeEditToolDecisionCounter: null,
     activeTimeCounter: null,
     statsStore: null,
     sessionId: randomUUID() as SessionId,
@@ -348,7 +322,7 @@ function getInitialState(): State {
     hasDevChannels: false,
     // Session project dir (null = derive from originalCwd)
     sessionProjectDir: null,
-    // Prompt cache 1h allowlist (null = not yet fetched from GrowthBook)
+    // Prompt cache 1h allowlist (null = not yet fetched from local feature configuration)
     promptCache1hAllowlist: null,
     // Prompt cache 1h eligibility (null = not yet evaluated)
     promptCache1hEligible: null,
@@ -360,7 +334,6 @@ function getInitialState(): State {
     promptId: null,
     lastMainRequestId: undefined,
     lastApiCompletionTimestamp: null,
-    pendingPostCompaction: false,
   }
 
   return state
@@ -518,57 +491,6 @@ export function getTotalToolDuration(): number {
 
 export function addToToolDuration(duration: number): void {
   STATE.totalToolDuration += duration
-  STATE.turnToolDurationMs += duration
-  STATE.turnToolCount++
-}
-
-export function getTurnHookDurationMs(): number {
-  return STATE.turnHookDurationMs
-}
-
-export function addToTurnHookDuration(duration: number): void {
-  STATE.turnHookDurationMs += duration
-  STATE.turnHookCount++
-}
-
-export function resetTurnHookDuration(): void {
-  STATE.turnHookDurationMs = 0
-  STATE.turnHookCount = 0
-}
-
-export function getTurnHookCount(): number {
-  return STATE.turnHookCount
-}
-
-export function getTurnToolDurationMs(): number {
-  return STATE.turnToolDurationMs
-}
-
-export function resetTurnToolDuration(): void {
-  STATE.turnToolDurationMs = 0
-  STATE.turnToolCount = 0
-}
-
-export function getTurnToolCount(): number {
-  return STATE.turnToolCount
-}
-
-export function getTurnClassifierDurationMs(): number {
-  return STATE.turnClassifierDurationMs
-}
-
-export function addToTurnClassifierDuration(duration: number): void {
-  STATE.turnClassifierDurationMs += duration
-  STATE.turnClassifierCount++
-}
-
-export function resetTurnClassifierDuration(): void {
-  STATE.turnClassifierDurationMs = 0
-  STATE.turnClassifierCount = 0
-}
-
-export function getTurnClassifierCount(): number {
-  return STATE.turnClassifierCount
 }
 
 export function getStatsStore(): {
@@ -697,20 +619,6 @@ export function getLastApiCompletionTimestamp(): number | null {
 
 export function setLastApiCompletionTimestamp(timestamp: number): void {
   STATE.lastApiCompletionTimestamp = timestamp
-}
-
-/** Mark that a compaction just occurred. The next API success event will
- *  include isPostCompaction=true, then the flag auto-resets. */
-export function markPostCompaction(): void {
-  STATE.pendingPostCompaction = true
-}
-
-/** Consume the post-compaction flag. Returns true once after compaction,
- *  then returns false until the next compaction. */
-export function consumePostCompaction(): boolean {
-  const was = STATE.pendingPostCompaction
-  STATE.pendingPostCompaction = false
-  return was
 }
 
 export function getLastInteractionTime(): number {
@@ -885,35 +793,18 @@ export function setMeter(
   STATE.meter = meter
 
   // Initialize all counters using the provided factory
-  STATE.sessionCounter = createCounter('claude_code.session.count', {
+  STATE.sessionCounter = createCounter('agent_framework.session.count', {
     description: 'Count of CLI sessions started',
   })
-  STATE.locCounter = createCounter('claude_code.lines_of_code.count', {
-    description:
-      "Count of lines of code modified, with the 'type' attribute indicating whether lines were added or removed",
-  })
-  STATE.prCounter = createCounter('claude_code.pull_request.count', {
-    description: 'Number of pull requests created',
-  })
-  STATE.commitCounter = createCounter('claude_code.commit.count', {
-    description: 'Number of git commits created',
-  })
-  STATE.costCounter = createCounter('claude_code.cost.usage', {
+  STATE.costCounter = createCounter('agent_framework.cost.usage', {
     description: 'Cost of the Claude Code session',
     unit: 'USD',
   })
-  STATE.tokenCounter = createCounter('claude_code.token.usage', {
+  STATE.tokenCounter = createCounter('agent_framework.token.usage', {
     description: 'Number of tokens used',
     unit: 'tokens',
   })
-  STATE.codeEditToolDecisionCounter = createCounter(
-    'claude_code.code_edit_tool.decision',
-    {
-      description:
-        'Count of code editing tool permission decisions (accept/reject) for Edit, Write, and NotebookEdit tools',
-    },
-  )
-  STATE.activeTimeCounter = createCounter('claude_code.active_time.total', {
+  STATE.activeTimeCounter = createCounter('agent_framework.active_time.total', {
     description: 'Total active time in seconds',
     unit: 's',
   })
@@ -927,28 +818,12 @@ export function getSessionCounter(): AttributedCounter | null {
   return STATE.sessionCounter
 }
 
-export function getLocCounter(): AttributedCounter | null {
-  return STATE.locCounter
-}
-
-export function getPrCounter(): AttributedCounter | null {
-  return STATE.prCounter
-}
-
-export function getCommitCounter(): AttributedCounter | null {
-  return STATE.commitCounter
-}
-
 export function getCostCounter(): AttributedCounter | null {
   return STATE.costCounter
 }
 
 export function getTokenCounter(): AttributedCounter | null {
   return STATE.tokenCounter
-}
-
-export function getCodeEditToolDecisionCounter(): AttributedCounter | null {
-  return STATE.codeEditToolDecisionCounter
 }
 
 export function getActiveTimeCounter(): AttributedCounter | null {

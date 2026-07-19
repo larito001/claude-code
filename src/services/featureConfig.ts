@@ -1,24 +1,6 @@
-/**
- * Provider-neutral feature configuration facade.
- *
- * The upstream module used Anthropic's hosted GrowthBook service. The framework
- * keeps the established API so existing core call sites and extensions remain
- * compatible, while resolving values only from local configuration and env.
- */
-import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
-import { logError } from '../../utils/log.js'
-
-export type GrowthBookUserAttributes = {
-  id: string
-  sessionId: string
-  deviceID: string
-  platform: 'win32' | 'darwin' | 'linux'
-  apiBaseUrlHost?: string
-  userType?: string
-  email?: string
-  appVersion?: string
-  github?: Record<string, unknown>
-}
+/** Local feature configuration with environment and persisted overrides. */
+import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
+import { logError } from '../utils/log.js'
 
 type FeatureRefreshListener = () => void
 
@@ -28,7 +10,7 @@ let envOverrides: Record<string, unknown> | undefined
 function parseEnvOverrides(): Record<string, unknown> {
   if (envOverrides) return envOverrides
 
-  const raw = process.env.CLAUDE_CODE_FEATURE_OVERRIDES
+  const raw = process.env.FRAMEWORK_FEATURE_OVERRIDES
   if (!raw) {
     envOverrides = {}
     return envOverrides
@@ -37,7 +19,7 @@ function parseEnvOverrides(): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('CLAUDE_CODE_FEATURE_OVERRIDES must be a JSON object')
+      throw new Error('FRAMEWORK_FEATURE_OVERRIDES must be a JSON object')
     }
     envOverrides = parsed as Record<string, unknown>
   } catch (error) {
@@ -75,24 +57,26 @@ function emitRefresh(): void {
   }
 }
 
-export function onGrowthBookRefresh(listener: FeatureRefreshListener): () => void {
+export function onFeatureConfigRefresh(
+  listener: FeatureRefreshListener,
+): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
 
-export function hasGrowthBookEnvOverride(feature: string): boolean {
+export function hasFeatureEnvOverride(feature: string): boolean {
   return feature in parseEnvOverrides()
 }
 
-export function getAllGrowthBookFeatures(): Record<string, unknown> {
+export function getAllFeatureOverrides(): Record<string, unknown> {
   return { ...getConfigOverrides(), ...parseEnvOverrides() }
 }
 
-export function getGrowthBookConfigOverrides(): Record<string, unknown> {
+export function getFeatureConfigOverrides(): Record<string, unknown> {
   return getConfigOverrides()
 }
 
-export function setGrowthBookConfigOverride(
+export function setFeatureConfigOverride(
   feature: string,
   value: unknown,
 ): void {
@@ -120,7 +104,7 @@ export function setGrowthBookConfigOverride(
   }
 }
 
-export function clearGrowthBookConfigOverrides(): void {
+export function clearFeatureConfigOverrides(): void {
   try {
     saveGlobalConfig(current => {
       if (!current.featureOverrides) return current
@@ -133,81 +117,29 @@ export function clearGrowthBookConfigOverrides(): void {
   }
 }
 
-export function getApiBaseUrlHost(): string | undefined {
-  try {
-    return new URL(
-      process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
-    ).host
-  } catch {
-    return undefined
-  }
-}
-
-export async function initializeGrowthBook(): Promise<void> {
+export async function initializeFeatureConfig(): Promise<void> {
   parseEnvOverrides()
 }
 
-export async function getFeatureValue_DEPRECATED<T>(
+export function getFeatureValue<T>(
   feature: string,
   defaultValue: T,
-): Promise<T> {
-  return resolveFeature(feature, defaultValue)
-}
-
-export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
-  feature: string,
-  defaultValue: T,
+  _refreshIntervalMs?: number,
 ): T {
   return resolveFeature(feature, defaultValue)
 }
 
-export function getFeatureValue_CACHED_WITH_REFRESH<T>(
-  feature: string,
-  defaultValue: T,
-  _refreshIntervalMs: number,
-): T {
-  return resolveFeature(feature, defaultValue)
-}
-
-export function checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-  gate: string,
-): boolean {
+export function isFeatureEnabled(gate: string): boolean {
   return Boolean(resolveFeature(gate, false))
 }
 
-export async function checkSecurityRestrictionGate(
-  gate: string,
-): Promise<boolean> {
-  return Boolean(resolveFeature(gate, false))
-}
-
-export async function checkGate_CACHED_OR_BLOCKING(
-  gate: string,
-): Promise<boolean> {
-  return Boolean(resolveFeature(gate, false))
-}
-
-export function resetGrowthBook(): void {
+export function resetFeatureConfig(): void {
   envOverrides = undefined
   emitRefresh()
 }
 
-export async function refreshGrowthBookFeatures(): Promise<void> {
+export async function refreshFeatureConfig(): Promise<void> {
   envOverrides = undefined
   parseEnvOverrides()
   emitRefresh()
-}
-
-export async function getDynamicConfig_BLOCKS_ON_INIT<T>(
-  configName: string,
-  defaultValue: T,
-): Promise<T> {
-  return resolveFeature(configName, defaultValue)
-}
-
-export function getDynamicConfig_CACHED_MAY_BE_STALE<T>(
-  configName: string,
-  defaultValue: T,
-): T {
-  return resolveFeature(configName, defaultValue)
 }

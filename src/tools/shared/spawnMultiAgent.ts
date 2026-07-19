@@ -128,10 +128,6 @@ export type SpawnTeammateConfig = {
   model?: string
   agent_type?: string
   description?: string
-  /** request_id of the API call whose response contained the tool_use that
-   *  spawned this teammate. Threaded through to TeammateAgentContext for
-   *  lineage tracing on tengu_api_* events. */
-  invokingRequestId?: string
 }
 
 // Internal input type matching TeammateTool's spawn parameters
@@ -145,7 +141,6 @@ type SpawnInput = {
   model?: string
   agent_type?: string
   description?: string
-  invokingRequestId?: string
 }
 
 // ============================================================================
@@ -213,11 +208,10 @@ function buildInheritedCliFlags(options?: {
 
   // Propagate permission mode to teammates, but NOT if plan mode is required
   // Plan mode takes precedence over bypass permissions for safety
-  if (planModeRequired) {
-    // Don't inherit bypass permissions when plan mode is required
-  } else if (
-    permissionMode === 'bypassPermissions' ||
-    getSessionBypassPermissionsMode()
+  if (
+    !planModeRequired &&
+    (permissionMode === 'bypassPermissions' ||
+      getSessionBypassPermissionsMode())
   ) {
     flags.push('--dangerously-skip-permissions')
   } else if (permissionMode === 'acceptEdits') {
@@ -225,7 +219,7 @@ function buildInheritedCliFlags(options?: {
   } else if (permissionMode === 'auto') {
     // Teammates inherit auto mode so the classifier auto-approves their tool
     // calls too. The teammate's own startup (permissionSetup.ts) handles
-    // GrowthBook gate checks and setAutoModeActive(true) independently.
+    // local feature configuration gate checks and setAutoModeActive(true) independently.
     flags.push('--permission-mode auto')
   }
 
@@ -921,7 +915,6 @@ async function handleSpawnInProcess(
       // teammate's lifetime, surviving /clear and auto-compact.
       toolUseContext: { ...context, messages: [] },
       abortController: result.abortController,
-      invokingRequestId: input.invokingRequestId,
     })
     logForDebugging(
       `[handleSpawnInProcess] Started agent execution for ${teammateId}`,

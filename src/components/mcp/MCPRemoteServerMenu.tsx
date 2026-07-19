@@ -1,6 +1,5 @@
 import figures from 'figures';
 import React, { useEffect, useRef, useState } from 'react';
-import { logEvent } from 'src/services/analytics/index.js';
 import type { CommandResultDisplay } from '../../commands.js';
 import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
@@ -147,9 +146,6 @@ export function MCPRemoteServerMenu({
             setManualCallbackSubmit(() => submit);
           }
         });
-        logEvent('tengu_mcp_auth_config_authenticate', {
-          wasAuthenticated: server.isAuthenticated
-        });
         const result_0 = await reconnectMcpServer(server.name);
         if (result_0.client.type === 'connected') {
           const message = isEffectivelyAuthenticated ? `Authentication successful. Reconnected to ${server.name}.` : `Authentication successful. Connected to ${server.name}.`;
@@ -177,7 +173,6 @@ export function MCPRemoteServerMenu({
     if (server.transport !== 'ws') {
       // First revoke the authentication tokens and clear all auth state
       await revokeServerTokens(server.name, server.config);
-      logEvent('tengu_mcp_auth_config_clear', {});
 
       // Disconnect the client and clear the cache
       await clearServerCache(server.name, {

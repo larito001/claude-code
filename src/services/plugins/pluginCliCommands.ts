@@ -10,18 +10,9 @@ import figures from 'figures'
 import { errorMessage } from '../../utils/errors.js'
 import { gracefulShutdown } from '../../utils/gracefulShutdown.js'
 import { logError } from '../../utils/log.js'
-import { getManagedPluginNames } from '../../utils/plugins/managedPlugins.js'
 import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
 import type { PluginScope } from '../../utils/plugins/schemas.js'
 import { writeToStdout } from '../../utils/process.js'
-import {
-  buildPluginTelemetryFields,
-  classifyPluginCommandError,
-} from '../../utils/telemetry/pluginTelemetry.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../analytics/index.js'
 import {
   disableAllPluginsOp,
   disablePluginOp,
@@ -44,11 +35,7 @@ type PluginCliCommand =
   | 'disable-all'
   | 'update'
 
-/**
- * Generic error handler for plugin CLI commands. Emits
- * tengu_plugin_command_failed before exit so dashboards can compute a
- * success rate against the corresponding success events.
- */
+/** Generic error handler for plugin CLI commands. */
 function handlePluginCommandError(
   error: unknown,
   command: PluginCliCommand,
@@ -64,26 +51,6 @@ function handlePluginCommandError(
   console.error(
     `${figures.cross} Failed to ${operation}: ${errorMessage(error)}`,
   )
-  const telemetryFields = plugin
-    ? (() => {
-        const { name, marketplace } = parsePluginIdentifier(plugin)
-        return {
-          ...buildPluginTelemetryFields(
-            name,
-            marketplace,
-            getManagedPluginNames(),
-          ),
-        }
-      })()
-    : {}
-  logEvent('tengu_plugin_command_failed', {
-    command:
-      command as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    error_category: classifyPluginCommandError(
-      error,
-    ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    ...telemetryFields,
-  })
   // eslint-disable-next-line custom-rules/no-process-exit
   process.exit(1)
 }
@@ -113,13 +80,6 @@ export async function installPlugin(
     const { name, marketplace } = parsePluginIdentifier(
       result.pluginId || plugin,
     )
-    logEvent('tengu_plugin_installed_cli', {
-      scope: (result.scope ||
-        scope) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      install_source:
-        'cli-explicit' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...buildPluginTelemetryFields(name, marketplace, getManagedPluginNames()),
-    })
 
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
@@ -151,11 +111,6 @@ export async function uninstallPlugin(
     const { name, marketplace } = parsePluginIdentifier(
       result.pluginId || plugin,
     )
-    logEvent('tengu_plugin_uninstalled_cli', {
-      scope: (result.scope ||
-        scope) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...buildPluginTelemetryFields(name, marketplace, getManagedPluginNames()),
-    })
 
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
@@ -186,11 +141,6 @@ export async function enablePlugin(
     const { name, marketplace } = parsePluginIdentifier(
       result.pluginId || plugin,
     )
-    logEvent('tengu_plugin_enabled_cli', {
-      scope:
-        result.scope as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...buildPluginTelemetryFields(name, marketplace, getManagedPluginNames()),
-    })
 
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
@@ -221,11 +171,6 @@ export async function disablePlugin(
     const { name, marketplace } = parsePluginIdentifier(
       result.pluginId || plugin,
     )
-    logEvent('tengu_plugin_disabled_cli', {
-      scope:
-        result.scope as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...buildPluginTelemetryFields(name, marketplace, getManagedPluginNames()),
-    })
 
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
@@ -248,7 +193,6 @@ export async function disableAllPlugins(): Promise<void> {
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${figures.tick} ${result.message}`)
 
-    logEvent('tengu_plugin_disabled_all_cli', {})
 
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
@@ -283,17 +227,6 @@ export async function updatePluginCli(
       const { name, marketplace } = parsePluginIdentifier(
         result.pluginId || plugin,
       )
-      logEvent('tengu_plugin_updated_cli', {
-        old_version: (result.oldVersion ||
-          'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        new_version: (result.newVersion ||
-          'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        ...buildPluginTelemetryFields(
-          name,
-          marketplace,
-          getManagedPluginNames(),
-        ),
-      })
     }
 
     await gracefulShutdown(0)

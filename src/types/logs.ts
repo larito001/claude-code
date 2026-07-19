@@ -141,8 +141,7 @@ export type ModeEntry = {
 /**
  * Worktree session state persisted to the transcript for resume.
  * Subset of WorktreeSession from utils/worktree.ts — excludes ephemeral
- * fields (creationDurationMs, usedSparsePaths) that are only used for
- * first-run analytics.
+ * fields that are not required when restoring the worktree.
  */
 export type PersistedWorktreeSession = {
   originalCwd: string

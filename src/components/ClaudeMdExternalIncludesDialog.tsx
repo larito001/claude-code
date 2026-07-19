@@ -1,6 +1,5 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useCallback } from 'react';
-import { logEvent } from 'src/services/analytics/index.js';
 import { Box, Link, Text } from '../ink.js';
 import type { ExternalClaudeMdInclude } from '../utils/claudemd.js';
 import { saveCurrentProjectConfig } from '../utils/config.js';
@@ -30,10 +29,8 @@ export function ClaudeMdExternalIncludesDialog(t0) {
   if ($[1] !== onDone) {
     t2 = value => {
       if (value === "no") {
-        logEvent("tengu_claude_md_external_includes_dialog_declined", {});
         saveCurrentProjectConfig(_temp2);
       } else {
-        logEvent("tengu_claude_md_external_includes_dialog_accepted", {});
         saveCurrentProjectConfig(_temp3);
       }
       onDone();
@@ -132,5 +129,4 @@ function _temp2(current) {
   };
 }
 function _temp() {
-  logEvent("tengu_claude_md_includes_dialog_shown", {});
 }

@@ -6,7 +6,7 @@ export type SessionState = 'idle' | 'running' | 'requires_action'
  *
  * Two delivery paths:
  * - tool_name + action_description → RequiresActionDetails proto
- *   (webhook payload, typed, logged in Datadog)
+ *   (typed webhook payload)
  * - full object → external_metadata.pending_action (queryable JSON
  *   on the Session, lets the frontend iterate on shape without
  *   proto round-trips)

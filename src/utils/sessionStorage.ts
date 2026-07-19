@@ -18,10 +18,6 @@ import {
 import memoize from 'lodash-es/memoize.js'
 import { basename, dirname, join } from 'path'
 import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
-import {
   getOriginalCwd,
   getPlanSlugCache,
   getPromptId,
@@ -32,7 +28,7 @@ import {
 } from '../bootstrap/state.js'
 import { builtInCommandNames } from '../commands.js'
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import { getFeatureValue } from '../services/featureConfig.js'
 import { REPL_TOOL_NAME } from '../tools/REPLTool/constants.js'
 import {
   type AgentId,
@@ -1463,13 +1459,6 @@ function applyPreservedSegmentRelinks(
       // the full pre-compact history. Known cause: mid-turn-yielded
       // attachment pushed to mutableMessages but never recordTranscript'd
       // (SDK subprocess restarted before next turn's qe:420 flush).
-      logEvent('tengu_relink_walk_broken', {
-        tailInTranscript: messages.has(lastSeg.tailUuid),
-        headInTranscript: messages.has(lastSeg.headUuid),
-        anchorInTranscript: messages.has(lastSeg.anchorUuid),
-        walkSteps: walkSeen.size,
-        transcriptSize: messages.size,
-      })
       return
     }
   }
@@ -1569,7 +1558,6 @@ export function buildConversationChain(
           `Cycle detected in parentUuid chain at message ${currentMsg.uuid}. Returning partial transcript.`,
         ),
       )
-      logEvent('tengu_chain_parent_cycle', {})
       break
     }
     seen.add(currentMsg.uuid)
@@ -1681,9 +1669,6 @@ function recoverOrphanedParallelToolResults(
   }
 
   if (recoveredCount === 0) return chain
-  logEvent('tengu_chain_parallel_tr_recovered', {
-    recovered_count: recoveredCount,
-  })
 
   const result: TranscriptMessage[] = []
   for (const m of chain) {
@@ -1692,43 +1677,6 @@ function recoverOrphanedParallelToolResults(
     if (toInsert) result.push(...toInsert)
   }
   return result
-}
-
-/**
- * Find the latest turn_duration checkpoint in the reconstructed chain and
- * compare its recorded messageCount against the chain's position at that
- * point. Emits tengu_resume_consistency_delta for BigQuery monitoring of
- * write→load round-trip drift — the class of bugs where snip/compact/
- * parallel-TR operations mutate in-memory but the parentUuid walk on disk
- * reconstructs a different set (adamr-20260320-165831: 397K displayed →
- * 1.65M actual on resume).
- *
- * delta > 0: resume loaded MORE than in-session (the usual failure mode)
- * delta < 0: resume loaded FEWER (chain truncation — #22453 class)
- * delta = 0: round-trip consistent
- *
- * Called from loadConversationForResume — fires once per resume, not on
- * transcript export or log-listing chain rebuilds.
- */
-export function checkResumeConsistency(chain: Message[]): void {
-  for (let i = chain.length - 1; i >= 0; i--) {
-    const m = chain[i]!
-    if (m.type !== 'system' || m.subtype !== 'turn_duration') continue
-    const expected = m.messageCount
-    if (expected === undefined) return
-    // `i` is the 0-based index of the checkpoint in the reconstructed chain.
-    // The checkpoint was appended AFTER messageCount messages, so its own
-    // position should be messageCount (i.e., i === expected).
-    const actual = i
-    logEvent('tengu_resume_consistency_delta', {
-      expected,
-      actual,
-      delta: actual - expected,
-      chain_length: chain.length,
-      checkpoint_age_entries: chain.length - 1 - i,
-    })
-    return
-  }
 }
 
 /**
@@ -2003,45 +1951,9 @@ function convertToLogOption(
   }
 }
 
-async function trackSessionBranchingAnalytics(
-  logs: LogOption[],
-): Promise<void> {
-  const sessionIdCounts = new Map<string, number>()
-  let maxCount = 0
-  for (const log of logs) {
-    const sessionId = getSessionIdFromLog(log)
-    if (sessionId) {
-      const newCount = (sessionIdCounts.get(sessionId) || 0) + 1
-      sessionIdCounts.set(sessionId, newCount)
-      maxCount = Math.max(newCount, maxCount)
-    }
-  }
-
-  // Early exit if no duplicates detected
-  if (maxCount <= 1) {
-    return
-  }
-
-  // Count sessions with branches and calculate stats using functional approach
-  const branchCounts = Array.from(sessionIdCounts.values()).filter(c => c > 1)
-  const sessionsWithBranches = branchCounts.length
-  const totalBranches = branchCounts.reduce((sum, count) => sum + count, 0)
-
-  logEvent('tengu_session_forked_branches_fetched', {
-    total_sessions: sessionIdCounts.size,
-    sessions_with_branches: sessionsWithBranches,
-    max_branches_per_session: Math.max(...branchCounts),
-    avg_branches_per_session: Math.round(totalBranches / sessionsWithBranches),
-    total_transcript_count: logs.length,
-  })
-}
-
 export async function fetchLogs(limit?: number): Promise<LogOption[]> {
   const projectDir = getProjectDir(getOriginalCwd())
   const logs = await getSessionFilesLite(projectDir, limit, getOriginalCwd())
-
-  await trackSessionBranchingAnalytics(logs)
-
   return logs
 }
 
@@ -2111,10 +2023,6 @@ export async function saveCustomTitle(
   if (sessionId === getSessionId()) {
     getProject().currentSessionTitle = customTitle
   }
-  logEvent('tengu_session_renamed', {
-    source:
-      source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
 }
 
 /**
@@ -2131,8 +2039,6 @@ export async function saveCustomTitle(
  * - CAS semantics: VS Code's `onlyIfNoCustomTitle` check scans for the
  *   `customTitle` field only, so AI can overwrite its own previous AI
  *   title but never a user title.
- * - Metrics: `tengu_session_renamed` is not fired for AI titles.
- *
  * Because the entry is never re-appended, it scrolls out of the 64KB tail
  * window once enough messages accumulate. Readers (`readLiteMetadata`,
  * `listSessionsImpl`, VS Code `fetchSessions`) fall back to scanning the
@@ -2175,7 +2081,6 @@ export async function saveTag(sessionId: UUID, tag: string, fullPath?: string) {
   if (sessionId === getSessionId()) {
     getProject().currentSessionTag = tag
   }
-  logEvent('tengu_session_tagged', {})
 }
 
 /**
@@ -2205,7 +2110,6 @@ export async function linkSessionToPR(
     project.currentSessionPrUrl = prUrl
     project.currentSessionPrRepository = prRepository
   }
-  logEvent('tengu_session_linked_to_pr', { prNumber })
 }
 
 export function getCurrentSessionTag(sessionId: UUID): string | undefined {
@@ -2309,10 +2213,6 @@ export async function saveAgentName(
     getProject().currentSessionAgentName = agentName
     void updateSessionName(agentName)
   }
-  logEvent('tengu_agent_name_set', {
-    source:
-      source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
 }
 
 export async function saveAgentColor(
@@ -2330,7 +2230,6 @@ export async function saveAgentColor(
   if (sessionId === getSessionId()) {
     getProject().currentSessionAgentColor = agentColor
   }
-  logEvent('tengu_agent_color_set', {})
 }
 
 /**
@@ -3172,9 +3071,7 @@ export async function loadTranscriptFile(
   const terminalMessages = allMessages.filter(msg => !parentUuids.has(msg.uuid))
 
   const leafUuids = new Set<UUID>()
-  let hasCycle = false
-
-  if (getFeatureValue_CACHED_MAY_BE_STALE('tengu_pebble_leaf_prune', false)) {
+  if (getFeatureValue('tengu_pebble_leaf_prune', false)) {
     // 构建一组具有用户/助理子级的 UUID
     // （这些是对话中间的节点，而不是死胡同）
     const hasUserAssistantChild = new Set<UUID>()
@@ -3193,7 +3090,6 @@ export async function loadTranscriptFile(
       let current: TranscriptMessage | undefined = terminal
       while (current) {
         if (seen.has(current.uuid)) {
-          hasCycle = true
           break
         }
         seen.add(current.uuid)
@@ -3216,7 +3112,6 @@ export async function loadTranscriptFile(
       let current: TranscriptMessage | undefined = terminal
       while (current) {
         if (seen.has(current.uuid)) {
-          hasCycle = true
           break
         }
         seen.add(current.uuid)
@@ -3229,10 +3124,6 @@ export async function loadTranscriptFile(
           : undefined
       }
     }
-  }
-
-  if (hasCycle) {
-    logEvent('tengu_transcript_parent_cycle', {})
   }
 
   return {

@@ -1,7 +1,6 @@
 import { feature } from 'src/utils/features.js';
 import { appendFileSync } from 'fs';
 import React from 'react';
-import { logEvent } from 'src/services/analytics/index.js';
 import { gracefulShutdown, gracefulShutdownSync } from 'src/utils/gracefulShutdown.js';
 import { type ChannelEntry, getAllowedChannels, setAllowedChannels, setHasDevChannels, setSessionTrustAccepted, setStatsStore } from './bootstrap/state.js';
 import type { Command } from './commands.js';
@@ -12,7 +11,7 @@ import { isSynchronizedOutputSupported } from './ink/terminal.js';
 import type { RenderOptions, Root, TextProps } from './ink.js';
 import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js';
 import { startDeferredPrefetches } from './main.js';
-import { checkGate_CACHED_OR_BLOCKING, initializeGrowthBook, resetGrowthBook } from './services/analytics/growthbook.js';
+import { isFeatureEnabled, initializeFeatureConfig, resetFeatureConfig } from './services/featureConfig.js';
 import { handleMcpjsonServerApprovals } from './services/mcpServerApproval.js';
 import { AppStateProvider } from './state/AppState.js';
 import { onChangeAppState } from './state/onChangeAppState.js';
@@ -140,8 +139,8 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     setSessionTrustAccepted(true);
 
     // Reinitialize feature gates after trust establishes access to settings.
-    resetGrowthBook();
-    void initializeGrowthBook();
+    resetFeatureConfig();
+    void initializeFeatureConfig();
 
     // Now that trust is established, prefetch system context if it wasn't already
     void getSystemContext();
@@ -206,12 +205,12 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     // function returns. A cold disk cache (fresh install, or first run after
     // the flag was added server-side) defaults to false and silently drops
     // channel notifications for the whole session — gh#37026.
-    // checkGate_CACHED_OR_BLOCKING returns immediately if disk already says
+    // isFeatureEnabled returns immediately if disk already says
     // true; only blocks on a cold/stale-false cache (awaits the same memoized
-    // initializeGrowthBook promise fired earlier). Also warms the
+    // initializeFeatureConfig promise fired earlier). Also warms the
     // isChannelsEnabled() check in the dev-channels dialog below.
     if (getAllowedChannels().length > 0 || (devChannels?.length ?? 0) > 0) {
-      await checkGate_CACHED_OR_BLOCKING('tengu_harbor');
+      await isFeatureEnabled('tengu_harbor');
     }
     if (devChannels && devChannels.length > 0) {
       const {
@@ -251,13 +250,8 @@ export function getRenderContext(exitOnCtrlC: boolean): {
   getFpsMetrics: () => FpsMetrics | undefined;
   stats: StatsStore;
 } {
-  let lastFlickerTime = 0;
   const baseOptions = getBaseRenderOptions(exitOnCtrlC);
 
-  // Log analytics event when stdin override is active
-  if (baseOptions.stdin) {
-    logEvent('tengu_stdin_interactive', {});
-  }
   const fpsTracker = new FpsTracker();
   const stats = createStatsStore();
   setStatsStore(stats);
@@ -299,15 +293,6 @@ export function getRenderContext(exitOnCtrlC: boolean): {
           if (flicker.reason === 'resize') {
             continue;
           }
-          const now = Date.now();
-          if (now - lastFlickerTime < 1000) {
-            logEvent('tengu_flicker', {
-              desiredHeight: flicker.desiredHeight,
-              actualHeight: flicker.availableHeight,
-              reason: flicker.reason
-            } as unknown as Record<string, boolean | number | undefined>);
-          }
-          lastFlickerTime = now;
         }
       }
     }

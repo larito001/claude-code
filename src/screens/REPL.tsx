@@ -27,7 +27,7 @@ import { startPreventSleep, stopPreventSleep } from '../services/preventSleep.js
 import { useTerminalNotification } from '../ink/useTerminalNotification.js';
 import { hasCursorUpViewportYankBug } from '../ink/terminal.js';
 import { createFileStateCacheWithSizeLimit, mergeFileStateCaches, READ_FILE_STATE_CACHE_SIZE } from '../utils/fileStateCache.js';
-import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getProjectRoot, getSessionId, switchSession, setCostStateForRestore, resetTurnHookDuration, resetTurnToolDuration, resetTurnClassifierDuration } from '../bootstrap/state.js';
+import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getProjectRoot, getSessionId, switchSession, setCostStateForRestore } from '../bootstrap/state.js';
 import { asSessionId, asAgentId } from '../types/ids.js';
 import { logForDebugging } from '../utils/debug.js';
 import { QueryGuard } from '../utils/QueryGuard.js';
@@ -47,7 +47,6 @@ import { useLogMessages } from '../hooks/useLogMessages.js';
 import { type Command, type CommandResultDisplay, type ResumeEntrypoint, getCommandName, isCommandEnabled } from '../commands.js';
 import type { PromptInputMode, QueuedCommand, VimMode } from '../types/textInputTypes.js';
 import { MessageSelector, selectableUserMessagesFilter, messagesAfterAreOnlySynthetic } from '../components/MessageSelector.js';
-import { useIdeLogging } from '../hooks/useIdeLogging.js';
 import { PermissionRequest, type ToolUseConfirm } from '../components/permissions/PermissionRequest.js';
 import { ElicitationDialog } from '../components/mcp/ElicitationDialog.js';
 import { PromptDialog } from '../components/hooks/PromptDialog.js';
@@ -101,8 +100,7 @@ import { clearSpeculativeChecks } from '../tools/BashTool/bashPermissions.js';
 import type { AutoUpdaterResult } from '../utils/autoUpdater.js';
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js';
 import { shouldShowCostWarnings } from '../utils/billing.js';
-import { logEvent, type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 'src/services/analytics/index.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
+import { getFeatureValue } from 'src/services/featureConfig.js';
 import { textForResubmit, handleMessageFromStream, type StreamingToolUse, type StreamingThinking, isCompactBoundaryMessage, getMessagesAfterCompactBoundary, getContentText, createUserMessage, createAssistantMessage, createTurnDurationMessage, createAgentsKilledMessage, createSystemMessage, createCommandInputMessage, formatCommandInputTags } from '../utils/messages.js';
 import { generateSessionTitle } from '../utils/sessionTitle.js';
 import { BASH_INPUT_TAG, COMMAND_MESSAGE_TAG, COMMAND_NAME_TAG, LOCAL_COMMAND_STDOUT_TAG } from '../constants/xml.js';
@@ -720,7 +718,6 @@ export function REPL({
   const mergedCommands = useMergedCommands(commandsWithPlugins, mcp.commands as Command[]);
   // Filter out all commands if disableSlashCommands is true
   const commands = useMemo(() => disableSlashCommands ? [] : mergedCommands, [disableSlashCommands, mergedCommands]);
-  useIdeLogging(mcp.clients);
   useIdeSelection(mcp.clients, setIDESelection);
   const [streamMode, setStreamMode] = useState<SpinnerMode>('responding');
   // Ref mirror so onSubmit can read the latest value without adding
@@ -1028,7 +1025,7 @@ export function REPL({
   // Gated so we can roll back if the sidebar indicator conflicts with
   // the title spinner in terminals that render both. When the flag is
   // on, the user-facing config setting controls whether it's active.
-  const tabStatusGateEnabled = getFeatureValue_CACHED_MAY_BE_STALE('tengu_terminal_sidebar', false);
+  const tabStatusGateEnabled = getFeatureValue('tengu_terminal_sidebar', false);
   const showStatusInTerminalTab = tabStatusGateEnabled && (getGlobalConfig().showStatusInTerminalTab ?? false);
   useTabStatus(titleDisabled || !showStatusInTerminalTab ? null : sessionStatus);
 
@@ -1039,10 +1036,8 @@ export function REPL({
   }, [setToolUseConfirmQueue]);
   const [messages, rawSetMessages] = useState<MessageType[]>(initialMessages ?? []);
   const messagesRef = useRef(messages);
-  // Stores the willowMode variant that was shown (or false if no hint shown).
-  // Captured at hint_shown time so hint_converted telemetry reports the same
-  // variant — the GrowthBook value shouldn't change mid-session, but reading
-  // it once guarantees consistency between the paired events.
+  // Stores the willowMode variant that is currently shown, or false when no
+  // idle hint is visible.
   const idleHintShownRef = useRef<string | false>(false);
   // Wrap setMessages so messagesRef is always current the instant the
   // call returns — not when React later processes the batch.  Apply the
@@ -1252,7 +1247,7 @@ export function REPL({
   lastQueryCompletionTimeRef.current = lastQueryCompletionTime;
 
   // Aggregate tool result budget: per-conversation decision tracking.
-  // When the GrowthBook flag is on, query.ts enforces the budget; when
+  // When the local feature configuration flag is on, query.ts enforces the budget; when
   // off (undefined), enforcement is skipped entirely. Stale entries after
   // /clear, rewind, or compact are harmless (tool_use_ids are UUIDs, stale
   // keys are never looked up). Memory is bounded by total replacement count
@@ -1350,11 +1345,8 @@ export function REPL({
       swarmStartTimeRef.current = null;
       swarmBudgetInfoRef.current = undefined;
       setMessages(prev => [...prev, createTurnDurationMessage(totalMs, deferredBudget,
-      // Count only what recordTranscript will persist — ephemeral
-      // progress ticks and non-persisted attachments are filtered by
-      // isLoggableMessage and never reach disk. Using raw prev.length
-      // would make checkResumeConsistency report false delta<0 for
-      // every turn that ran a progress-emitting tool.
+      // Count only what recordTranscript will persist. Ephemeral progress
+      // ticks and non-persisted attachments never reach disk.
       count(prev, isLoggableMessage))]);
     }
   }, [hasRunningTeammates, setMessages]);
@@ -1632,16 +1624,7 @@ export function REPL({
 
       // 清除输入，确保无残留状态
       setInputValue('');
-      logEvent('tengu_session_resumed', {
-        entrypoint: entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        success: true,
-        resume_duration_ms: Math.round(performance.now() - resumeStart)
-      });
     } catch (error) {
-      logEvent('tengu_session_resumed', {
-        entrypoint: entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        success: false
-      });
       throw error;
     }
   }, [resetLoadingState, setAppState]);
@@ -1863,7 +1846,6 @@ export function REPL({
   useEffect(() => {
     const totalCost = getTotalCost();
     if (totalCost >= 5 /* $5 */ && !showCostDialog && !haveShownCostDialog) {
-      logEvent('tengu_cost_threshold_reached', {});
       // Mark as shown even if cost warnings are disabled. Otherwise this
       // effect re-fires on every message change for
       // the rest of the session — 200k+ spurious events observed.
@@ -2263,9 +2245,8 @@ export function REPL({
     // Mark onboarding as complete when any user message is sent to Claude
     void maybeMarkProjectOnboardingComplete();
 
-    // Extract a session title from the first real user message. One-shot
-    // via ref (was tengu_birch_mist experiment: first-message-only to save
-    // Haiku calls). The ref replaces the old `messages.length <= 1` check,
+    // Extract a session title from the first real user message. The one-shot
+    // ref replaces the old `messages.length <= 1` check,
     // which was broken by SessionStart hook messages (prepended via
     // useDeferredHookMessages) and attachment messages (appended by
     // processTextPrompt) — both pushed length past 1 on turn one, so the
@@ -2357,7 +2338,7 @@ export function REPL({
     const [,, defaultSystemPrompt, baseUserContext, systemContext] = await Promise.all([
     // IMPORTANT: do this after setMessages() above, to avoid UI jank
     checkAndDisableBypassPermissionsIfNeeded(toolPermissionContext, setAppState),
-    // Gated on TRANSCRIPT_CLASSIFIER so GrowthBook kill switch runs wherever auto mode is built in
+    // Gated on TRANSCRIPT_CLASSIFIER so local feature configuration kill switch runs wherever auto mode is built in
     feature('TRANSCRIPT_CLASSIFIER') ? checkAndDisableAutoModeIfNeeded(toolPermissionContext, setAppState, store.getState().fastMode) : undefined, getSystemPrompt(freshTools, mainLoopModelParam, Array.from(toolPermissionContext.additionalWorkingDirectories.keys()), freshMcpClients), getUserContext(), getSystemContext()]);
     const userContext = {
       ...baseUserContext,
@@ -2376,9 +2357,6 @@ export function REPL({
     });
     toolUseContext.renderedSystemPrompt = systemPrompt;
     queryCheckpoint('query_query_start');
-    resetTurnHookDuration();
-    resetTurnToolDuration();
-    resetTurnClassifierDuration();
     for await (const event of query({
       messages: messagesIncludingNewMessages,
       systemPrompt,
@@ -2416,19 +2394,15 @@ export function REPL({
     // Returns null if already running — no separate check-then-set.
     const thisGeneration = queryGuard.tryStart();
     if (thisGeneration === null) {
-      logEvent('tengu_concurrent_onquery_detected', {});
 
       // Extract and enqueue user message text, skipping meta messages
       // (e.g. expanded skill content, tick prompts) that should not be
       // replayed as user-visible text.
-      newMessages.filter((m): m is UserMessage => m.type === 'user' && !m.isMeta).map(_ => getContentText(_.message.content)).filter(_ => _ !== null).forEach((msg, i) => {
+      newMessages.filter((m): m is UserMessage => m.type === 'user' && !m.isMeta).map(_ => getContentText(_.message.content)).filter(_ => _ !== null).forEach(msg => {
         enqueue({
           value: msg,
           mode: 'prompt'
         });
-        if (i === 0) {
-          logEvent('tengu_concurrent_onquery_enqueued', {});
-        }
       });
       return;
     }
@@ -2688,13 +2662,6 @@ export function REPL({
       // 2. Command was triggered via keybinding (fromKeybinding option)
       const matchingCommand = commands.find(cmd => isCommandEnabled(cmd) && (cmd.name === commandName || cmd.aliases?.includes(commandName) || getCommandName(cmd) === commandName));
       if (matchingCommand?.name === 'clear' && idleHintShownRef.current) {
-        logEvent('tengu_idle_return_action', {
-          action: 'hint_converted' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          variant: idleHintShownRef.current as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          idleMinutes: Math.round((Date.now() - lastQueryCompletionTimeRef.current) / 60_000),
-          messageCount: messagesRef.current.length,
-          totalInputTokens: getTotalInputTokens()
-        });
         idleHintShownRef.current = false;
       }
       const shouldTreatAsImmediate = queryGuard.isActive && (matchingCommand?.immediate || options?.fromKeybinding);
@@ -2711,14 +2678,6 @@ export function REPL({
         const pastedTextRefs = parseReferences(input).filter(r => pastedContents[r.id]?.type === 'text');
         const pastedTextCount = pastedTextRefs.length;
         const pastedTextBytes = pastedTextRefs.reduce((sum, r) => sum + (pastedContents[r.id]?.content.length ?? 0), 0);
-        logEvent('tengu_paste_text', {
-          pastedTextCount,
-          pastedTextBytes
-        });
-        logEvent('tengu_immediate_command_executed', {
-          commandName: matchingCommand.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          fromKeybinding: options?.fromKeybinding ?? false
-        });
 
         // Execute the command directly
         const executeImmediateCommand = async (): Promise<void> => {
@@ -2801,7 +2760,7 @@ export function REPL({
     // conversation is large and the cache is cold. tengu_willow_mode
     // controls treatment: "dialog" (blocking), "hint" (notification), "off".
     {
-      const willowMode = getFeatureValue_CACHED_MAY_BE_STALE('tengu_willow_mode', 'off');
+      const willowMode = getFeatureValue('tengu_willow_mode', 'off');
       const idleThresholdMin = Number(process.env.CLAUDE_CODE_IDLE_THRESHOLD_MINUTES ?? 75);
       const tokenThreshold = Number(process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000);
       if (willowMode !== 'off' && !getGlobalConfig().idleReturnDismissed && !skipIdleCheckRef.current && !speculationAccept && !input.trim().startsWith('/') && lastQueryCompletionTimeRef.current > 0 && getTotalInputTokens() >= tokenThreshold) {
@@ -2939,8 +2898,7 @@ export function REPL({
       canUseTool,
       addNotification,
       setMessages,
-      // Read via ref so streamMode can be dropped from onSubmit deps —
-      // handlePromptSubmit only uses it for debug log + telemetry event.
+      // Read via ref so streamMode can be dropped from onSubmit deps.
       streamMode: streamModeRef.current,
       hasInterruptibleToolInProgress: hasInterruptibleToolInProgressRef.current
     });
@@ -3037,12 +2995,6 @@ export function REPL({
     const prev = messagesRef.current;
     const messageIndex = prev.lastIndexOf(message);
     if (messageIndex === -1) return;
-    logEvent('tengu_conversation_rewind', {
-      preRewindMessageCount: prev.length,
-      postRewindMessageCount: messageIndex,
-      messagesRemoved: prev.length - messageIndex,
-      rewindToMessageIndex: messageIndex
-    });
     setMessages(prev.slice(0, messageIndex));
     // Careful, this has to happen after setMessages
     setConversationId(randomUUID());
@@ -3189,8 +3141,8 @@ export function REPL({
 
   useAfterFirstRender();
 
-  // Track prompt queue usage for analytics. Fire once per transition from
-  // empty to non-empty, not on every length change -- otherwise a render loop
+  // Track prompt queue adoption locally to avoid repeating beginner tips.
+  // Count once per transition from empty to non-empty; otherwise a render loop
   // (concurrent onQuery thrashing, etc.) spams saveGlobalConfig, which hits
   // ELOCKED under concurrent sessions and falls back to unlocked writes.
   // That write storm is the primary trigger for ~/.claude.json corruption
@@ -3299,7 +3251,7 @@ export function REPL({
   useEffect(() => {
     if (lastQueryCompletionTime === 0) return;
     if (isLoading) return;
-    const willowMode: string = getFeatureValue_CACHED_MAY_BE_STALE('tengu_willow_mode', 'off');
+    const willowMode: string = getFeatureValue('tengu_willow_mode', 'off');
     if (willowMode !== 'hint' && willowMode !== 'hint_v2') return;
     if (getGlobalConfig().idleReturnDismissed) return;
     const tokenThreshold = Number(process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000);
@@ -3329,13 +3281,6 @@ export function REPL({
         timeoutMs: 0x7fffffff
       });
       hintRef.current = mode;
-      logEvent('tengu_idle_return_action', {
-        action: 'hint_shown' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        variant: mode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        idleMinutes: Math.round(idleMinutes),
-        messageCount: msgsRef.current.length,
-        totalInputTokens: totalTokens
-      });
     }, Math.max(0, remaining), lastQueryCompletionTime, addNotification, messagesRef, willowMode, idleHintShownRef);
     return () => {
       clearTimeout(timer);
@@ -4044,17 +3989,10 @@ export function REPL({
               ...current,
               hasAcknowledgedCostThreshold: true
             }));
-            logEvent('tengu_cost_threshold_acknowledged', {});
           }} />}
                 {focusedInputDialog === 'idle-return' && idleReturnPending && <IdleReturnDialog idleMinutes={idleReturnPending.idleMinutes} totalInputTokens={getTotalInputTokens()} onDone={async action => {
             const pending = idleReturnPending;
             setIdleReturnPending(null);
-            logEvent('tengu_idle_return_action', {
-              action: action as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              idleMinutes: Math.round(pending.idleMinutes),
-              messageCount: messagesRef.current.length,
-              totalInputTokens: getTotalInputTokens()
-            });
             if (action === 'dismiss') {
               setInputValue(pending.input);
               return;

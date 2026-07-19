@@ -10,8 +10,6 @@ import {
   getAttributionHeader,
   getCLISyspromptPrefix,
 } from '../constants/system.js'
-import { logEvent } from '../services/analytics/index.js'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/claude.js'
 import { getAnthropicClient } from '../services/api/client.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
@@ -59,7 +57,7 @@ export type SideQueryOptions = {
   thinking?: number | false
   /** Stop sequences — generation stops when any of these strings is emitted */
   stop_sequences?: string[]
-  /** Attributes this call in tengu_api_success for COGS joining against reporting.sampling_calls. */
+  /** Identifies the internal query source for request routing and diagnostics. */
   querySource: QuerySource
 }
 
@@ -201,21 +199,6 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
     (response as { _request_id?: string | null })._request_id ?? undefined
   const now = Date.now()
   const lastCompletion = getLastApiCompletionTimestamp()
-  logEvent('tengu_api_success', {
-    requestId:
-      requestId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    querySource:
-      opts.querySource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    model:
-      normalizedModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-    cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
-    uncachedInputTokens: response.usage.cache_creation_input_tokens ?? 0,
-    durationMsIncludingRetries: now - start,
-    timeSinceLastApiCallMs:
-      lastCompletion !== null ? now - lastCompletion : undefined,
-  })
   setLastApiCompletionTimestamp(now)
 
   return response

@@ -21,7 +21,7 @@ import {
   getMainLoopModel,
   getPublicModelName,
 } from './model/model.js'
-import { isMemoryFileAccess } from './sessionFileAccessHooks.js'
+import { isMemoryFileAccess } from './memoryFileAccess.js'
 import { getTranscriptPath } from './sessionStorage.js'
 import { readTranscriptForLoad } from './sessionStoragePortable.js'
 import { getInitialSettings } from './settings/settings.js'

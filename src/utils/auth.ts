@@ -4,10 +4,6 @@ import { execa } from 'execa'
 import { mkdir, stat } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
 import { join } from 'path'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
 import { getModelStrings } from 'src/utils/model/modelStrings.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import {
@@ -264,7 +260,6 @@ async function _executeApiKeyHelper(
         'Security: apiKeyHelper was blocked because workspace trust is not confirmed.',
       )
       logDebugError('apiKeyHelper invoked before trust check', error)
-      logEvent('tengu_apiKeyHelper_missing_trust11', {})
       return null
     }
   }
@@ -306,7 +301,7 @@ export function prefetchApiKeyFromApiKeyHelperIfSafe(
   isNonInteractiveSession: boolean,
 ): void {
   // Skip if trust not yet accepted — the inner _executeApiKeyHelper check
-  // would catch this too, but would fire a false-positive analytics event.
+  // would catch this too, but would report a misleading credential conflict.
   if (
     isApiKeyHelperFromProjectOrLocalSettings() &&
     !checkHasTrustDialogAccepted()
@@ -339,7 +334,6 @@ async function runAwsAuthRefresh(): Promise<boolean> {
         'Security: awsAuthRefresh was blocked because workspace trust is not confirmed.',
       )
       logDebugError('awsAuthRefresh invoked before trust check', error)
-      logEvent('tengu_awsAuthRefresh_missing_trust', {})
       return false
     }
   }
@@ -436,7 +430,6 @@ async function getAwsCredsFromCredentialExport(): Promise<{
         'Security: awsCredentialExport was blocked because workspace trust is not confirmed.',
       )
       logDebugError('awsCredentialExport invoked before trust check', error)
-      logEvent('tengu_awsCredentialExport_missing_trust', {})
       return null
     }
   }
@@ -603,7 +596,6 @@ async function runGcpAuthRefresh(): Promise<boolean> {
         'Security: gcpAuthRefresh was blocked because workspace trust is not confirmed.',
       )
       logDebugError('gcpAuthRefresh invoked before trust check', error)
-      logEvent('tengu_gcpAuthRefresh_missing_trust', {})
       return false
     }
   }

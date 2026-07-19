@@ -13,7 +13,6 @@
 
 import { z } from 'zod/v4'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'
-import { logEvent } from '../services/analytics/index.js'
 import { queryHaiku } from '../services/api/claude.js'
 import type { Message } from '../types/message.js'
 import { logForDebugging } from './debug.js'
@@ -114,14 +113,12 @@ export async function generateSessionTitle(
     const parsed = titleSchema().safeParse(safeParseJSON(text))
     const title = parsed.success ? parsed.data.title.trim() || null : null
 
-    logEvent('tengu_session_title_generated', { success: title !== null })
 
     return title
   } catch (error) {
     logForDebugging(`generateSessionTitle failed: ${error}`, {
       level: 'error',
     })
-    logEvent('tengu_session_title_generated', { success: false })
     return null
   }
 }

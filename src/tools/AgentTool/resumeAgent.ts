@@ -44,13 +44,11 @@ export async function resumeAgentBackground({
   prompt,
   toolUseContext,
   canUseTool,
-  invokingRequestId,
 }: {
   agentId: string
   prompt: string
   toolUseContext: ToolUseContext
   canUseTool: CanUseToolFn
-  invokingRequestId?: string
 }): Promise<ResumeAgentResult> {
   const startTime = Date.now()
   const appState = toolUseContext.getAppState()
@@ -147,7 +145,7 @@ export async function resumeAgentBackground({
     }
   }
 
-  // Resolve model for analytics metadata (runAgent resolves its own internally)
+  // Resolve the worker model; runAgent also resolves its internal request model.
   const resolvedAgentModel = getAgentModel(
     selectedAgent.model,
     toolUseContext.options.mainLoopModel,
@@ -219,9 +217,6 @@ export async function resumeAgentBackground({
     agentType: 'subagent' as const,
     subagentName: selectedAgent.agentType,
     isBuiltIn: isBuiltInAgent(selectedAgent),
-    invokingRequestId,
-    invocationKind: 'resume' as const,
-    invocationEmitted: false,
   }
 
   const wrapWithCwd = <T>(fn: () => T): T =>

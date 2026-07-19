@@ -1,9 +1,5 @@
 import { feature } from 'src/utils/features.js'
 import { z } from 'zod/v4'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import {
   type GlobalConfig,
@@ -224,13 +220,6 @@ export const ConfigTool = buildTool({
         })
       }
 
-      logEvent('tengu_config_tool_changed', {
-        setting:
-          setting as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        value: String(
-          finalValue,
-        ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
 
       return {
         data: {

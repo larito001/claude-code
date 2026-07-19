@@ -543,7 +543,7 @@ export function extractAgentMcpServers(
 }
 
 /**
- * Extracts the MCP server base URL (without query string) for analytics logging.
+ * Extracts a logging-safe MCP server base URL without its query string.
  * Query strings are stripped because they can contain access tokens.
  * Trailing slashes are also removed for normalization.
  * Returns undefined for stdio/sdk servers or if URL parsing fails.

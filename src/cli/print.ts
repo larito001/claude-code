@@ -15,11 +15,7 @@ import { assembleToolPool, filterToolsByDenyRules } from 'src/tools.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { uniq } from 'src/utils/array.js'
 import { mergeAndFilterTools } from 'src/utils/toolPool.js'
-import {
-  logEvent,
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-} from 'src/services/analytics/index.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
+import { getFeatureValue } from 'src/services/featureConfig.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import {
   logForDiagnosticsNoPII,
@@ -166,9 +162,6 @@ import {
 } from 'src/utils/permissions/permissionSetup.js'
 import {
   tryGenerateSuggestion,
-  logSuggestionOutcome,
-  logSuggestionSuppressed,
-  type PromptVariant,
 } from 'src/services/PromptSuggestion/promptSuggestion.js'
 import { getLastCacheSafeParams } from 'src/utils/forkedAgent.js'
 import { getApiCredentialInformation } from 'src/utils/auth.js'
@@ -317,7 +310,7 @@ import { getRunningTasks } from '../utils/task/framework.js'
 import { isBackgroundTask } from '../tasks/types.js'
 import { stopTask } from '../tasks/stopTask.js'
 import { drainSdkEvents } from '../utils/sdkEventQueue.js'
-import { initializeGrowthBook } from '../services/analytics/growthbook.js'
+import { initializeFeatureConfig } from '../services/featureConfig.js'
 import { drainPendingExtraction } from '../services/extractMemories/extractMemories.js'
 import { errorMessage, toError } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
@@ -504,9 +497,9 @@ export async function runHeadless(
   headlessProfilerStartTurn()
   headlessProfilerCheckpoint('runHeadless_entry')
 
-  // Initialize GrowthBook so feature flags take effect in headless mode.
+  // Initialize local feature configuration so feature flags take effect in headless mode.
   // Without this, the disk cache is empty and all flags fall back to defaults.
-  void initializeGrowthBook()
+  void initializeFeatureConfig()
 
   if (options.resumeSessionAt && !options.resume) {
     process.stderr.write(`Error: --resume-session-at requires --resume\n`)
@@ -958,7 +951,7 @@ function runHeadlessStreaming(
   const output = structuredIO.outbound
 
   // Ctrl+C in -p mode: abort the in-flight query, then shut down gracefully.
-  // gracefulShutdown persists session state and flushes analytics, with a
+  // gracefulShutdown persists session state and flushes observability data, with a
   // failsafe timer that force-exits if cleanup hangs.
   const sigintHandler = () => {
     logForDiagnosticsNoPII('info', 'shutdown_signal', { signal: 'SIGINT' })
@@ -1013,33 +1006,20 @@ function runHeadlessStreaming(
     }
   })
 
-  // Prompt suggestion tracking (push model)
+  // Prompt suggestion state (push model)
   const suggestionState: {
     abortController: AbortController | null
     inflightPromise: Promise<void> | null
-    lastEmitted: {
-      text: string
-      emittedAt: number
-      promptId: PromptVariant
-      generationRequestId: string | null
-    } | null
     pendingSuggestion: {
       type: 'prompt_suggestion'
       suggestion: string
       uuid: UUID
       session_id: string
     } | null
-    pendingLastEmittedEntry: {
-      text: string
-      promptId: PromptVariant
-      generationRequestId: string | null
-    } | null
   } = {
     abortController: null,
     inflightPromise: null,
-    lastEmitted: null,
     pendingSuggestion: null,
-    pendingLastEmittedEntry: null,
   }
 
   // Set up AWS auth status listener if enabled
@@ -1206,9 +1186,6 @@ function runHeadlessStreaming(
 
             const mode = request.params.mode === 'url' ? 'url' : 'form'
 
-            logEvent('tengu_mcp_elicitation_shown', {
-              mode: mode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            })
 
             // Run elicitation hooks first — they can provide a response programmatically
             const hookResponse = await runElicitationHooks(
@@ -1221,11 +1198,6 @@ function runHeadlessStreaming(
                 serverName,
                 `Elicitation resolved by hook: ${jsonStringify(hookResponse)}`,
               )
-              logEvent('tengu_mcp_elicitation_response', {
-                mode: mode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                action:
-                  hookResponse.action as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              })
               return hookResponse
             }
 
@@ -1264,11 +1236,6 @@ function runHeadlessStreaming(
               elicitationId,
             )
 
-            logEvent('tengu_mcp_elicitation_response', {
-              mode: mode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              action:
-                result.action as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            })
             return result
           },
         )
@@ -1764,9 +1731,6 @@ function runHeadlessStreaming(
               `CLAUDE_CODE_SYNC_PLUGIN_INSTALL: plugin installation timed out after ${timeoutMs}ms`,
             ),
           )
-          logEvent('tengu_sync_plugin_install_timeout', {
-            timeout_ms: timeoutMs,
-          })
         }
       } else {
         await pluginInstallPromise
@@ -1961,34 +1925,10 @@ function runHeadlessStreaming(
 
           const input = command.value
 
-          // Abort any in-flight suggestion generation and track acceptance
+          // Abort any in-flight suggestion generation.
           suggestionState.abortController?.abort()
           suggestionState.abortController = null
           suggestionState.pendingSuggestion = null
-          suggestionState.pendingLastEmittedEntry = null
-          if (suggestionState.lastEmitted) {
-            if (command.mode === 'prompt') {
-              // SDK user messages enqueue ContentBlockParam[], not a plain string
-              const inputText =
-                typeof input === 'string'
-                  ? input
-                  : (
-                      input.find(b => b.type === 'text') as
-                        | { type: 'text'; text: string }
-                        | undefined
-                    )?.text
-              if (typeof inputText === 'string') {
-                logSuggestionOutcome(
-                  suggestionState.lastEmitted.text,
-                  inputText,
-                  suggestionState.lastEmitted.emittedAt,
-                  suggestionState.lastEmitted.promptId,
-                  suggestionState.lastEmitted.generationRequestId,
-                )
-              }
-              suggestionState.lastEmitted = null
-            }
-          }
 
           abortController = createAbortController()
           headlessProfilerCheckpoint('before_ask')
@@ -2110,14 +2050,7 @@ function runHeadlessStreaming(
             suggestionState.abortController = localAbort
 
             const cacheSafeParams = getLastCacheSafeParams()
-            if (!cacheSafeParams) {
-              logSuggestionSuppressed(
-                'sdk_no_params',
-                undefined,
-                undefined,
-                'sdk',
-              )
-            } else {
+            if (cacheSafeParams) {
               // Use a ref object so the IIFE's finally can compare against its own
               // promise without a self-reference (which upsets TypeScript's flow analysis).
               const ref: { promise: Promise<void> | null } = { promise: null }
@@ -2128,7 +2061,6 @@ function runHeadlessStreaming(
                     mutableMessages,
                     getAppState,
                     cacheSafeParams,
-                    'sdk',
                   )
                   if (!result || localAbort.signal.aborted) return
                   const suggestionMsg = {
@@ -2137,26 +2069,11 @@ function runHeadlessStreaming(
                     uuid: randomUUID(),
                     session_id: getSessionId(),
                   }
-                  const lastEmittedEntry = {
-                    text: result.suggestion,
-                    emittedAt: Date.now(),
-                    promptId: result.promptId,
-                    generationRequestId: result.generationRequestId,
-                  }
                   // Defer emission if the result is being held for background agents,
                   // so that prompt_suggestion always arrives after result.
-                  // Only set lastEmitted when the suggestion is actually delivered
-                  // to the consumer; deferred suggestions may be discarded before
-                  // delivery if a new command arrives first.
                   if (heldBackResult) {
                     suggestionState.pendingSuggestion = suggestionMsg
-                    suggestionState.pendingLastEmittedEntry = {
-                      text: lastEmittedEntry.text,
-                      promptId: lastEmittedEntry.promptId,
-                      generationRequestId: lastEmittedEntry.generationRequestId,
-                    }
                   } else {
-                    suggestionState.lastEmitted = lastEmittedEntry
                     output.enqueue(suggestionMsg)
                   }
                 } catch (error) {
@@ -2165,12 +2082,6 @@ function runHeadlessStreaming(
                     (error.name === 'AbortError' ||
                       error.name === 'APIUserAbortError')
                   ) {
-                    logSuggestionSuppressed(
-                      'aborted',
-                      undefined,
-                      undefined,
-                      'sdk',
-                    )
                     return
                   }
                   logError(toError(error))
@@ -2236,14 +2147,6 @@ function runHeadlessStreaming(
         heldBackResult = null
         if (suggestionState.pendingSuggestion) {
           output.enqueue(suggestionState.pendingSuggestion)
-          // Now that the suggestion is actually delivered, record it for acceptance tracking
-          if (suggestionState.pendingLastEmittedEntry) {
-            suggestionState.lastEmitted = {
-              ...suggestionState.pendingLastEmittedEntry,
-              emittedAt: Date.now(),
-            }
-            suggestionState.pendingLastEmittedEntry = null
-          }
           suggestionState.pendingSuggestion = null
         }
       }
@@ -2644,7 +2547,6 @@ function runHeadlessStreaming(
           }
           suggestionState.abortController?.abort()
           suggestionState.abortController = null
-          suggestionState.lastEmitted = null
           suggestionState.pendingSuggestion = null
           sendControlResponseSuccess(message)
         } else if (message.request.subtype === 'end_session') {
@@ -2656,7 +2558,6 @@ function runHeadlessStreaming(
           }
           suggestionState.abortController?.abort()
           suggestionState.abortController = null
-          suggestionState.lastEmitted = null
           suggestionState.pendingSuggestion = null
           sendControlResponseSuccess(message)
           break // exits for-await → falls through to inputClosed=true drain below
@@ -2703,7 +2604,7 @@ function runHeadlessStreaming(
 
           if (
             message.request.agentProgressSummaries &&
-            getFeatureValue_CACHED_MAY_BE_STALE('tengu_slate_prism', true)
+            getFeatureValue('tengu_slate_prism', true)
           ) {
             setSdkAgentProgressSummariesEnabled(true)
           }
@@ -4235,9 +4136,8 @@ function handleChannelEnable(
   }
 
   const pluginId =
-    `${entry.name}@${entry.marketplace}` as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+    `${entry.name}@${entry.marketplace}`
   logMCPDebug(serverName, 'Channel notifications registered')
-  logEvent('tengu_mcp_channel_enable', { plugin: pluginId })
 
   // Identical enqueue shape to the interactive register block in
   // useManageMCPConnections. drainCommandQueue processes it between turns —
@@ -4251,14 +4151,6 @@ function handleChannelEnable(
         serverName,
         `notifications/claude/channel: ${content.slice(0, 80)}`,
       )
-      logEvent('tengu_mcp_channel_message', {
-        content_length: content.length,
-        meta_key_count: Object.keys(meta ?? {}).length,
-        entry_kind:
-          'plugin' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        is_dev: false,
-        plugin: pluginId,
-      })
       enqueue({
         mode: 'prompt',
         value: wrapChannelMessage(serverName, content, meta),
@@ -4312,7 +4204,7 @@ function reregisterChannelHandlerAfterReconnect(
   const entry = findChannelEntry(connection.name, getAllowedChannels())
   const pluginId =
     entry?.kind === 'plugin'
-      ? (`${entry.name}@${entry.marketplace}` as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
+      ? (`${entry.name}@${entry.marketplace}`)
       : undefined
 
   logMCPDebug(
@@ -4327,14 +4219,6 @@ function reregisterChannelHandlerAfterReconnect(
         connection.name,
         `notifications/claude/channel: ${content.slice(0, 80)}`,
       )
-      logEvent('tengu_mcp_channel_message', {
-        content_length: content.length,
-        meta_key_count: Object.keys(meta ?? {}).length,
-        entry_kind:
-          entry?.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        is_dev: entry?.dev ?? false,
-        plugin: pluginId,
-      })
       enqueue({
         mode: 'prompt',
         value: wrapChannelMessage(connection.name, content, meta),
@@ -4418,7 +4302,6 @@ async function loadInitialMessages(
   // Handle continue in print mode
   if (options.continue) {
     try {
-      logEvent('tengu_continue_print', {})
 
       const result = await loadConversationForResume(
         undefined /* sessionId */,
@@ -4499,7 +4382,6 @@ async function loadInitialMessages(
   // Handle resume in print mode (accepts a session ID or local JSONL file).
   if (options.resume) {
     try {
-      logEvent('tengu_resume_print', {})
 
       // In print mode - we require a valid session ID, JSONL file or URL
       const parsedSessionId = parseSessionIdentifier(

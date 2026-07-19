@@ -31,7 +31,6 @@ import {
   getIsNonInteractiveSession,
   getRegisteredHooks,
   getStatsStore,
-  addToTurnHookDuration,
   getOriginalCwd,
   getMainThreadAgentType,
 } from '../bootstrap/state.js'
@@ -50,17 +49,6 @@ import {
   getSettings_DEPRECATED,
   getSettingsForSource,
 } from './settings/settings.js'
-import {
-  logEvent,
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-} from 'src/services/analytics/index.js'
-import { logOTelEvent } from './telemetry/events.js'
-import { ALLOWED_OFFICIAL_MARKETPLACE_NAMES } from './plugins/schemas.js'
-import {
-  startHookSpan,
-  endHookSpan,
-  isBetaTracingEnabled,
-} from './telemetry/sessionTracing.js'
 import {
   hookJSONOutputSchema,
   promptRequestSchema,
@@ -262,7 +250,6 @@ function executeInBackground({
 
   return true
 }
-
 /**
  * Checks if a hook should be skipped due to lack of workspace trust.
  *
@@ -1453,41 +1440,6 @@ function hookDedupKey(m: MatchedHook, payload: string): string {
   return `${m.pluginRoot ?? m.skillRoot ?? ''}\0${payload}`
 }
 
-/**
- * Build a map of {sanitizedPluginName: hookCount} from matched hooks.
- * Only logs actual names for official marketplace plugins; others become 'third-party'.
- */
-function getPluginHookCounts(
-  hooks: MatchedHook[],
-): Record<string, number> | undefined {
-  const pluginHooks = hooks.filter(h => h.pluginId)
-  if (pluginHooks.length === 0) {
-    return undefined
-  }
-  const counts: Record<string, number> = {}
-  for (const h of pluginHooks) {
-    const atIndex = h.pluginId!.lastIndexOf('@')
-    const isOfficial =
-      atIndex > 0 &&
-      ALLOWED_OFFICIAL_MARKETPLACE_NAMES.has(h.pluginId!.slice(atIndex + 1))
-    const key = isOfficial ? h.pluginId! : 'third-party'
-    counts[key] = (counts[key] || 0) + 1
-  }
-  return counts
-}
-
-
-/**
- * Build a map of {hookType: count} from matched hooks.
- */
-function getHookTypeCounts(hooks: MatchedHook[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const h of hooks) {
-    counts[h.hook.type] = (counts[h.hook.type] || 0) + 1
-  }
-  return counts
-}
-
 function getHooksConfig(
   appState: AppState | undefined,
   sessionId: string,
@@ -2015,24 +1967,7 @@ async function* executeHooks({
     return
   }
 
-  const userHooks = matchingHooks.filter(h => !isInternalHook(h))
-  if (userHooks.length > 0) {
-    const pluginHookCounts = getPluginHookCounts(userHooks)
-    const hookTypeCounts = getHookTypeCounts(userHooks)
-    logEvent(`tengu_run_hook`, {
-      hookName:
-        hookName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      numCommands: userHooks.length,
-      hookTypeCounts: jsonStringify(
-        hookTypeCounts,
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...(pluginHookCounts && {
-        pluginHookCounts: jsonStringify(
-          pluginHookCounts,
-        ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      }),
-    })
-  } else {
+  if (matchingHooks.every(isInternalHook)) {
     // Fast-path: all hooks are internal callbacks. These return {} and don't
     // use the abort signal, so we
     // can skip span/progress/abortSignal/processHookJSONOutput/resultLoop.
@@ -2051,44 +1986,8 @@ async function* executeHooks({
     }
     const totalDurationMs = Date.now() - batchStartTime
     getStatsStore()?.observe('hook_duration_ms', totalDurationMs)
-    addToTurnHookDuration(totalDurationMs)
-    logEvent(`tengu_repl_hook_finished`, {
-      hookName:
-        hookName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      numCommands: matchingHooks.length,
-      numSuccess: matchingHooks.length,
-      numBlocking: 0,
-      numNonBlockingError: 0,
-      numCancelled: 0,
-      totalDurationMs,
-    })
     return
   }
-
-  // Collect hook definitions for beta tracing telemetry
-  const hookDefinitionsJson = isBetaTracingEnabled()
-    ? jsonStringify(getHookDefinitionsForTelemetry(matchingHooks))
-    : '[]'
-
-  // Log hook execution start to OTEL (only for beta tracing)
-  if (isBetaTracingEnabled()) {
-    void logOTelEvent('hook_execution_start', {
-      hook_event: hookEvent,
-      hook_name: hookName,
-      num_hooks: String(matchingHooks.length),
-      managed_only: String(shouldAllowManagedHooksOnly()),
-      hook_definitions: hookDefinitionsJson,
-      hook_source: shouldAllowManagedHooksOnly() ? 'policySettings' : 'merged',
-    })
-  }
-
-  // Start hook span for beta tracing
-  const hookSpan = startHookSpan(
-    hookEvent,
-    hookName,
-    matchingHooks.length,
-    hookDefinitionsJson,
-  )
 
   // Yield progress messages for each hook before execution
   for (const { hook } of matchingHooks) {
@@ -2729,20 +2628,10 @@ async function* executeHooks({
     }
   })
 
-  // Track outcomes for logging
-  const outcomes = {
-    success: 0,
-    blocking: 0,
-    non_blocking_error: 0,
-    cancelled: 0,
-  }
-
   let permissionBehavior: PermissionResult['behavior'] | undefined
 
   // Run all hooks in parallel and wait for all to complete
   for await (const result of all(hookPromises)) {
-    outcomes[result.outcome]++
-
     // Check for preventContinuation early
     if (result.preventContinuation) {
       logForDebugging(
@@ -2929,45 +2818,8 @@ async function* executeHooks({
 
   const totalDurationMs = Date.now() - batchStartTime
   getStatsStore()?.observe('hook_duration_ms', totalDurationMs)
-  addToTurnHookDuration(totalDurationMs)
 
-  logEvent(`tengu_repl_hook_finished`, {
-    hookName:
-      hookName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    numCommands: matchingHooks.length,
-    numSuccess: outcomes.success,
-    numBlocking: outcomes.blocking,
-    numNonBlockingError: outcomes.non_blocking_error,
-    numCancelled: outcomes.cancelled,
-    totalDurationMs,
-  })
 
-  // Log hook execution completion to OTEL (only for beta tracing)
-  if (isBetaTracingEnabled()) {
-    const hookDefinitionsComplete =
-      getHookDefinitionsForTelemetry(matchingHooks)
-
-    void logOTelEvent('hook_execution_complete', {
-      hook_event: hookEvent,
-      hook_name: hookName,
-      num_hooks: String(matchingHooks.length),
-      num_success: String(outcomes.success),
-      num_blocking: String(outcomes.blocking),
-      num_non_blocking_error: String(outcomes.non_blocking_error),
-      num_cancelled: String(outcomes.cancelled),
-      managed_only: String(shouldAllowManagedHooksOnly()),
-      hook_definitions: jsonStringify(hookDefinitionsComplete),
-      hook_source: shouldAllowManagedHooksOnly() ? 'policySettings' : 'merged',
-    })
-  }
-
-  // End hook span for beta tracing
-  endHookSpan(hookSpan, {
-    numSuccess: outcomes.success,
-    numBlocking: outcomes.blocking,
-    numNonBlockingError: outcomes.non_blocking_error,
-    numCancelled: outcomes.cancelled,
-  })
 }
 
 export type HookOutsideReplResult = {
@@ -3049,25 +2901,6 @@ async function executeHooksOutsideREPL({
 
   if (signal?.aborted) {
     return []
-  }
-
-  const userHooks = matchingHooks.filter(h => !isInternalHook(h))
-  if (userHooks.length > 0) {
-    const pluginHookCounts = getPluginHookCounts(userHooks)
-    const hookTypeCounts = getHookTypeCounts(userHooks)
-    logEvent(`tengu_run_hook`, {
-      hookName:
-        hookName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      numCommands: userHooks.length,
-      hookTypeCounts: jsonStringify(
-        hookTypeCounts,
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...(pluginHookCounts && {
-        pluginHookCounts: jsonStringify(
-          pluginHookCounts,
-        ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      }),
-    })
   }
 
   // Validate and stringify the hook input
@@ -4999,23 +4832,4 @@ export async function executeWorktreeRemoveHook(
   }
 
   return true
-}
-
-function getHookDefinitionsForTelemetry(
-  matchedHooks: MatchedHook[],
-): Array<{ type: string; command?: string; prompt?: string; name?: string }> {
-  return matchedHooks.map(({ hook }) => {
-    if (hook.type === 'command') {
-      return { type: 'command', command: hook.command }
-    } else if (hook.type === 'prompt') {
-      return { type: 'prompt', prompt: hook.prompt }
-    } else if (hook.type === 'http') {
-      return { type: 'http', command: hook.url }
-    } else if (hook.type === 'function') {
-      return { type: 'function', name: 'function' }
-    } else if (hook.type === 'callback') {
-      return { type: 'callback', name: 'callback' }
-    }
-    return { type: 'unknown' }
-  })
 }

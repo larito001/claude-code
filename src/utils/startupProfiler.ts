@@ -2,19 +2,14 @@
  * Startup profiling utility for measuring and reporting time spent in various
  * initialization phases.
  *
- * Two modes:
- * 1. Sampled event logging for lightweight phase measurements.
- * 2. CLAUDE_CODE_PROFILE_STARTUP=1 for a full report with memory snapshots.
+ * Set CLAUDE_CODE_PROFILE_STARTUP=1 for a full local report with memory
+ * snapshots.
  *
  * Uses Node.js built-in performance hooks API for standard timing measurement.
  */
 
 import { dirname, join } from 'path'
 import { getSessionId } from 'src/bootstrap/state.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import { logForDebugging } from './debug.js'
 import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -25,14 +20,7 @@ import { writeFileSync_DEPRECATED } from './slowOperations.js'
 // eslint-disable-next-line custom-rules/no-process-env-top-level
 const DETAILED_PROFILING = isEnvTruthy(process.env.CLAUDE_CODE_PROFILE_STARTUP)
 
-// Sampling for lightweight startup logging: 0.5%.
-// Decision made once at startup - non-sampled users pay no profiling cost
-const STATSIG_SAMPLE_RATE = 0.005
-// eslint-disable-next-line custom-rules/no-process-env-top-level
-const STATSIG_LOGGING_SAMPLED = Math.random() < STATSIG_SAMPLE_RATE
-
-// Enable profiling if either detailed mode OR sampled for Statsig
-const SHOULD_PROFILE = DETAILED_PROFILING || STATSIG_LOGGING_SAMPLED
+const SHOULD_PROFILE = DETAILED_PROFILING
 
 // Track memory snapshots separately (perf_hooks doesn't track memory).
 // Only used when DETAILED_PROFILING is enabled.
@@ -43,14 +31,6 @@ const SHOULD_PROFILE = DETAILED_PROFILING || STATSIG_LOGGING_SAMPLED
 // plugins reset the settings cache), and the second call would overwrite the
 // first's memory snapshot.
 const memorySnapshots: NodeJS.MemoryUsage[] = []
-
-// Phase definitions for Statsig logging: [startCheckpoint, endCheckpoint]
-const PHASE_DEFINITIONS = {
-  import_time: ['cli_entry', 'main_tsx_imports_loaded'],
-  init_time: ['init_function_start', 'init_function_end'],
-  settings_time: ['eagerLoadSettings_start', 'eagerLoadSettings_end'],
-  total_time: ['cli_entry', 'main_after_run'],
-} as const
 
 // Record initial checkpoint if profiling is enabled
 if (SHOULD_PROFILE) {
@@ -123,9 +103,6 @@ export function profileReport(): void {
   if (reported) return
   reported = true
 
-  // Emit startup performance telemetry through the configured analytics sink.
-  logStartupPerf()
-
   // Output detailed report if CLAUDE_CODE_PROFILE_STARTUP=1
   if (DETAILED_PROFILING) {
     // Write to file
@@ -149,45 +126,4 @@ export function isDetailedProfilingEnabled(): boolean {
 
 export function getStartupPerfLogPath(): string {
   return join(getClaudeConfigHomeDir(), 'startup-perf', `${getSessionId()}.txt`)
-}
-
-/**
- * Log startup performance phases to Statsig.
- * Only logs if this session was sampled at startup.
- */
-export function logStartupPerf(): void {
-  // Only log if we were sampled (decision made at module load)
-  if (!STATSIG_LOGGING_SAMPLED) return
-
-  const perf = getPerformance()
-  const marks = perf.getEntriesByType('mark')
-  if (marks.length === 0) return
-
-  // Build checkpoint lookup
-  const checkpointTimes = new Map<string, number>()
-  for (const mark of marks) {
-    checkpointTimes.set(mark.name, mark.startTime)
-  }
-
-  // Compute phase durations
-  const metadata: Record<string, number | undefined> = {}
-
-  for (const [phaseName, [startCheckpoint, endCheckpoint]] of Object.entries(
-    PHASE_DEFINITIONS,
-  )) {
-    const startTime = checkpointTimes.get(startCheckpoint)
-    const endTime = checkpointTimes.get(endCheckpoint)
-
-    if (startTime !== undefined && endTime !== undefined) {
-      metadata[`${phaseName}_ms`] = Math.round(endTime - startTime)
-    }
-  }
-
-  // Add checkpoint count for debugging
-  metadata.checkpoint_count = marks.length
-
-  logEvent(
-    'tengu_startup_perf',
-    metadata as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  )
 }

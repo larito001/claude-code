@@ -796,13 +796,7 @@ export function startUserInputPerfettoSpan(context?: string): string {
 /**
  * End a user input waiting span
  */
-export function endUserInputPerfettoSpan(
-  spanId: string,
-  metadata?: {
-    decision?: string
-    source?: string
-  },
-): void {
+export function endUserInputPerfettoSpan(spanId: string): void {
   if (!isEnabled || !spanId) return
 
   const pending = pendingSpans.get(spanId)
@@ -813,8 +807,6 @@ export function endUserInputPerfettoSpan(
 
   const args = {
     ...pending.args,
-    decision: metadata?.decision,
-    source: metadata?.source,
     duration_ms: duration / 1000,
   }
 
@@ -880,7 +872,7 @@ export function emitPerfettoCounter(
 /**
  * Start an interaction span (wraps a full user request cycle)
  */
-export function startInteractionPerfettoSpan(userPrompt?: string): string {
+export function startInteractionPerfettoSpan(userPromptLength?: number): string {
   if (!isEnabled) return ''
 
   const spanId = generateSpanId()
@@ -892,7 +884,7 @@ export function startInteractionPerfettoSpan(userPrompt?: string): string {
     startTime: getTimestamp(),
     agentInfo,
     args: {
-      user_prompt_length: userPrompt?.length,
+      user_prompt_length: userPromptLength,
     },
   })
 

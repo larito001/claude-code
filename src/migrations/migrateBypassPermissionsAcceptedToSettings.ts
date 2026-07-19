@@ -1,4 +1,3 @@
-import { logEvent } from 'src/services/analytics/index.js'
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
 import { logError } from '../utils/log.js'
 import {
@@ -25,7 +24,6 @@ export function migrateBypassPermissionsAcceptedToSettings(): void {
       })
     }
 
-    logEvent('tengu_migrate_bypass_permissions_accepted', {})
 
     saveGlobalConfig(current => {
       if (!('bypassPermissionsModeAccepted' in current)) return current

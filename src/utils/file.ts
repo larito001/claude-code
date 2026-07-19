@@ -12,8 +12,7 @@ import {
   resolve,
   sep,
 } from 'path'
-import { logEvent } from 'src/services/analytics/index.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import { getFeatureValue } from '../services/featureConfig.js'
 import { getCwd } from '../utils/cwd.js'
 import { logForDebugging } from './debug.js'
 import { isENOENT, isFsInaccessible } from './errors.js'
@@ -278,7 +277,7 @@ export async function suggestPathUnderCwd(
 export function isCompactLinePrefixEnabled(): boolean {
   // Default: killswitch off = compact format enabled. Client-side only —
   // no server support needed, safe for Bedrock/Vertex/Foundry.
-  return !getFeatureValue_CACHED_MAY_BE_STALE(
+  return !getFeatureValue(
     'tengu_compact_line_prefix_killswitch',
     false,
   )
@@ -440,7 +439,6 @@ export function writeFileSyncAndFlush_DEPRECATED(
     logForDebugging(`Failed to write file atomically: ${atomicError}`, {
       level: 'error',
     })
-    logEvent('tengu_atomic_write_error', {})
 
     // Clean up temp file on error
     try {

@@ -1,10 +1,5 @@
 import { feature } from 'src/utils/features.js'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
-import { sanitizeToolNameForAnalytics } from 'src/services/analytics/metadata.js'
 import type { ToolUseConfirm } from '../../components/permissions/PermissionRequest.js'
 import type {
   ToolPermissionContext,
@@ -37,21 +32,6 @@ import {
   supportsPersistence,
 } from '../../utils/permissions/PermissionUpdate.js'
 import type { PermissionUpdate } from '../../utils/permissions/PermissionUpdateSchema.js'
-import {
-  logPermissionDecision,
-  type PermissionDecisionArgs,
-} from './permissionLogging.js'
-
-type PermissionApprovalSource =
-  | { type: 'hook'; permanent?: boolean }
-  | { type: 'user'; permanent: boolean }
-  | { type: 'classifier' }
-
-type PermissionRejectionSource =
-  | { type: 'hook' }
-  | { type: 'user_abort' }
-  | { type: 'user_reject'; hasFeedback: boolean }
-
 // Generic interface for permission queue operations, decoupled from React.
 // In the REPL, these are backed by React state.
 type PermissionQueueOps = {
@@ -110,32 +90,6 @@ function createPermissionContext(
     assistantMessage,
     messageId,
     toolUseID,
-    logDecision(
-      args: PermissionDecisionArgs,
-      opts?: {
-        input?: Record<string, unknown>
-        permissionPromptStartTimeMs?: number
-      },
-    ) {
-      logPermissionDecision(
-        {
-          tool,
-          input: opts?.input ?? input,
-          toolUseContext,
-          messageId,
-          toolUseID,
-        },
-        args,
-        opts?.permissionPromptStartTimeMs,
-      )
-    },
-    logCancelled() {
-      logEvent('tengu_tool_use_cancelled', {
-        messageID:
-          messageId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        toolName: sanitizeToolNameForAnalytics(tool.name),
-      })
-    },
     async persistPermissions(updates: PermissionUpdate[]) {
       if (updates.length === 0) return false
       persistPermissionUpdates(updates)
@@ -147,7 +101,6 @@ function createPermissionContext(
     },
     resolveIfAborted(resolve: (decision: PermissionDecision) => void) {
       if (!toolUseContext.abortController.signal.aborted) return false
-      this.logCancelled()
       resolve(this.cancelAndAbort(undefined, true))
       return true
     },
@@ -199,11 +152,6 @@ function createPermissionContext(
                 setClassifierApproval(toolUseID, matchedRule)
               }
             }
-            logPermissionDecision(
-              { tool, input, toolUseContext, messageId, toolUseID },
-              { decision: 'accept', source: { type: 'classifier' } },
-              undefined,
-            )
             return {
               behavior: 'allow' as const,
               updatedInput: updatedInput ?? input,
@@ -238,10 +186,6 @@ function createPermissionContext(
               permissionPromptStartTimeMs,
             )
           } else if (decision.behavior === 'deny') {
-            this.logDecision(
-              { decision: 'reject', source: { type: 'hook' } },
-              { permissionPromptStartTimeMs },
-            )
             if (decision.interrupt) {
               logForDebugging(
                 `Hook interrupt: tool=${tool.name} hookMessage=${decision.message}`,
@@ -296,15 +240,7 @@ function createPermissionContext(
       contentBlocks?: ContentBlockParam[],
       decisionReason?: PermissionDecisionReason,
     ): Promise<PermissionAllowDecision> {
-      const acceptedPermanentUpdates =
-        await this.persistPermissions(permissionUpdates)
-      this.logDecision(
-        {
-          decision: 'accept',
-          source: { type: 'user', permanent: acceptedPermanentUpdates },
-        },
-        { input: updatedInput, permissionPromptStartTimeMs },
-      )
+      await this.persistPermissions(permissionUpdates)
       const userModified = tool.inputsEquivalent
         ? !tool.inputsEquivalent(input, updatedInput)
         : false
@@ -321,15 +257,7 @@ function createPermissionContext(
       permissionUpdates: PermissionUpdate[],
       permissionPromptStartTimeMs?: number,
     ): Promise<PermissionAllowDecision> {
-      const acceptedPermanentUpdates =
-        await this.persistPermissions(permissionUpdates)
-      this.logDecision(
-        {
-          decision: 'accept',
-          source: { type: 'hook', permanent: acceptedPermanentUpdates },
-        },
-        { input: finalInput, permissionPromptStartTimeMs },
-      )
+      await this.persistPermissions(permissionUpdates)
       return this.buildAllow(finalInput, {
         decisionReason: { type: 'hook', hookName: 'PermissionRequest' },
       })
@@ -381,8 +309,6 @@ function createPermissionQueueOps(
 export { createPermissionContext, createPermissionQueueOps, createResolveOnce }
 export type {
   PermissionContext,
-  PermissionApprovalSource,
   PermissionQueueOps,
-  PermissionRejectionSource,
   ResolveOnce,
 }

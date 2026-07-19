@@ -5,7 +5,6 @@ import { errorMessage } from '../../utils/errors.js'
 import { execFileNoThrowWithCwd } from '../../utils/execFileNoThrow.js'
 import { logError, logMCPDebug, logMCPError } from '../../utils/log.js'
 import { jsonParse } from '../../utils/slowOperations.js'
-import { logEvent } from '../analytics/index.js'
 import type {
   McpHTTPServerConfig,
   McpSSEServerConfig,
@@ -51,7 +50,6 @@ export async function getMcpHeadersFromHelper(
         `Security: headersHelper for MCP server '${serverName}' was blocked because workspace trust is not confirmed.`,
       )
       logDebugError('MCP headersHelper invoked before trust check', error)
-      logEvent('tengu_mcp_headersHelper_missing_trust', {})
       return null
     }
   }

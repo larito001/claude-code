@@ -19,10 +19,6 @@ import {
   registerPermissionCallback,
   unregisterPermissionCallback,
 } from '../../hooks/useSwarmPermissionPoller.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
 import { getAutoCompactThreshold } from '../../services/compact/autoCompact.js'
 import {
   buildPostCompactMessages,
@@ -495,9 +491,6 @@ export type InProcessRunnerConfig = {
   allowPermissionPrompts?: boolean
   /** Short description of the task (used as summary for the initial prompt header) */
   description?: string
-  /** request_id of the API call that spawned this teammate, for lineage
-   *  tracing on tengu_api_* events. */
-  invokingRequestId?: string
 }
 
 /**
@@ -896,7 +889,6 @@ export async function runInProcessTeammate(
     systemPromptMode,
     allowedTools,
     allowPermissionPrompts,
-    invokingRequestId,
   } = config
   const { setAppState } = toolUseContext
 
@@ -904,7 +896,7 @@ export async function runInProcessTeammate(
     `[inProcessRunner] Starting agent loop for ${identity.agentId}`,
   )
 
-  // Create AgentContext for analytics attribution
+  // Create isolated execution context for this teammate.
   const agentContext: AgentContext = {
     agentId: identity.agentId,
     parentSessionId: identity.parentSessionId,
@@ -914,9 +906,6 @@ export async function runInProcessTeammate(
     planModeRequired: identity.planModeRequired,
     isTeamLead: false,
     agentType: 'teammate',
-    invokingRequestId,
-    invocationKind: 'spawn',
-    invocationEmitted: false,
   }
 
   // Build system prompt based on systemPromptMode
@@ -943,15 +932,6 @@ export async function runInProcessTeammate(
         systemPromptParts.push(`\n# Custom Agent Instructions\n${customPrompt}`)
       }
 
-      // Log agent memory loaded event for in-process teammates
-      if (agentDefinition.memory) {
-        logEvent('tengu_agent_memory_loaded', {
-          scope:
-            agentDefinition.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          source:
-            'in-process-teammate' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        })
-      }
     }
 
     // Append mode: add provided system prompt after default

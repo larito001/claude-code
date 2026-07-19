@@ -286,20 +286,6 @@ export const PermissionUpdateSchema = lazySchema(() =>
   ]),
 )
 
-export const PermissionDecisionClassificationSchema = lazySchema(() =>
-  z
-    .enum(['user_temporary', 'user_permanent', 'user_reject'])
-    .describe(
-      'Classification of this permission decision for telemetry. SDK hosts ' +
-        'that prompt users (desktop apps, IDEs) should set this to reflect ' +
-        'what actually happened: user_temporary for allow-once, user_permanent ' +
-        'for always-allow (both the click and later cache hits), user_reject ' +
-        'for deny. If unset, the CLI infers conservatively (temporary for ' +
-        'allow, reject for deny). The vocabulary matches tool_decision OTel ' +
-        'events (monitoring-usage docs).',
-    ),
-)
-
 export const PermissionResultSchema = lazySchema(() =>
   z.union([
     z.object({
@@ -308,16 +294,12 @@ export const PermissionResultSchema = lazySchema(() =>
       updatedInput: z.record(z.string(), z.unknown()).optional(),
       updatedPermissions: z.array(PermissionUpdateSchema()).optional(),
       toolUseID: z.string().optional(),
-      decisionClassification:
-        PermissionDecisionClassificationSchema().optional(),
     }),
     z.object({
       behavior: z.literal('deny'),
       message: z.string(),
       interrupt: z.boolean().optional(),
       toolUseID: z.string().optional(),
-      decisionClassification:
-        PermissionDecisionClassificationSchema().optional(),
     }),
   ]),
 )

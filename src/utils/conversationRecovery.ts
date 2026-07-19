@@ -35,7 +35,6 @@ import { copyPlanForResume } from './plans.js'
 import { processSessionStartHooks } from './sessionStart.js'
 import {
   buildConversationChain,
-  checkResumeConsistency,
   getLastSessionLog,
   getSessionIdFromLog,
   isLiteLog,
@@ -447,7 +446,6 @@ export async function loadConversationForResume(
       void copyFileHistoryForResume(log)
 
       messages = log.messages
-      checkResumeConsistency(messages)
     }
 
     // Restore skill state from invoked_skills attachments before deserialization.

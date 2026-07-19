@@ -2,7 +2,6 @@ import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNotifications } from 'src/context/notifications.js';
 import { Text } from 'src/ink.js';
-import { logEvent } from 'src/services/analytics/index.js';
 import { useDebounceCallback } from 'usehooks-ts';
 import { type Command, getCommandName } from '../commands.js';
 import { getModeFromInput, getValueFromInput } from '../components/PromptInput/inputModes.js';
@@ -102,7 +101,6 @@ type Props = {
     commandArgumentHint?: string;
   };
   suppressSuggestions?: boolean;
-  markAccepted: () => void;
   onModeChange?: (mode: PromptInputMode) => void;
 };
 type UseTypeaheadResult = {
@@ -218,7 +216,6 @@ async function generateBashSuggestions(input: string, cursorOffset: number): Pro
     return suggestions;
   } catch {
     // Silent failure - don't break UX
-    logEvent('tengu_shell_completion_failed', {});
     return [];
   }
 }
@@ -366,7 +363,6 @@ export function useTypeahead({
     commandArgumentHint
   },
   suppressSuggestions = false,
-  markAccepted,
   onModeChange
 }: Props): UseTypeaheadResult {
   const {
@@ -1297,7 +1293,6 @@ export function useTypeahead({
       const suggestionText = promptSuggestion.text;
       const suggestionShownAt = promptSuggestion.shownAt;
       if (suggestionText && suggestionShownAt > 0 && input === '') {
-        markAccepted();
         acceptSuggestionText(suggestionText);
         e.stopImmediatePropagation();
         return;
@@ -1316,7 +1311,6 @@ export function useTypeahead({
       const suggestionShownAt = promptSuggestion.shownAt;
       if (suggestionText && suggestionShownAt > 0 && input === '' && !isViewingTeammate) {
         e.preventDefault();
-        markAccepted();
         acceptSuggestionText(suggestionText);
         return;
       }

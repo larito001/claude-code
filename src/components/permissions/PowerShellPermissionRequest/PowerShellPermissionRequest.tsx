@@ -1,23 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useTheme } from '../../../ink.js';
 import { useKeybinding } from '../../../keybindings/useKeybinding.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../../services/analytics/growthbook.js';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../../services/analytics/index.js';
-import { sanitizeToolNameForAnalytics } from '../../../services/analytics/metadata.js';
+import { getFeatureValue } from '../../../services/featureConfig.js';
 import { getDestructiveCommandWarning } from '../../../tools/PowerShellTool/destructiveCommandWarning.js';
 import { PowerShellTool } from '../../../tools/PowerShellTool/PowerShellTool.js';
 import { isAllowlistedCommand } from '../../../tools/PowerShellTool/readOnlyValidation.js';
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js';
 import { getCompoundCommandPrefixesStatic } from '../../../utils/powershell/staticPrefix.js';
 import { Select } from '../../CustomSelect/select.js';
-import { type UnaryEvent, usePermissionRequestLogging } from '../hooks.js';
+import { usePermissionPromptTracking } from '../hooks.js';
 import { PermissionDecisionDebugInfo } from '../PermissionDecisionDebugInfo.js';
 import { PermissionDialog } from '../PermissionDialog.js';
 import { PermissionExplainerContent, usePermissionExplainerUI } from '../PermissionExplanation.js';
 import type { PermissionRequestProps } from '../PermissionRequest.js';
 import { PermissionRuleExplanation } from '../PermissionRuleExplanation.js';
 import { useShellPermissionFeedback } from '../useShellPermissionFeedback.js';
-import { logUnaryPermissionEvent } from '../utils.js';
 import { powershellToolUseOptions } from './powershellToolUseOptions.js';
 export function PowerShellPermissionRequest(props: PermissionRequestProps): React.ReactNode {
   const {
@@ -57,7 +54,7 @@ export function PowerShellPermissionRequest(props: PermissionRequestProps): Reac
     onReject,
     explainerVisible: explainerState.visible
   });
-  const destructiveWarning = getFeatureValue_CACHED_MAY_BE_STALE('tengu_destructive_command_warning', false) ? getDestructiveCommandWarning(command) : null;
+  const destructiveWarning = getFeatureValue('tengu_destructive_command_warning', false) ? getDestructiveCommandWarning(command) : null;
   const [showPermissionDebug, setShowPermissionDebug] = useState(false);
 
   // Editable prefix — compute static prefix locally (no LLM call).
@@ -92,11 +89,7 @@ export function PowerShellPermissionRequest(props: PermissionRequestProps): Reac
     hasUserEditedPrefix.current = true;
     setEditablePrefix(value);
   }, []);
-  const unaryEvent = useMemo<UnaryEvent>(() => ({
-    completion_type: 'tool_use_single',
-    language_name: 'none'
-  }), []);
-  usePermissionRequestLogging(toolUseConfirm, unaryEvent);
+  usePermissionPromptTracking(toolUseConfirm);
   const options = useMemo(() => powershellToolUseOptions({
     suggestions: toolUseConfirm.permissionResult.behavior === 'ask' ? toolUseConfirm.permissionResult.suggestions : undefined,
     onRejectFeedbackChange: setRejectFeedback,
@@ -115,21 +108,8 @@ export function PowerShellPermissionRequest(props: PermissionRequestProps): Reac
     context: 'Confirmation'
   });
   function onSelect(value: string) {
-    // Map options to numeric values for analytics (strings not allowed in logEvent)
-    const optionIndex: Record<string, number> = {
-      yes: 1,
-      'yes-apply-suggestions': 2,
-      'yes-prefix-edited': 2,
-      no: 3
-    };
-    logEvent('tengu_permission_request_option_selected', {
-      option_index: optionIndex[value],
-      explainer_visible: explainerState.visible
-    });
-    const toolNameForAnalytics = sanitizeToolNameForAnalytics(toolUseConfirm.tool.name) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
     if (value === 'yes-prefix-edited') {
       const trimmedPrefix = (editablePrefix ?? '').trim();
-      logUnaryPermissionEvent('tool_use_single', toolUseConfirm, 'accept');
       if (!trimmedPrefix) {
         toolUseConfirm.onAllow(toolUseConfirm.input, []);
       } else {
@@ -151,22 +131,12 @@ export function PowerShellPermissionRequest(props: PermissionRequestProps): Reac
       case 'yes':
         {
           const trimmedFeedback = acceptFeedback.trim();
-          logUnaryPermissionEvent('tool_use_single', toolUseConfirm, 'accept');
-          // Log accept submission with feedback context
-          logEvent('tengu_accept_submitted', {
-            toolName: toolNameForAnalytics,
-            isMcp: toolUseConfirm.tool.isMcp ?? false,
-            has_instructions: !!trimmedFeedback,
-            instructions_length: trimmedFeedback.length,
-            entered_feedback_mode: yesFeedbackModeEntered
-          });
           toolUseConfirm.onAllow(toolUseConfirm.input, [], trimmedFeedback || undefined);
           onDone();
           break;
         }
       case 'yes-apply-suggestions':
         {
-          logUnaryPermissionEvent('tool_use_single', toolUseConfirm, 'accept');
           // Extract suggestions if present (works for both 'ask' and 'passthrough' behaviors)
           const permissionUpdates = 'suggestions' in toolUseConfirm.permissionResult ? toolUseConfirm.permissionResult.suggestions || [] : [];
           toolUseConfirm.onAllow(toolUseConfirm.input, permissionUpdates);
@@ -176,16 +146,6 @@ export function PowerShellPermissionRequest(props: PermissionRequestProps): Reac
       case 'no':
         {
           const trimmedFeedback = rejectFeedback.trim();
-
-          // Log reject submission with feedback context
-          logEvent('tengu_reject_submitted', {
-            toolName: toolNameForAnalytics,
-            isMcp: toolUseConfirm.tool.isMcp ?? false,
-            has_instructions: !!trimmedFeedback,
-            instructions_length: trimmedFeedback.length,
-            entered_feedback_mode: noFeedbackModeEntered
-          });
-
           // Process rejection (with or without feedback)
           handleReject(trimmedFeedback || undefined);
           break;

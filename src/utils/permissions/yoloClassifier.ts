@@ -8,18 +8,13 @@ import {
   getCachedClaudeMdContent,
   getSessionId,
 } from '../../bootstrap/state.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import { logEvent } from '../../services/analytics/index.js'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/metadata.js'
+import { getFeatureValue } from '../../services/featureConfig.js'
 import { getCacheControl } from '../../services/api/claude.js'
 import { parsePromptTooLongTokenCounts } from '../../services/api/errors.js'
 import { getDefaultMaxRetries } from '../../services/api/withRetry.js'
 import type { Tool, ToolPermissionContext, Tools } from '../../Tool.js'
 import type { Message } from '../../types/message.js'
-import type {
-  ClassifierUsage,
-  YoloClassifierResult,
-} from '../../types/permissions.js'
+import type { YoloClassifierResult } from '../../types/permissions.js'
 import { isDebugMode, logForDebugging } from '../debug.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from '../envUtils.js'
 import { errorMessage } from '../errors.js'
@@ -367,10 +362,6 @@ function toCompactBlock(
       logForDebugging(
         `toAutoClassifierInput failed for ${block.name}: ${errorMessage(e)}`,
       )
-      logEvent('tengu_auto_mode_malformed_tool_input', {
-        toolName:
-          block.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
       encoded = input
     }
     if (encoded === '') return ''
@@ -563,43 +554,6 @@ function parseXmlThinking(text: string): string | null {
 }
 
 /**
- * Extract usage stats from an API response.
- */
-function extractUsage(
-  result: Anthropic.Beta.Messages.BetaMessage,
-): ClassifierUsage {
-  return {
-    inputTokens: result.usage.input_tokens,
-    outputTokens: result.usage.output_tokens,
-    cacheReadInputTokens: result.usage.cache_read_input_tokens ?? 0,
-    cacheCreationInputTokens: result.usage.cache_creation_input_tokens ?? 0,
-  }
-}
-
-/**
- * Extract the API request_id (req_xxx) that the SDK attaches as a
- * non-enumerable `_request_id` property on response objects.
- */
-function extractRequestId(
-  result: Anthropic.Beta.Messages.BetaMessage,
-): string | undefined {
-  return (result as { _request_id?: string | null })._request_id ?? undefined
-}
-
-/**
- * Combine usage from two classifier stages into a single total.
- */
-function combineUsage(a: ClassifierUsage, b: ClassifierUsage): ClassifierUsage {
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-    cacheReadInputTokens: a.cacheReadInputTokens + b.cacheReadInputTokens,
-    cacheCreationInputTokens:
-      a.cacheCreationInputTokens + b.cacheCreationInputTokens,
-  }
-}
-
-/**
  * Replace the tool_use output format instruction with XML format.
  * Finds the last line of the prompt ("Use the classify_result tool...")
  * and replaces it with XML output instructions.
@@ -660,11 +614,6 @@ async function classifyYoloActionXml(
     Anthropic.TextBlockParam | Anthropic.ImageBlockParam
   >,
   model: string,
-  promptLengths: {
-    systemPrompt: number
-    toolCalls: number
-    userPrompts: number
-  },
   signal: AbortSignal,
   dumpContextInfo: {
     mainLoopTokens: number
@@ -676,12 +625,6 @@ async function classifyYoloActionXml(
   },
   mode: TwoStageMode,
 ): Promise<YoloClassifierResult> {
-  const classifierType =
-    mode === 'both'
-      ? 'xml_2stage'
-      : mode === 'fast'
-        ? 'xml_fast'
-        : 'xml_thinking'
   const xmlSystemPrompt = replaceOutputFormatWithXml(systemPrompt)
   const systemBlocks: Anthropic.TextBlockParam[] = [
     {
@@ -690,12 +633,8 @@ async function classifyYoloActionXml(
       cache_control: getCacheControl({ querySource: 'auto_mode' }),
     },
   ]
-  let stage1Usage: ClassifierUsage | undefined
-  let stage1DurationMs: number | undefined
-  let stage1RequestId: string | undefined
-  let stage1MsgId: string | undefined
+  let stage1Completed = false
   let stage1Opts: Parameters<typeof sideQuery>[0] | undefined
-  const overallStart = Date.now()
   const [disableThinking, thinkingPadding] = getClassifierThinkingConfig(model)
 
   // Wrap transcript entries in <transcript> tags for the XML classifier.
@@ -737,10 +676,7 @@ async function classifyYoloActionXml(
         querySource: 'auto_mode',
       }
       const stage1Raw = await sideQuery(stage1Opts)
-      stage1DurationMs = Date.now() - stage1Start
-      stage1Usage = extractUsage(stage1Raw)
-      stage1RequestId = extractRequestId(stage1Raw)
-      stage1MsgId = stage1Raw.id
+      stage1Completed = true
       const stage1Text = extractTextContent(stage1Raw.content)
       const stage1Block = parseXmlBlock(stage1Text)
 
@@ -748,54 +684,27 @@ async function classifyYoloActionXml(
 
       // If stage 1 says allow, return immediately (fast path)
       if (stage1Block === false) {
-        logAutoModeOutcome('success', model, {
-          classifierType,
-          durationMs: stage1DurationMs,
-        })
         return {
           shouldBlock: false,
           reason: 'Allowed by fast classifier',
           model,
-          usage: stage1Usage,
-          durationMs: stage1DurationMs,
-          promptLengths,
-          stage: 'fast',
-          stage1RequestId,
-          stage1MsgId,
         }
       }
 
       // In fast-only mode, stage 1 is final — handle block + unparseable here.
       if (mode === 'fast') {
         if (stage1Block === null) {
-          logAutoModeOutcome('parse_failure', model, { classifierType })
           return {
             shouldBlock: true,
             reason: 'Classifier stage 1 unparseable - blocking for safety',
             model,
-            usage: stage1Usage,
-            durationMs: stage1DurationMs,
-            promptLengths,
-            stage: 'fast',
-            stage1RequestId,
-            stage1MsgId,
           }
         }
         // stage1Block === true
-        logAutoModeOutcome('success', model, {
-          classifierType,
-          durationMs: stage1DurationMs,
-        })
         return {
           shouldBlock: true,
           reason: parseXmlReason(stage1Text) ?? 'Blocked by fast classifier',
           model,
-          usage: stage1Usage,
-          durationMs: stage1DurationMs,
-          promptLengths,
-          stage: 'fast',
-          stage1RequestId,
-          stage1MsgId,
         }
       }
     }
@@ -822,73 +731,33 @@ async function classifyYoloActionXml(
       querySource: 'auto_mode' as const,
     }
     const stage2Raw = await sideQuery(stage2Opts)
-    const stage2DurationMs = Date.now() - stage2Start
-    const stage2Usage = extractUsage(stage2Raw)
-    const stage2RequestId = extractRequestId(stage2Raw)
-    const stage2MsgId = stage2Raw.id
     const stage2Text = extractTextContent(stage2Raw.content)
     const stage2Block = parseXmlBlock(stage2Text)
-    const totalDurationMs = (stage1DurationMs ?? 0) + stage2DurationMs
-    const totalUsage = stage1Usage
-      ? combineUsage(stage1Usage, stage2Usage)
-      : stage2Usage
 
     void maybeDumpAutoMode(stage2Opts, stage2Raw, stage2Start, 'stage2')
 
     if (stage2Block === null) {
-      logAutoModeOutcome('parse_failure', model, { classifierType })
       return {
         shouldBlock: true,
         reason: 'Classifier stage 2 unparseable - blocking for safety',
         model,
-        usage: totalUsage,
-        durationMs: totalDurationMs,
-        promptLengths,
-        stage: 'thinking',
-        stage1Usage,
-        stage1DurationMs,
-        stage1RequestId,
-        stage1MsgId,
-        stage2Usage,
-        stage2DurationMs,
-        stage2RequestId,
-        stage2MsgId,
       }
     }
 
-    logAutoModeOutcome('success', model, {
-      classifierType,
-      durationMs: totalDurationMs,
-    })
     return {
       thinking: parseXmlThinking(stage2Text) ?? undefined,
       shouldBlock: stage2Block,
       reason: parseXmlReason(stage2Text) ?? 'No reason provided',
       model,
-      usage: totalUsage,
-      durationMs: totalDurationMs,
-      promptLengths,
-      stage: 'thinking',
-      stage1Usage,
-      stage1DurationMs,
-      stage1RequestId,
-      stage1MsgId,
-      stage2Usage,
-      stage2DurationMs,
-      stage2RequestId,
-      stage2MsgId,
     }
   } catch (error) {
     if (signal.aborted) {
       logForDebugging('Auto mode classifier (XML): aborted by user')
-      logAutoModeOutcome('interrupted', model, { classifierType })
       return {
         shouldBlock: true,
         reason: 'Classifier request aborted',
         model,
         unavailable: true,
-        durationMs: Date.now() - overallStart,
-        promptLengths,
       }
     }
     const tooLong = detectPromptTooLong(error)
@@ -903,34 +772,17 @@ async function classifyYoloActionXml(
         ...dumpContextInfo,
         model,
       })) ?? undefined
-    logAutoModeOutcome(tooLong ? 'transcript_too_long' : 'error', model, {
-      classifierType,
-      ...(tooLong && {
-        transcriptActualTokens: tooLong.actualTokens,
-        transcriptLimitTokens: tooLong.limitTokens,
-      }),
-    })
     return {
       shouldBlock: true,
       reason: tooLong
         ? 'Classifier transcript exceeded context window'
-        : stage1Usage
+        : stage1Completed
           ? 'Stage 2 classifier error - blocking based on stage 1 assessment'
           : 'Classifier unavailable - blocking for safety',
       model,
-      unavailable: stage1Usage === undefined,
+      unavailable: !stage1Completed,
       transcriptTooLong: Boolean(tooLong),
-      stage: stage1Usage ? 'thinking' : undefined,
-      durationMs: Date.now() - overallStart,
       errorDumpPath,
-      ...(stage1Usage && {
-        usage: stage1Usage,
-        stage1Usage,
-        stage1DurationMs,
-        stage1RequestId,
-        stage1MsgId,
-      }),
-      promptLengths,
     }
   }
 }
@@ -1007,8 +859,8 @@ export async function classifyYoloAction(
 
   // Compare main-loop context vs classifier transcript to track projection
   // divergence. tokenCountWithEstimation is cheap (walks back to last API
-  // response usage + estimates the tail slice) so we compute unconditionally
-  // for telemetry. The classifier prompt should stay strictly smaller than
+  // response usage + estimates the tail slice) for local debug diagnostics.
+  // The classifier prompt should stay strictly smaller than
   // main-loop context so auto-compact fires before the classifier overflows.
   const classifierChars = systemPrompt.length + userPrompt.length
   const classifierTokensEst = Math.round(classifierChars / 4)
@@ -1032,7 +884,7 @@ export async function classifyYoloAction(
   }
 
   // Use getCacheControl for consistency with the main agent loop —
-  // respects GrowthBook TTL allowlist and query-source gating.
+  // respects local feature configuration TTL allowlist and query-source gating.
   const cacheControl = getCacheControl({ querySource: 'auto_mode' })
   // Place cache_control on the action block. In the two-stage classifier,
   // stage 2 shares the same transcript+action prefix as stage 1 — the
@@ -1047,7 +899,7 @@ export async function classifyYoloAction(
 
   const model = getClassifierModel()
 
-  // Dispatch to 2-stage XML classifier if enabled via GrowthBook
+  // Dispatch to 2-stage XML classifier if enabled via local feature configuration
   if (isTwoStageClassifierEnabled()) {
     return classifyYoloActionXml(
       prefixMessages,
@@ -1055,7 +907,6 @@ export async function classifyYoloAction(
       userPrompt,
       userContentBlocks,
       model,
-      promptLengths,
       signal,
       {
         mainLoopTokens: mainLoopTokens ?? tokenCountWithEstimation(messages),
@@ -1100,10 +951,8 @@ export async function classifyYoloAction(
     const result = await sideQuery(sideQueryOpts)
     void maybeDumpAutoMode(sideQueryOpts, result, start)
     const durationMs = Date.now() - start
-    const stage1RequestId = extractRequestId(result)
-    const stage1MsgId = result.id
 
-    // Extract usage for overhead telemetry
+    // Keep API usage available for local debug diagnostics.
     const usage = {
       inputTokens: result.usage.input_tokens,
       outputTokens: result.usage.output_tokens,
@@ -1138,16 +987,10 @@ export async function classifyYoloAction(
       logForDebugging('Auto mode classifier: No tool use block found', {
         level: 'warn',
       })
-      logAutoModeOutcome('parse_failure', model, { failureKind: 'no_tool_use' })
       return {
         shouldBlock: true,
         reason: 'Classifier returned no tool use block - blocking for safety',
         model,
-        usage,
-        durationMs,
-        promptLengths,
-        stage1RequestId,
-        stage1MsgId,
       }
     }
 
@@ -1160,18 +1003,10 @@ export async function classifyYoloAction(
       logForDebugging('Auto mode classifier: Invalid response schema', {
         level: 'warn',
       })
-      logAutoModeOutcome('parse_failure', model, {
-        failureKind: 'invalid_schema',
-      })
       return {
         shouldBlock: true,
         reason: 'Invalid classifier response - blocking for safety',
         model,
-        usage,
-        durationMs,
-        promptLengths,
-        stage1RequestId,
-        stage1MsgId,
       }
     }
 
@@ -1180,26 +1015,11 @@ export async function classifyYoloAction(
       shouldBlock: parsed.shouldBlock,
       reason: parsed.reason ?? 'No reason provided',
       model,
-      usage,
-      durationMs,
-      promptLengths,
-      stage1RequestId,
-      stage1MsgId,
     }
-    // Context-delta telemetry: chart classifierInputTokens / mainLoopTokens
-    // in Datadog. Expect ~0.6-0.8 steady state; alert on p95 > 1.0 (means
-    // classifier is bigger than main loop — auto-compact won't save us).
-    logAutoModeOutcome('success', model, {
-      durationMs,
-      mainLoopTokens,
-      classifierInputTokens,
-      classifierTokensEst,
-    })
     return classifierResult
   } catch (error) {
     if (signal.aborted) {
       logForDebugging('Auto mode classifier: aborted by user')
-      logAutoModeOutcome('interrupted', model)
       return {
         shouldBlock: true,
         reason: 'Classifier request aborted',
@@ -1223,14 +1043,6 @@ export async function classifyYoloAction(
       })) ?? undefined
     // No API usage on error — use classifierTokensEst / mainLoopTokens
     // for the ratio. Overflow errors are the critical divergence signal.
-    logAutoModeOutcome(tooLong ? 'transcript_too_long' : 'error', model, {
-      mainLoopTokens,
-      classifierTokensEst,
-      ...(tooLong && {
-        transcriptActualTokens: tooLong.actualTokens,
-        transcriptLimitTokens: tooLong.limitTokens,
-      }),
-    })
     return {
       shouldBlock: true,
       reason: tooLong
@@ -1268,7 +1080,7 @@ type AutoModeConfig = {
 function getClassifierModel(): string {
   const envModel = process.env.CLAUDE_CODE_AUTO_MODE_MODEL
   if (envModel) return envModel
-  const config = getFeatureValue_CACHED_MAY_BE_STALE(
+  const config = getFeatureValue(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
   )
@@ -1291,7 +1103,7 @@ function resolveTwoStageClassifier():
   if (env === 'fast' || env === 'thinking') return env
   if (isEnvTruthy(env)) return true
   if (isEnvDefinedFalsy(env)) return false
-  const config = getFeatureValue_CACHED_MAY_BE_STALE(
+  const config = getFeatureValue(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
   )
@@ -1310,7 +1122,7 @@ function isJsonlTranscriptEnabled(): boolean {
   const env = process.env.CLAUDE_CODE_JSONL_TRANSCRIPT
   if (isEnvTruthy(env)) return true
   if (isEnvDefinedFalsy(env)) return false
-  const config = getFeatureValue_CACHED_MAY_BE_STALE(
+  const config = getFeatureValue(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
   )
@@ -1337,50 +1149,6 @@ const POWERSHELL_DENY_GUIDANCE: readonly string[] = feature(
       'PowerShell Elevation: `Start-Process -Verb RunAs`, `-ExecutionPolicy Bypass`, and disabling AMSI/Defender (`Set-MpPreference -DisableRealtimeMonitoring`) fall under "Security Weaken".',
     ]
   : []
-
-type AutoModeOutcome =
-  | 'success'
-  | 'parse_failure'
-  | 'interrupted'
-  | 'error'
-  | 'transcript_too_long'
-
-/**
- * Telemetry helper for tengu_auto_mode_outcome. All string fields are
- * enum-like values (outcome, model name, classifier type, failure kind) —
- * never code or file paths, so the AnalyticsMetadata casts are safe.
- */
-function logAutoModeOutcome(
-  outcome: AutoModeOutcome,
-  model: string,
-  extra?: {
-    classifierType?: string
-    failureKind?: string
-    durationMs?: number
-    mainLoopTokens?: number
-    classifierInputTokens?: number
-    classifierTokensEst?: number
-    transcriptActualTokens?: number
-    transcriptLimitTokens?: number
-  },
-): void {
-  const { classifierType, failureKind, ...rest } = extra ?? {}
-  logEvent('tengu_auto_mode_outcome', {
-    outcome:
-      outcome as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    classifierModel:
-      model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    ...(classifierType !== undefined && {
-      classifierType:
-        classifierType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    }),
-    ...(failureKind !== undefined && {
-      failureKind:
-        failureKind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    }),
-    ...rest,
-  })
-}
 
 /**
  * Detect API 400 "prompt is too long: N tokens > M maximum" errors and

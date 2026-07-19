@@ -99,7 +99,7 @@ export async function getAnthropicClient({
     'X-Claude-Code-Session-Id': getSessionId(),
     ...customHeaders,
     ...(containerId ? { 'x-claude-remote-container-id': containerId } : {}),
-    // SDK consumers can identify their app/library for backend analytics
+    // SDK consumers can identify their app/library in request diagnostics.
     ...(clientApp ? { 'x-client-app': clientApp } : {}),
   }
 

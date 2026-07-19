@@ -1,6 +1,4 @@
 import type { UUID } from 'crypto'
-import { logEvent } from 'src/services/analytics/index.js'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 'src/services/analytics/metadata.js'
 import { type Command, getCommandName, isCommandEnabled } from '../commands.js'
 import { selectableUserMessagesFilter } from '../components/MessageSelector.js'
 import type { SpinnerMode } from '../components/Spinner/types.js'
@@ -220,7 +218,6 @@ export async function handlePromptSubmit(
     (sum, r) => sum + (pastedContents[r.id]?.content.length ?? 0),
     0,
   )
-  logEvent('tengu_paste_text', { pastedTextCount, pastedTextBytes })
 
   // Handle local-jsx immediate commands (e.g., /config, /doctor)
   if (!skipSlashCommands && finalInput.trim().startsWith('/')) {
@@ -247,10 +244,6 @@ export async function handlePromptSubmit(
       immediateCommand.type === 'local-jsx' &&
       (queryGuard.isActive || isExternalLoading)
     ) {
-      logEvent('tengu_immediate_command_executed', {
-        commandName:
-          immediateCommand.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
 
       // Clear input
       onInputChange('')
@@ -319,12 +312,6 @@ export async function handlePromptSubmit(
       logForDebugging(
         `[interrupt] Aborting current turn: streamMode=${params.streamMode}`,
       )
-      logEvent('tengu_cancel', {
-        source:
-          'interrupt_on_submit' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        streamMode:
-          params.streamMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
       params.abortController?.abort('interrupt')
     }
 

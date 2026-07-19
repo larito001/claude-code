@@ -1,15 +1,5 @@
-/**
- * Session file access analytics hooks.
- * Tracks access to session memory and transcript files via Read, Grep, Glob tools.
- * Also tracks memdir file access via Read, Grep, Glob, Edit, and Write tools.
- */
+/** Detect whether a tool call accesses framework memory files. */
 import { feature } from 'src/utils/features.js'
-import { registerHookCallbacks } from '../bootstrap/state.js'
-import type { HookInput, HookJSONOutput } from '../entrypoints/agentSdkTypes.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
 import { inputSchema as editInputSchema } from '../tools/FileEditTool/types.js'
 import { FileReadTool } from '../tools/FileReadTool/FileReadTool.js'
@@ -20,7 +10,6 @@ import { GlobTool } from '../tools/GlobTool/GlobTool.js'
 import { GLOB_TOOL_NAME } from '../tools/GlobTool/prompt.js'
 import { GrepTool } from '../tools/GrepTool/GrepTool.js'
 import { GREP_TOOL_NAME } from '../tools/GrepTool/prompt.js'
-import type { HookCallback } from '../types/hooks.js'
 import {
   detectSessionFileType,
   detectSessionPatternType,
@@ -32,7 +21,6 @@ const teamMemPaths = feature('TEAMMEM')
   ? (require('../memdir/teamMemPaths.js') as typeof import('../memdir/teamMemPaths.js'))
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
-import { getSubagentLogName } from './agentContext.js'
 
 /**
  * Extract the file path from a tool input for memdir detection.
@@ -130,95 +118,4 @@ export function isMemoryFileAccess(
   }
 
   return false
-}
-
-/**
- * PostToolUse callback to log session file access events.
- */
-async function handleSessionFileAccess(
-  input: HookInput,
-  _toolUseID: string | null,
-  _signal: AbortSignal | undefined,
-): Promise<HookJSONOutput> {
-  if (input.hook_event_name !== 'PostToolUse') return {}
-
-  const fileType = getSessionFileTypeFromInput(
-    input.tool_name,
-    input.tool_input,
-  )
-
-  const subagentName = getSubagentLogName()
-  const subagentProps = subagentName ? { subagent_name: subagentName } : {}
-
-  if (fileType === 'session_memory') {
-    logEvent('tengu_session_memory_accessed', { ...subagentProps })
-  } else if (fileType === 'session_transcript') {
-    logEvent('tengu_transcript_accessed', { ...subagentProps })
-  }
-
-  // Memdir access tracking
-  const filePath = getFilePathFromInput(input.tool_name, input.tool_input)
-  if (filePath && isAutoMemFile(filePath)) {
-    logEvent('tengu_memdir_accessed', {
-      tool: input.tool_name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...subagentProps,
-    })
-
-    switch (input.tool_name) {
-      case FILE_READ_TOOL_NAME:
-        logEvent('tengu_memdir_file_read', { ...subagentProps })
-        break
-      case FILE_EDIT_TOOL_NAME:
-        logEvent('tengu_memdir_file_edit', { ...subagentProps })
-        break
-      case FILE_WRITE_TOOL_NAME:
-        logEvent('tengu_memdir_file_write', { ...subagentProps })
-        break
-    }
-  }
-
-  // Team memory access tracking
-  if (feature('TEAMMEM') && filePath && teamMemPaths!.isTeamMemFile(filePath)) {
-    logEvent('tengu_team_mem_accessed', {
-      tool: input.tool_name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...subagentProps,
-    })
-
-    switch (input.tool_name) {
-      case FILE_READ_TOOL_NAME:
-        logEvent('tengu_team_mem_file_read', { ...subagentProps })
-        break
-      case FILE_EDIT_TOOL_NAME:
-        logEvent('tengu_team_mem_file_edit', { ...subagentProps })
-        break
-      case FILE_WRITE_TOOL_NAME:
-        logEvent('tengu_team_mem_file_write', { ...subagentProps })
-        break
-    }
-  }
-
-  return {}
-}
-
-/**
- * Register session file access tracking hooks.
- * Called during CLI initialization.
- */
-export function registerSessionFileAccessHooks(): void {
-  const hook: HookCallback = {
-    type: 'callback',
-    callback: handleSessionFileAccess,
-    timeout: 1, // Very short timeout - just logging
-    internal: true,
-  }
-
-  registerHookCallbacks({
-    PostToolUse: [
-      { matcher: FILE_READ_TOOL_NAME, hooks: [hook] },
-      { matcher: GREP_TOOL_NAME, hooks: [hook] },
-      { matcher: GLOB_TOOL_NAME, hooks: [hook] },
-      { matcher: FILE_EDIT_TOOL_NAME, hooks: [hook] },
-      { matcher: FILE_WRITE_TOOL_NAME, hooks: [hook] },
-    ],
-  })
 }

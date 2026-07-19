@@ -5,7 +5,7 @@ import {
   clearCommandsCache,
   getCommands,
 } from '../commands.js'
-import { onGrowthBookRefresh } from '../services/analytics/growthbook.js'
+import { onFeatureConfigRefresh } from '../services/featureConfig.js'
 import { logError } from '../utils/log.js'
 import { skillChangeDetector } from '../utils/skills/skillChangeDetector.js'
 
@@ -14,12 +14,12 @@ import { skillChangeDetector } from '../utils/skills/skillChangeDetector.js'
  *
  * 1. Skill file changes (watcher) — full cache clear + disk re-scan, since
  *    skill content changed on disk.
- * 2. GrowthBook init/refresh — memo-only clear, since only `isEnabled()`
+ * 2. local feature configuration init/refresh — memo-only clear, since only `isEnabled()`
  *    predicates may have changed. Handles commands like /btw whose gate
  *    reads a flag that isn't in the disk cache yet on first session after
- *    a flag rename: getCommands() runs before GB init (main.tsx:2855 vs
+ *    a flag rename: getCommands() runs before feature configuration init,
  *    showSetupScreens at :3106), so the memoized list is baked with the
- *    default. Once init populates remoteEvalFeatureValues, re-filter.
+ *    default. Once initialization finishes, re-filter.
  */
 export function useSkillsChange(
   cwd: string | undefined,
@@ -42,7 +42,7 @@ export function useSkillsChange(
 
   useEffect(() => skillChangeDetector.subscribe(handleChange), [handleChange])
 
-  const handleGrowthBookRefresh = useCallback(async () => {
+  const handleFeatureConfigRefresh = useCallback(async () => {
     if (!cwd) return
     try {
       clearCommandMemoizationCaches()
@@ -56,7 +56,7 @@ export function useSkillsChange(
   }, [cwd, onCommandsChange])
 
   useEffect(
-    () => onGrowthBookRefresh(handleGrowthBookRefresh),
-    [handleGrowthBookRefresh],
+    () => onFeatureConfigRefresh(handleFeatureConfigRefresh),
+    [handleFeatureConfigRefresh],
   )
 }

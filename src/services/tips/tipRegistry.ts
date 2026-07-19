@@ -41,7 +41,7 @@ import {
   getCurrentSessionAgentColor,
   isCustomTitleEnabled,
 } from '../../utils/sessionStorage.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
+import { getFeatureValue } from '../featureConfig.js'
 import { getSessionsSinceLastShown } from './tipHistory.js'
 import type { Tip, TipContext } from './types.js'
 
@@ -453,7 +453,7 @@ const externalTips: Tip[] = [
     content: async ctx => {
       const blue = color('suggestion', ctx.theme)
       const cmd = blue('/effort high')
-      const variant = getFeatureValue_CACHED_MAY_BE_STALE<
+      const variant = getFeatureValue<
         'off' | 'copy_a' | 'copy_b'
       >('tengu_tide_elm', 'off')
       return variant === 'copy_b'
@@ -471,7 +471,7 @@ const externalTips: Tip[] = [
       const persisted = getInitialSettings().effortLevel
       if (persisted === 'high' || persisted === 'max') return false
       return (
-        getFeatureValue_CACHED_MAY_BE_STALE<'off' | 'copy_a' | 'copy_b'>(
+        getFeatureValue<'off' | 'copy_a' | 'copy_b'>(
           'tengu_tide_elm',
           'off',
         ) !== 'off'
@@ -482,7 +482,7 @@ const externalTips: Tip[] = [
     id: 'subagent-fanout-nudge',
     content: async ctx => {
       const blue = color('suggestion', ctx.theme)
-      const variant = getFeatureValue_CACHED_MAY_BE_STALE<
+      const variant = getFeatureValue<
         'off' | 'copy_a' | 'copy_b'
       >('tengu_tern_alloy', 'off')
       return variant === 'copy_b'
@@ -493,7 +493,7 @@ const externalTips: Tip[] = [
     isRelevant: async () => {
       if (!is1PApiCustomer()) return false
       return (
-        getFeatureValue_CACHED_MAY_BE_STALE<'off' | 'copy_a' | 'copy_b'>(
+        getFeatureValue<'off' | 'copy_a' | 'copy_b'>(
           'tengu_tern_alloy',
           'off',
         ) !== 'off'
@@ -504,7 +504,7 @@ const externalTips: Tip[] = [
     id: 'loop-command-nudge',
     content: async ctx => {
       const blue = color('suggestion', ctx.theme)
-      const variant = getFeatureValue_CACHED_MAY_BE_STALE<
+      const variant = getFeatureValue<
         'off' | 'copy_a' | 'copy_b'
       >('tengu_timber_lark', 'off')
       return variant === 'copy_b'
@@ -516,7 +516,7 @@ const externalTips: Tip[] = [
       if (!is1PApiCustomer()) return false
       if (!isCronSchedulingEnabled()) return false
       return (
-        getFeatureValue_CACHED_MAY_BE_STALE<'off' | 'copy_a' | 'copy_b'>(
+        getFeatureValue<'off' | 'copy_a' | 'copy_b'>(
           'tengu_timber_lark',
           'off',
         ) !== 'off'

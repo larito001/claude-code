@@ -1,7 +1,7 @@
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
+import { getFeatureValue } from '../featureConfig.js'
 
 /**
- * GrowthBook config for time-based microcompact.
+ * local feature configuration config for time-based microcompact.
  *
  * Triggers content-clearing microcompact when the gap since the last main-loop
  * assistant message exceeds a threshold — the server-side prompt cache has
@@ -34,9 +34,8 @@ const TIME_BASED_MC_CONFIG_DEFAULTS: TimeBasedMCConfig = {
 }
 
 export function getTimeBasedMCConfig(): TimeBasedMCConfig {
-  // Hoist the GB read so exposure fires on every eval path, not just when
-  // the caller's other conditions (querySource, messages.length) pass.
-  return getFeatureValue_CACHED_MAY_BE_STALE<TimeBasedMCConfig>(
+  // Read configuration centrally so every evaluation path uses the same value.
+  return getFeatureValue<TimeBasedMCConfig>(
     'tengu_slate_heron',
     TIME_BASED_MC_CONFIG_DEFAULTS,
   )

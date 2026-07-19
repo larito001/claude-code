@@ -7,12 +7,8 @@
  */
 
 import memoize from 'lodash-es/memoize.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import { getFeatureValue } from '../services/featureConfig.js'
 import { feature } from './features.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import type { Tool } from '../Tool.js'
 import {
   type ToolPermissionContext,
@@ -206,12 +202,12 @@ const DEFAULT_UNSUPPORTED_MODEL_PATTERNS = ['haiku']
 
 /**
  * Get the list of model patterns that do NOT support tool_reference.
- * Can be configured via GrowthBook for live updates without code changes.
+ * Can be configured via local feature configuration for live updates without code changes.
  */
 function getUnsupportedToolReferencePatterns(): string[] {
   try {
-    // Try to get from GrowthBook for live configuration
-    const patterns = getFeatureValue_CACHED_MAY_BE_STALE<string[] | null>(
+    // Try to get from local feature configuration for live configuration
+    const patterns = getFeatureValue<string[] | null>(
       'tengu_tool_search_unsupported_models',
       null,
     )
@@ -219,7 +215,7 @@ function getUnsupportedToolReferencePatterns(): string[] {
       return patterns
     }
   } catch {
-    // GrowthBook not ready, use defaults
+    // local feature configuration not ready, use defaults
   }
   return DEFAULT_UNSUPPORTED_MODEL_PATTERNS
 }
@@ -232,7 +228,7 @@ function getUnsupportedToolReferencePatterns(): string[] {
  * models work by default without code changes.
  *
  * Currently, Haiku models do NOT support tool_reference. This can be
- * updated via GrowthBook feature 'tengu_tool_search_unsupported_models'.
+ * updated via local feature configuration feature 'tengu_tool_search_unsupported_models'.
  *
  * @param model The model name to check
  * @returns true if the model supports tool_reference, false otherwise
@@ -392,35 +388,12 @@ export async function isToolSearchEnabled(
 ): Promise<boolean> {
   const mcpToolCount = count(tools, t => t.isMcp)
 
-  // Helper to log the mode decision event
-  function logModeDecision(
-    enabled: boolean,
-    mode: ToolSearchMode,
-    reason: string,
-    extraProps?: Record<string, number>,
-  ): void {
-    logEvent('tengu_tool_search_mode_decision', {
-      enabled,
-      mode: mode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      reason:
-        reason as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      // Log the actual model being checked, not the session's main model.
-      // This is important for debugging subagent tool search decisions where
-      // the subagent model (e.g., haiku) differs from the session model (e.g., opus).
-      checkedModel:
-        model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      mcpToolCount,
-      ...extraProps,
-    })
-  }
-
   // Check if model supports tool_reference
   if (!modelSupportsToolReference(model)) {
     logForDebugging(
       `Tool search disabled for model '${model}': model does not support tool_reference blocks. ` +
         `This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.`,
     )
-    logModeDecision(false, 'standard', 'model_unsupported')
     return false
   }
 
@@ -429,7 +402,6 @@ export async function isToolSearchEnabled(
     logForDebugging(
       `Tool search disabled: ToolSearchTool is not available (may have been disallowed via disallowedTools).`,
     )
-    logModeDecision(false, 'standard', 'mcp_search_unavailable')
     return false
   }
 
@@ -437,7 +409,6 @@ export async function isToolSearchEnabled(
 
   switch (mode) {
     case 'tst':
-      logModeDecision(true, mode, 'tst_enabled')
       return true
 
     case 'tst-auto': {
@@ -453,7 +424,6 @@ export async function isToolSearchEnabled(
           `Auto tool search enabled: ${debugDescription}` +
             (source ? ` [source: ${source}]` : ''),
         )
-        logModeDecision(true, mode, 'auto_above_threshold', metrics)
         return true
       }
 
@@ -461,12 +431,10 @@ export async function isToolSearchEnabled(
         `Auto tool search disabled: ${debugDescription}` +
           (source ? ` [source: ${source}]` : ''),
       )
-      logModeDecision(false, mode, 'auto_below_threshold', metrics)
       return false
     }
 
     case 'standard':
-      logModeDecision(false, mode, 'standard_mode')
       return false
   }
 }
@@ -598,28 +566,6 @@ export type DeferredToolsDelta = {
 }
 
 /**
- * Call-site discriminator for the tengu_deferred_tools_pool_change event.
- * The scan runs from several sites with different expected-prior semantics
- * (inc-4747):
- *   - attachments_main: main-thread getAttachments → prior=0 is a BUG on fire-2+
- *   - attachments_subagent: subagent getAttachments → prior=0 is EXPECTED
- *     (fresh conversation, initialMessages has no DTD)
- *   - compact_full: compact.ts passes [] → prior=0 is EXPECTED
- *   - compact_partial: compact.ts passes messagesToKeep → depends on what survived
- * Without this the 96%-prior=0 stat is dominated by EXPECTED buckets and
- * the real main-thread cross-turn bug (if any) is invisible in BQ.
- */
-export type DeferredToolsDeltaScanContext = {
-  callSite:
-    | 'attachments_main'
-    | 'attachments_subagent'
-    | 'compact_full'
-    | 'compact_partial'
-    | 'reactive_compact'
-  querySource?: string
-}
-
-/**
  * True → announce deferred tools via persisted delta attachments.
  * False → claude.ts keeps its per-call <available-deferred-tools>
  * header prepend (the attachment does not fire).
@@ -641,18 +587,11 @@ export function isDeferredToolsDeltaEnabled(): boolean {
 export function getDeferredToolsDelta(
   tools: Tools,
   messages: Message[],
-  scanContext?: DeferredToolsDeltaScanContext,
 ): DeferredToolsDelta | null {
   const announced = new Set<string>()
-  let attachmentCount = 0
-  let dtdCount = 0
-  const attachmentTypesSeen = new Set<string>()
   for (const msg of messages) {
     if (msg.type !== 'attachment') continue
-    attachmentCount++
-    attachmentTypesSeen.add(msg.attachment.type)
     if (msg.attachment.type !== 'deferred_tools_delta') continue
-    dtdCount++
     for (const n of msg.attachment.addedNames) announced.add(n)
     for (const n of msg.attachment.removedNames) announced.delete(n)
   }
@@ -670,28 +609,6 @@ export function getDeferredToolsDelta(
   }
 
   if (added.length === 0 && removed.length === 0) return null
-
-  // Diagnostic for the inc-4747 scan-finds-nothing bug. Round-1 fields
-  // (messagesLength/attachmentCount/dtdCount from #23167) showed 45.6% of
-  // events have attachments-but-no-DTD, but those numbers are confounded:
-  // subagent first-fires and compact-path scans have EXPECTED prior=0 and
-  // dominate the stat. callSite/querySource/attachmentTypesSeen split the
-  // buckets so the real main-thread cross-turn failure is isolable in BQ.
-  logEvent('tengu_deferred_tools_pool_change', {
-    addedCount: added.length,
-    removedCount: removed.length,
-    priorAnnouncedCount: announced.size,
-    messagesLength: messages.length,
-    attachmentCount,
-    dtdCount,
-    callSite: (scanContext?.callSite ??
-      'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    querySource: (scanContext?.querySource ??
-      'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    attachmentTypesSeen: [...attachmentTypesSeen]
-      .sort()
-      .join(',') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
 
   return {
     addedNames: added.map(t => t.name).sort(),

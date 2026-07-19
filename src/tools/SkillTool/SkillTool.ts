@@ -30,15 +30,10 @@ import {
   isOfficialMarketplaceName,
   parsePluginIdentifier,
 } from 'src/utils/plugins/pluginIdentifier.js'
-import { buildPluginCommandTelemetryFields } from 'src/utils/telemetry/pluginTelemetry.js'
 import { z } from 'zod/v4'
 import { clearInvokedSkillsForAgent } from '../../bootstrap/state.js'
 import { COMMAND_MESSAGE_TAG } from '../../constants/xml.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
 import { getAgentContext } from '../../utils/agentContext.js'
 import {
   extractResultText,
@@ -115,29 +110,6 @@ async function executeForkedSkill(
     : undefined
   const queryDepth = context.queryTracking?.depth ?? 0
   const parentAgentId = getAgentContext()?.agentId
-  logEvent('tengu_skill_tool_invocation', {
-    command_name:
-      forkedSanitizedName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    execution_context:
-      'fork' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    invocation_trigger: (queryDepth > 0
-      ? 'nested-skill'
-      : 'claude-proactive') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    query_depth: queryDepth,
-    ...(parentAgentId && {
-      parent_agent_id:
-        parentAgentId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    }),
-    ...(command.pluginInfo && {
-      plugin_name: (isOfficialSkill
-        ? command.pluginInfo.pluginManifest.name
-        : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      plugin_repository: (isOfficialSkill
-        ? command.pluginInfo.repository
-        : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...buildPluginCommandTelemetryFields(command.pluginInfo),
-    }),
-  })
 
   const { modifiedGetAppState, baseAgent, promptMessages, skillContent } =
     await prepareForkedCommandContext(command, args || '', context)
@@ -301,9 +273,6 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
 
     // Remove leading slash if present (for compatibility)
     const hasLeadingSlash = trimmed.startsWith('/')
-    if (hasLeadingSlash) {
-      logEvent('tengu_skill_tool_slash_prefix', {})
-    }
     const normalizedCommandName = hasLeadingSlash
       ? trimmed.substring(1)
       : trimmed
@@ -544,30 +513,6 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
         : undefined
     const queryDepth = context.queryTracking?.depth ?? 0
     const parentAgentId = getAgentContext()?.agentId
-    logEvent('tengu_skill_tool_invocation', {
-      command_name:
-        sanitizedCommandName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      execution_context:
-        'inline' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      invocation_trigger: (queryDepth > 0
-        ? 'nested-skill'
-        : 'claude-proactive') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      query_depth: queryDepth,
-      ...(parentAgentId && {
-        parent_agent_id:
-          parentAgentId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      }),
-      ...(command?.type === 'prompt' &&
-        command.pluginInfo && {
-          plugin_name: (isOfficialSkill
-            ? command.pluginInfo.pluginManifest.name
-            : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          plugin_repository: (isOfficialSkill
-            ? command.pluginInfo.repository
-            : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          ...buildPluginCommandTelemetryFields(command.pluginInfo),
-        }),
-    })
 
     // Get the tool use ID from the parent message for linking newMessages
     const toolUseID = getToolUseIDFromParentMessage(

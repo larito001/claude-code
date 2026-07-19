@@ -1,21 +1,14 @@
 import type { Base64ImageSource } from '@anthropic-ai/sdk/resources/index.mjs'
 import { readdir, readFile as readFileAsync } from 'fs/promises'
 import * as path from 'path'
-import { posix, win32 } from 'path'
 import { z } from 'zod/v4'
 import {
   PDF_AT_MENTION_INLINE_THRESHOLD,
-  PDF_EXTRACT_SIZE_THRESHOLD,
   PDF_MAX_PAGES_PER_READ,
 } from '../../constants/apiLimits.js'
 import { hasBinaryExtension } from '../../constants/files.js'
 import { memoryFreshnessNote } from '../../memdir/memoryAge.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import { logEvent } from '../../services/analytics/index.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  getFileExtensionForAnalytics,
-} from '../../services/analytics/metadata.js'
+import { getFeatureValue } from '../../services/featureConfig.js'
 import {
   countTokensWithAPI,
   roughTokenCountEstimationForFileType,
@@ -28,7 +21,7 @@ import {
 import type { ToolUseContext } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { getCwd } from '../../utils/cwd.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from '../../utils/envUtils.js'
+import { isEnvTruthy } from '../../utils/envUtils.js'
 import { getErrnoCode, isENOENT } from '../../utils/errors.js'
 import {
   addLineNumbers,
@@ -37,7 +30,6 @@ import {
   getFileModificationTimeAsync,
   suggestPathUnderCwd,
 } from '../../utils/file.js'
-import { logFileOperation } from '../../utils/fileOperationAnalytics.js'
 import { formatFileSize } from '../../utils/format.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'
 import {
@@ -186,43 +178,6 @@ export class MaxFileReadTokenExceededError extends Error {
 
 // Common image extensions
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
-
-/**
- * Detects if a file path is a session-related file for analytics logging.
- * Only matches files within the Claude config directory (e.g., ~/.claude).
- * Returns the type of session file or null if not a session file.
- */
-function detectSessionFileType(
-  filePath: string,
-): 'session_memory' | 'session_transcript' | null {
-  const configDir = getClaudeConfigHomeDir()
-
-  // Only match files within the Claude config directory
-  if (!filePath.startsWith(configDir)) {
-    return null
-  }
-
-  // Normalize path to use forward slashes for consistent matching across platforms
-  const normalizedPath = filePath.split(win32.sep).join(posix.sep)
-
-  // Session memory files: ~/.claude/session-memory/*.md (including summary.md)
-  if (
-    normalizedPath.includes('/session-memory/') &&
-    normalizedPath.endsWith('.md')
-  ) {
-    return 'session_memory'
-  }
-
-  // Session JSONL transcript files: ~/.claude/projects/*/*.jsonl
-  if (
-    normalizedPath.includes('/projects/') &&
-    normalizedPath.endsWith('.jsonl')
-  ) {
-    return 'session_transcript'
-  }
-
-  return null
-}
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -506,15 +461,6 @@ export const FileReadTool = buildTool({
       fileReadingLimits?.maxSizeBytes ?? defaults.maxSizeBytes
     const maxTokens = fileReadingLimits?.maxTokens ?? defaults.maxTokens
 
-    // Telemetry: track when callers override default read limits.
-    // Only fires on override (low volume) — event count = override frequency.
-    if (fileReadingLimits !== undefined) {
-      logEvent('tengu_file_read_limits_override', {
-        hasMaxTokens: fileReadingLimits.maxTokens !== undefined,
-        hasMaxSizeBytes: fileReadingLimits.maxSizeBytes !== undefined,
-      })
-    }
-
     const ext = path.extname(file_path).toLowerCase().slice(1)
     // Use expandPath for consistent path normalization with FileEditTool/FileWriteTool
     // (especially handles whitespace trimming and Windows path separators)
@@ -532,7 +478,7 @@ export const FileReadTool = buildTool({
     // message is incompatible with a target model.
     // Default: killswitch off = dedup enabled. Client-side only — no
     // server support needed, safe for Bedrock/Vertex/Foundry.
-    const dedupKillswitch = getFeatureValue_CACHED_MAY_BE_STALE(
+    const dedupKillswitch = getFeatureValue(
       'tengu_read_dedup_killswitch',
       false,
     )
@@ -554,10 +500,6 @@ export const FileReadTool = buildTool({
         try {
           const mtimeMs = await getFileModificationTimeAsync(fullFilePath)
           if (mtimeMs === existingState.timestamp) {
-            const analyticsExt = getFileExtensionForAnalytics(fullFilePath)
-            logEvent('tengu_file_read_dedup', {
-              ...(analyticsExt !== undefined && { ext: analyticsExt }),
-            })
             return {
               data: {
                 type: 'file_unchanged' as const,
@@ -851,12 +793,6 @@ async function callInner(
       file: { filePath: file_path, cells },
     }
 
-    logFileOperation({
-      operation: 'read',
-      tool: 'FileReadTool',
-      filePath: fullFilePath,
-      content: cellsJson,
-    })
 
     return { data }
   }
@@ -868,12 +804,6 @@ async function callInner(
     const data = await readImageWithTokenBudget(resolvedFilePath, maxTokens)
     context.nestedMemoryAttachmentTriggers?.add(fullFilePath)
 
-    logFileOperation({
-      operation: 'read',
-      tool: 'FileReadTool',
-      filePath: fullFilePath,
-      content: data.file.base64,
-    })
 
     const metadataText = data.file.dimensions
       ? createImageMetadataText(data.file.dimensions)
@@ -900,18 +830,6 @@ async function callInner(
       if (!extractResult.success) {
         throw new Error(extractResult.error.message)
       }
-      logEvent('tengu_pdf_page_extraction', {
-        success: true,
-        pageCount: extractResult.data.file.count,
-        fileSize: extractResult.data.file.originalSize,
-        hasPageRange: true,
-      })
-      logFileOperation({
-        operation: 'read',
-        tool: 'FileReadTool',
-        filePath: fullFilePath,
-        content: `PDF pages ${pages}`,
-      })
       const entries = await readdir(extractResult.data.file.outputDir)
       const imageFiles = entries.filter(f => f.endsWith('.jpg')).sort()
       const imageBlocks = await Promise.all(
@@ -953,28 +871,6 @@ async function callInner(
       )
     }
 
-    const fs = getFsImplementation()
-    const stats = await fs.stat(resolvedFilePath)
-    const shouldExtractPages =
-      !isPDFSupported() || stats.size > PDF_EXTRACT_SIZE_THRESHOLD
-
-    if (shouldExtractPages) {
-      const extractResult = await extractPDFPages(resolvedFilePath)
-      if (extractResult.success) {
-        logEvent('tengu_pdf_page_extraction', {
-          success: true,
-          pageCount: extractResult.data.file.count,
-          fileSize: extractResult.data.file.originalSize,
-        })
-      } else {
-        logEvent('tengu_pdf_page_extraction', {
-          success: false,
-          available: extractResult.error.reason !== 'unavailable',
-          fileSize: stats.size,
-        })
-      }
-    }
-
     if (!isPDFSupported()) {
       throw new Error(
         'Reading full PDFs is not supported with this model. Use a newer model (Sonnet 3.5 v2 or later), ' +
@@ -988,12 +884,6 @@ async function callInner(
       throw new Error(readResult.error.message)
     }
     const pdfData = readResult.data
-    logFileOperation({
-      operation: 'read',
-      tool: 'FileReadTool',
-      filePath: fullFilePath,
-      content: pdfData.file.base64,
-    })
 
     return {
       data: pdfData,
@@ -1056,30 +946,6 @@ async function callInner(
     memoryFileMtimes.set(data, mtimeMs)
   }
 
-  logFileOperation({
-    operation: 'read',
-    tool: 'FileReadTool',
-    filePath: fullFilePath,
-    content,
-  })
-
-  const sessionFileType = detectSessionFileType(fullFilePath)
-  const analyticsExt = getFileExtensionForAnalytics(fullFilePath)
-  logEvent('tengu_session_file_read', {
-    totalLines,
-    readLines: lineCount,
-    totalBytes,
-    readBytes,
-    offset,
-    ...(limit !== undefined && { limit }),
-    ...(analyticsExt !== undefined && { ext: analyticsExt }),
-    ...(messageId !== undefined && {
-      messageID:
-        messageId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    }),
-    is_session_memory: sessionFileType === 'session_memory',
-    is_session_transcript: sessionFileType === 'session_transcript',
-  })
 
   return { data }
 }

@@ -11,7 +11,6 @@ import { useManagePlugins } from '../../hooks/useManagePlugins.js';
 import type { Root } from '../../ink.js';
 import { Box } from '../../ink.js';
 import { KeybindingSetup } from '../../keybindings/KeybindingProviderSetup.js';
-import { logEvent } from '../../services/analytics/index.js';
 import { MCPConnectionManager } from '../../services/mcp/MCPConnectionManager.js';
 import { AppStateProvider } from '../../state/AppState.js';
 
@@ -36,7 +35,6 @@ function DoctorWithPlugins(t0) {
   return t1;
 }
 export async function doctorHandler(root: Root): Promise<void> {
-  logEvent('tengu_doctor_command', {});
   await new Promise<void>(resolve => {
     root.render(<AppStateProvider>
         <KeybindingSetup>

@@ -11,10 +11,6 @@ import { logError } from 'src/utils/log.js'
 import { getClaudeTempDir } from 'src/utils/permissions/filesystem.js'
 import { jsonStringify } from 'src/utils/slowOperations.js'
 import type { QuerySource } from '../../constants/querySource.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../analytics/index.js'
 
 function getCacheBreakDiffPath(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -133,8 +129,7 @@ function isExcludedModel(model: string): boolean {
  * Untracked sources (speculation, session_memory, prompt_suggestion, etc.)
  * are short-lived forked agents where cache break detection provides no
  * value — they run 1-3 turns with a fresh agentId each time, so there's
- * nothing meaningful to compare against. Their cache metrics are still
- * logged via tengu_api_success for analytics.
+ * nothing meaningful to compare against.
  */
 function getTrackingKey(
   querySource: QuerySource,
@@ -557,59 +552,6 @@ export async function checkResponseForCacheBreak(
       reason = 'unknown cause'
     }
 
-    logEvent('tengu_prompt_cache_break', {
-      systemPromptChanged: changes?.systemPromptChanged ?? false,
-      toolSchemasChanged: changes?.toolSchemasChanged ?? false,
-      modelChanged: changes?.modelChanged ?? false,
-      fastModeChanged: changes?.fastModeChanged ?? false,
-      cacheControlChanged: changes?.cacheControlChanged ?? false,
-      globalCacheStrategyChanged: changes?.globalCacheStrategyChanged ?? false,
-      betasChanged: changes?.betasChanged ?? false,
-      autoModeChanged: changes?.autoModeChanged ?? false,
-      effortChanged: changes?.effortChanged ?? false,
-      extraBodyChanged: changes?.extraBodyChanged ?? false,
-      addedToolCount: changes?.addedToolCount ?? 0,
-      removedToolCount: changes?.removedToolCount ?? 0,
-      systemCharDelta: changes?.systemCharDelta ?? 0,
-      // Tool names are sanitized: built-in names are a fixed vocabulary,
-      // MCP tools collapse to 'mcp' (user-configured, could leak paths).
-      addedTools: (changes?.addedTools ?? [])
-        .map(sanitizeToolName)
-        .join(
-          ',',
-        ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      removedTools: (changes?.removedTools ?? [])
-        .map(sanitizeToolName)
-        .join(
-          ',',
-        ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      changedToolSchemas: (changes?.changedToolSchemas ?? [])
-        .map(sanitizeToolName)
-        .join(
-          ',',
-        ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      // Beta header names and cache strategy are fixed enum-like values,
-      // not code or filepaths. requestId is an opaque server-generated ID.
-      addedBetas: (changes?.addedBetas ?? []).join(
-        ',',
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      removedBetas: (changes?.removedBetas ?? []).join(
-        ',',
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      prevGlobalCacheStrategy: (changes?.prevGlobalCacheStrategy ??
-        '') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      newGlobalCacheStrategy: (changes?.newGlobalCacheStrategy ??
-        '') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      callNumber: state.callCount,
-      prevCacheReadTokens: prevCacheRead,
-      cacheReadTokens,
-      cacheCreationTokens,
-      timeSinceLastAssistantMsg: timeSinceLastAssistantMsg ?? -1,
-      lastAssistantMsgOver5minAgo,
-      lastAssistantMsgOver1hAgo,
-      requestId: (requestId ??
-        '') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
 
     // Write a diff file when --debug is enabled. The path is included in the
     // summary log for local diagnostics.

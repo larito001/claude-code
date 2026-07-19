@@ -3,7 +3,7 @@ import type {
   ImageBlockParam,
   TextBlockParam,
 } from '@anthropic-ai/sdk/resources/index.mjs'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import { getFeatureValue } from '../services/featureConfig.js'
 import {
   countMessagesTokensWithAPI,
   roughTokenCountEstimation,
@@ -18,7 +18,7 @@ const DEFAULT_MAX_MCP_OUTPUT_TOKENS = 25000
 /**
  * Resolve the MCP output token cap. Precedence:
  *   1. MAX_MCP_OUTPUT_TOKENS env var (explicit user override)
- *   2. tengu_satin_quoll GrowthBook flag's `mcp_tool` key (tokens, not chars —
+ *   2. tengu_satin_quoll local feature configuration flag's `mcp_tool` key (tokens, not chars —
  *      unlike the other keys in that map which getPersistenceThreshold reads
  *      as chars; MCP has its own truncation layer upstream of that)
  *   3. Hardcoded default
@@ -31,7 +31,7 @@ export function getMaxMcpOutputTokens(): number {
       return parsed
     }
   }
-  const overrides = getFeatureValue_CACHED_MAY_BE_STALE<Record<
+  const overrides = getFeatureValue<Record<
     string,
     number
   > | null>('tengu_satin_quoll', {})

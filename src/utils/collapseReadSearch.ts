@@ -12,7 +12,7 @@ import {
   type CommitKind,
   detectGitOperation,
   type PrAction,
-} from '../tools/shared/gitOperationTracking.js'
+} from '../tools/shared/gitOperationDetection.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../tools/ToolSearchTool/prompt.js'
 import type {
   CollapsedReadSearchGroup,

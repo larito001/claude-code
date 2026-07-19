@@ -1,4 +1,4 @@
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
+import { getFeatureValue } from '../../services/featureConfig.js'
 import { hasEmbeddedSearchTools } from '../../utils/embeddedTools.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from '../../utils/envUtils.js'
 import { isTeammate } from '../../utils/teammate.js'
@@ -59,7 +59,7 @@ export function shouldInjectAgentListInMessages(): boolean {
   if (isEnvTruthy(process.env.CLAUDE_CODE_AGENT_LIST_IN_MESSAGES)) return true
   if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_AGENT_LIST_IN_MESSAGES))
     return false
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_agent_list_attach', false)
+  return getFeatureValue('tengu_agent_list_attach', false)
 }
 
 export async function getPrompt(
@@ -119,14 +119,14 @@ assistant: <thinking>Forking this \u2014 it's a survey question. I want the punc
 ${AGENT_TOOL_NAME}({
   name: "ship-audit",
   description: "Branch ship-readiness audit",
-  prompt: "Audit what's left before this branch can ship. Check: uncommitted changes, commits ahead of main, whether tests exist, whether the GrowthBook gate is wired up, whether CI-relevant files changed. Report a punch list \u2014 done vs. missing. Under 200 words."
+  prompt: "Audit what's left before this branch can ship. Check: uncommitted changes, commits ahead of main, whether tests exist, whether the local feature configuration gate is wired up, whether CI-relevant files changed. Report a punch list \u2014 done vs. missing. Under 200 words."
 })
 assistant: Ship-readiness audit running.
 <commentary>
 Turn ends here. The coordinator knows nothing about the findings yet. What follows is a SEPARATE turn \u2014 the notification arrives from outside, as a user-role message. It is not something the coordinator writes.
 </commentary>
 [later turn \u2014 notification arrives as user message]
-assistant: Audit's back. Three blockers: no tests for the new prompt path, GrowthBook gate wired but not in build_flags.yaml, and one uncommitted file.
+assistant: Audit's back. Three blockers: no tests for the new prompt path, local feature configuration gate wired but not in build_flags.yaml, and one uncommitted file.
 </example>
 
 <example>

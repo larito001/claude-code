@@ -54,10 +54,7 @@ const UNIQUENESS_REFINE = {
 } as const;
 const commonFields = lazySchema(() => ({
   answers: z.record(z.string(), z.string()).optional().describe('User answers collected by the permission component'),
-  annotations: annotationsSchema(),
-  metadata: z.object({
-    source: z.string().optional().describe('Optional identifier for the source of this question (e.g., "remember" for /remember command). Used for analytics tracking.')
-  }).optional().describe('Optional metadata for tracking and analytics purposes. Not displayed to user.')
+  annotations: annotationsSchema()
 }));
 const inputSchema = lazySchema(() => z.strictObject({
   questions: z.array(questionSchema()).min(1).max(4).describe('Questions to ask the user (1-4 questions)'),

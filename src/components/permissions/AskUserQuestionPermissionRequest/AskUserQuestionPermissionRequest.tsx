@@ -6,7 +6,6 @@ import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
 import { stringWidth } from '../../../ink/stringWidth.js';
 import { useTheme } from '../../../ink.js';
 import { useKeybindings } from '../../../keybindings/useKeybinding.js';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../../services/analytics/index.js';
 import { useAppState } from '../../../state/AppState.js';
 import type { Question } from '../../../tools/AskUserQuestionTool/AskUserQuestionTool.js';
 import { AskUserQuestionTool } from '../../../tools/AskUserQuestionTool/AskUserQuestionTool.js';
@@ -160,7 +159,6 @@ function AskUserQuestionPermissionRequestBody(t0) {
     globalContentHeight,
     globalContentWidth
   } = t5;
-  const metadataSource = result.success ? result.data.metadata?.source : undefined;
   let t6;
   if ($[15] === Symbol.for("react.memo_cache_sentinel")) {
     t6 = {};
@@ -263,22 +261,13 @@ function AskUserQuestionPermissionRequestBody(t0) {
   const allQuestionsAnswered = t11;
   const hideSubmitTab = questions.length === 1 && !questions[0]?.multiSelect;
   let t12;
-  if ($[25] !== isInPlanMode || $[26] !== metadataSource || $[27] !== onDone || $[28] !== onReject || $[29] !== questions.length || $[30] !== toolUseConfirm) {
+  if ($[25] !== isInPlanMode || $[27] !== onDone || $[28] !== onReject || $[29] !== questions.length || $[30] !== toolUseConfirm) {
     t12 = () => {
-      if (metadataSource) {
-        logEvent("tengu_ask_user_question_rejected", {
-          source: metadataSource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          questionCount: questions.length,
-          isInPlanMode,
-          interviewPhaseEnabled: isInPlanMode && isPlanModeInterviewPhaseEnabled()
-        });
-      }
       onDone();
       onReject();
       toolUseConfirm.onReject();
     };
     $[25] = isInPlanMode;
-    $[26] = metadataSource;
     $[27] = onDone;
     $[28] = onReject;
     $[29] = questions.length;
@@ -289,7 +278,7 @@ function AskUserQuestionPermissionRequestBody(t0) {
   }
   const handleCancel = t12;
   let t13;
-  if ($[32] !== allImageAttachments || $[33] !== answers || $[34] !== isInPlanMode || $[35] !== metadataSource || $[36] !== onDone || $[37] !== questions || $[38] !== toolUseConfirm) {
+  if ($[32] !== allImageAttachments || $[33] !== answers || $[34] !== isInPlanMode || $[36] !== onDone || $[37] !== questions || $[38] !== toolUseConfirm) {
     t13 = async () => {
       const questionsWithAnswers = questions.map(q_1 => {
         const answer = answers[q_1.question];
@@ -304,14 +293,6 @@ function AskUserQuestionPermissionRequestBody(t0) {
     Start by asking them what they would like to clarify.
 
     Questions asked:\n${questionsWithAnswers}`;
-      if (metadataSource) {
-        logEvent("tengu_ask_user_question_respond_to_claude", {
-          source: metadataSource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          questionCount: questions.length,
-          isInPlanMode,
-          interviewPhaseEnabled: isInPlanMode && isPlanModeInterviewPhaseEnabled()
-        });
-      }
       const imageBlocks = await convertImagesToBlocks(allImageAttachments);
       onDone();
       toolUseConfirm.onReject(feedback, imageBlocks && imageBlocks.length > 0 ? imageBlocks : undefined);
@@ -319,7 +300,6 @@ function AskUserQuestionPermissionRequestBody(t0) {
     $[32] = allImageAttachments;
     $[33] = answers;
     $[34] = isInPlanMode;
-    $[35] = metadataSource;
     $[36] = onDone;
     $[37] = questions;
     $[38] = toolUseConfirm;
@@ -329,7 +309,7 @@ function AskUserQuestionPermissionRequestBody(t0) {
   }
   const handleRespondToClaude = t13;
   let t14;
-  if ($[40] !== allImageAttachments || $[41] !== answers || $[42] !== isInPlanMode || $[43] !== metadataSource || $[44] !== onDone || $[45] !== questions || $[46] !== toolUseConfirm) {
+  if ($[40] !== allImageAttachments || $[41] !== answers || $[42] !== isInPlanMode || $[44] !== onDone || $[45] !== questions || $[46] !== toolUseConfirm) {
     t14 = async () => {
       const questionsWithAnswers_0 = questions.map(q_2 => {
         const answer_0 = answers[q_2.question];
@@ -342,14 +322,6 @@ function AskUserQuestionPermissionRequestBody(t0) {
 Stop asking clarifying questions and proceed to finish the plan with the information you have.
 
 Questions asked and answers provided:\n${questionsWithAnswers_0}`;
-      if (metadataSource) {
-        logEvent("tengu_ask_user_question_finish_plan_interview", {
-          source: metadataSource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          questionCount: questions.length,
-          isInPlanMode,
-          interviewPhaseEnabled: isInPlanMode && isPlanModeInterviewPhaseEnabled()
-        });
-      }
       const imageBlocks_0 = await convertImagesToBlocks(allImageAttachments);
       onDone();
       toolUseConfirm.onReject(feedback_0, imageBlocks_0 && imageBlocks_0.length > 0 ? imageBlocks_0 : undefined);
@@ -357,7 +329,6 @@ Questions asked and answers provided:\n${questionsWithAnswers_0}`;
     $[40] = allImageAttachments;
     $[41] = answers;
     $[42] = isInPlanMode;
-    $[43] = metadataSource;
     $[44] = onDone;
     $[45] = questions;
     $[46] = toolUseConfirm;
@@ -367,17 +338,8 @@ Questions asked and answers provided:\n${questionsWithAnswers_0}`;
   }
   const handleFinishPlanInterview = t14;
   let t15;
-  if ($[48] !== allImageAttachments || $[49] !== isInPlanMode || $[50] !== metadataSource || $[51] !== onDone || $[52] !== questionStates || $[53] !== questions || $[54] !== toolUseConfirm) {
+  if ($[48] !== allImageAttachments || $[49] !== isInPlanMode || $[51] !== onDone || $[52] !== questionStates || $[53] !== questions || $[54] !== toolUseConfirm) {
     t15 = async answersToSubmit => {
-      if (metadataSource) {
-        logEvent("tengu_ask_user_question_accepted", {
-          source: metadataSource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          questionCount: questions.length,
-          answerCount: Object.keys(answersToSubmit).length,
-          isInPlanMode,
-          interviewPhaseEnabled: isInPlanMode && isPlanModeInterviewPhaseEnabled()
-        });
-      }
       const annotations = {};
       for (const q_3 of questions) {
         const answer_1 = answersToSubmit[q_3.question];
@@ -408,7 +370,6 @@ Questions asked and answers provided:\n${questionsWithAnswers_0}`;
     };
     $[48] = allImageAttachments;
     $[49] = isInPlanMode;
-    $[50] = metadataSource;
     $[51] = onDone;
     $[52] = questionStates;
     $[53] = questions;

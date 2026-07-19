@@ -38,7 +38,7 @@ export function isForkSubagentEnabled(): boolean {
   return false
 }
 
-/** Synthetic agent type name used for analytics when the fork path fires. */
+/** Synthetic agent type name used by the fork path. */
 export const FORK_SUBAGENT_TYPE = 'fork'
 
 /**
@@ -54,7 +54,7 @@ export const FORK_SUBAGENT_TYPE = 'fork'
  * The getSystemPrompt here is unused: the fork path passes
  * `override.systemPrompt` with the parent's already-rendered system prompt
  * bytes, threaded via `toolUseContext.renderedSystemPrompt`. Reconstructing
- * by re-calling getSystemPrompt() can diverge (GrowthBook cold→warm) and
+ * by re-calling getSystemPrompt() can diverge (local feature configuration cold→warm) and
  * bust the prompt cache; threading the rendered bytes is byte-exact.
  */
 export const FORK_AGENT = {

@@ -1,5 +1,5 @@
 import { feature } from 'src/utils/features.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
+import { getFeatureValue } from '../../services/featureConfig.js'
 import type { Tool } from '../../Tool.js'
 import { AGENT_TOOL_NAME } from '../AgentTool/constants.js'
 
@@ -16,7 +16,7 @@ const PROMPT_HEAD = `Fetches full schema definitions for deferred tools so they 
 // via system-reminder attachments. When disabled: prepended
 // <available-deferred-tools> block (pre-gate behavior).
 function getToolLocationHint(): string {
-  const deltaEnabled = getFeatureValue_CACHED_MAY_BE_STALE(
+  const deltaEnabled = getFeatureValue(
     'tengu_glacier_2xr',
     false,
   )

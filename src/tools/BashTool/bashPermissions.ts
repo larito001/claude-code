@@ -1,10 +1,6 @@
 import { feature } from 'src/utils/features.js'
 import { APIUserAbortError } from '@anthropic-ai/sdk'
 import type { z } from 'zod/v4'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
 import type { ToolPermissionContext, ToolUseContext } from '../../Tool.js'
 import type { PendingClassifierCheck } from '../../types/permissions.js'
 import { count } from '../../utils/array.js'
@@ -90,7 +86,7 @@ const ENV_VAR_ASSIGN_RE = /^[A-Za-z_]\w*=/
 // CC-643: On complex compound commands, splitCommand_DEPRECATED can produce a
 // very large subcommands array (possible exponential growth; #21405's ReDoS fix
 // may have been incomplete). Each subcommand then runs tree-sitter parse +
-// ~20 validators + logEvent (bashSecurity.ts), and with memoized metadata the
+// ~20 validators, and with memoized metadata the
 // resulting microtask chain starves the event loop — REPL freeze at 100% CPU,
 // strace showed /proc/self/stat reads at ~127Hz with no epoll_wait. Fifty is
 // generous: legitimate user commands don't split that wide. Above the cap we
@@ -1582,9 +1578,6 @@ export async function bashToolHasPermission(
       type: 'other' as const,
       reason: astResult.reason,
     }
-    logEvent('tengu_bash_ast_too_complex', {
-      nodeTypeId: nodeTypeId(astResult.nodeType),
-    })
     return {
       behavior: 'ask',
       decisionReason,
@@ -2161,25 +2154,12 @@ export async function bashToolHasPermission(
     astSubcommands === null &&
     !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK)
   ) {
-    // CC-643: Batch divergence telemetry into a single logEvent. The per-sub
-    // logEvent was the hot-path syscall driver (each call → /proc/self/stat
-    // via process.memoryUsage()). Aggregate count preserves the signal.
-    let divergenceCount = 0
-    const onDivergence = () => {
-      divergenceCount++
-    }
     const results = await Promise.all(
-      subcommands.map(c => bashCommandIsSafeAsync(c, onDivergence)),
+      subcommands.map(c => bashCommandIsSafeAsync(c)),
     )
     hasPossibleCommandInjection = results.some(
       r => r.behavior !== 'passthrough',
     )
-    if (divergenceCount > 0) {
-      logEvent('tengu_tree_sitter_security_divergence', {
-        quoteContextDivergence: true,
-        count: divergenceCount,
-      })
-    }
   }
   if (
     subcommandPermissionDecisions.every(_ => _.behavior === 'allow') &&

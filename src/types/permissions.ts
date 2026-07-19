@@ -336,64 +336,14 @@ export type ClassifierResult = {
 
 export type ClassifierBehavior = 'deny' | 'ask' | 'allow'
 
-export type ClassifierUsage = {
-  inputTokens: number
-  outputTokens: number
-  cacheReadInputTokens: number
-  cacheCreationInputTokens: number
-}
-
 export type YoloClassifierResult = {
   thinking?: string
   shouldBlock: boolean
   reason: string
   unavailable?: boolean
-  /**
-   * API 返回“提示太长”——超出分类器记录
-   * 上下文窗口。确定性（相同的记录→相同的错误），所以
-   * 呼叫者应该回到正常提示，而不是重试/失败关闭。
-   */
   transcriptTooLong?: boolean
-  /** 用于此分类器调用的模型 */
   model: string
-  /** 分类器 API 调用中的令牌使用情况（用于开销遥测） */
-  usage?: ClassifierUsage
-  /** 分类器 API 调用的持续时间（以毫秒为单位） */
-  durationMs?: number
-  /** 发送到分类器的提示组件的字符长度 */
-  promptLengths?: {
-    systemPrompt: number
-    toolCalls: number
-    userPrompts: number
-  }
-  /** 错误提示转储的路径（仅在API错误导致不可用时设置） */
   errorDumpPath?: string
-  /** 哪个分类器阶段产生最终决策（仅限 2 阶段 XML） */
-  stage?: 'fast' | 'thinking'
-  /** 当阶段 2 也运行时，阶段 1（快速）的令牌使用情况 */
-  stage1Usage?: ClassifierUsage
-  /** 当阶段 2 也运行时，阶段 1 的持续时间（以毫秒为单位） */
-  stage1DurationMs?: number
-  /**
-   * 第 1 阶段的 API request_id (req_xxx)。允许加入服务器端
-   * 缓存未命中/路由归因的 api_usage 日志。也用于
-   * 旧版 1 阶段 (tool_use) 分类器 — 单个请求位于此处。
-   */
-  stage1RequestId?: string
-  /**
-   * 第 1 阶段的 API 消息 ID (msg_xxx)。启用加入
-   * tengu_auto_mode_decision 分析事件到分类器的实际
-   * 分析后提示/完成。
-   */
-  stage1MsgId?: string
-  /** 当第 2 阶段运行时，第 2 阶段的代币使用情况（思考） */
-  stage2Usage?: ClassifierUsage
-  /** 运行阶段 2 时阶段 2 的持续时间（以毫秒为单位） */
-  stage2DurationMs?: number
-  /** 第 2 阶段的 API request_id（每当第 2 阶段运行时设置） */
-  stage2RequestId?: string
-  /** 第 2 阶段的 API 消息 ID (msg_xxx)（每当第 2 阶段运行时设置） */
-  stage2MsgId?: string
 }
 
 // ============================================================================

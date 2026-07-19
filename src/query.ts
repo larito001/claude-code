@@ -9,10 +9,6 @@ import {
   type AutoCompactTrackingState,
 } from './services/compact/autoCompact.js'
 import { buildPostCompactMessages } from './services/compact/compact.js'
-import {
-  logEvent,
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-} from 'src/services/analytics/index.js'
 import { ImageSizeError } from './utils/imageValidation.js'
 import { ImageResizeError } from './utils/imageResizer.js'
 import { findToolByName, type ToolUseContext } from './Tool.js'
@@ -65,7 +61,7 @@ import {
   tokenCountWithEstimation,
 } from './utils/tokens.js'
 import { ESCALATED_MAX_TOKENS } from './utils/context.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from './services/analytics/growthbook.js'
+import { getFeatureValue } from './services/featureConfig.js'
 import { SLEEP_TOOL_NAME } from './tools/SleepTool/prompt.js'
 import { executePostSamplingHooks } from './utils/hooks/postSamplingHooks.js'
 import { executeStopFailureHooks } from './utils/hooks.js'
@@ -257,7 +253,7 @@ async function* queryLoop(
   // sites.
   let taskBudgetRemaining: number | undefined = undefined
 
-  // 在进入时对不可变的 env/statsig/session 状态进行快照。参见查询配置
+  // 在进入时对不可变的 env/feature configuration/session 状态进行快照。参见查询配置
   // for what's included and why feature() gates are intentionally excluded.
   const config = buildQueryConfig()
 
@@ -305,9 +301,6 @@ async function* queryLoop(
           chainId: deps.uuid(),
           depth: 0,
         }
-
-    const queryChainIdForAnalytics =
-      queryTracking.chainId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
 
     toolUseContext = {
       ...toolUseContext,
@@ -383,31 +376,6 @@ async function* queryLoop(
         compactionUsage,
       } = compactionResult
 
-      logEvent('tengu_auto_compact_succeeded', {
-        originalMessageCount: messages.length,
-        compactedMessageCount:
-          compactionResult.summaryMessages.length +
-          compactionResult.attachments.length +
-          compactionResult.hookResults.length,
-        preCompactTokenCount,
-        postCompactTokenCount,
-        truePostCompactTokenCount,
-        compactionInputTokens: compactionUsage?.input_tokens,
-        compactionOutputTokens: compactionUsage?.output_tokens,
-        compactionCacheReadTokens:
-          compactionUsage?.cache_read_input_tokens ?? 0,
-        compactionCacheCreationTokens:
-          compactionUsage?.cache_creation_input_tokens ?? 0,
-        compactionTotalTokens: compactionUsage
-          ? compactionUsage.input_tokens +
-            (compactionUsage.cache_creation_input_tokens ?? 0) +
-            (compactionUsage.cache_read_input_tokens ?? 0) +
-            compactionUsage.output_tokens
-          : 0,
-
-        queryChainId: queryChainIdForAnalytics,
-        queryDepth: queryTracking.depth,
-      })
 
       // task_budget：捕获之前的预压缩最终上下文窗口
       // messagesForQuery 被替换为下面的 postCompactMessages。
@@ -581,11 +549,6 @@ async function* queryLoop(
               for (const msg of assistantMessages) {
                 yield { type: 'tombstone' as const, message: msg }
               }
-              logEvent('tengu_orphaned_messages_tombstoned', {
-                orphanedMessageCount: assistantMessages.length,
-                queryChainId: queryChainIdForAnalytics,
-                queryDepth: queryTracking.depth,
-              })
 
               assistantMessages.length = 0
               toolResults.length = 0
@@ -742,16 +705,6 @@ async function* queryLoop(
             messagesForQuery = stripSignatureBlocks(messagesForQuery)
 
             // 记录后备事件
-            logEvent('tengu_model_fallback_triggered', {
-              original_model:
-                innerError.originalModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              fallback_model:
-                fallbackModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              entrypoint:
-                'cli' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              queryChainId: queryChainIdForAnalytics,
-              queryDepth: queryTracking.depth,
-            })
 
             // 产生有关后备的系统消息 - 使用“警告”级别，以便
             // 用户无需详细模式即可看到通知
@@ -769,15 +722,6 @@ async function* queryLoop(
       logError(error)
       const errorMessage =
         error instanceof Error ? error.message : String(error)
-      logEvent('tengu_query_error', {
-        assistantMessages: assistantMessages.length,
-        toolUses: assistantMessages.flatMap(_ =>
-          _.message.content.filter(content => content.type === 'tool_use'),
-        ).length,
-
-        queryChainId: queryChainIdForAnalytics,
-        queryDepth: queryTracking.depth,
-      })
 
       // Handle image size/resize errors with user-friendly messages
       if (
@@ -871,7 +815,7 @@ async function* queryLoop(
         // override check), then falls through to multi-turn recovery if
         // 64k also hits the cap.
         // 3P default: false (not validated on Bedrock/Vertex)
-        const capEnabled = getFeatureValue_CACHED_MAY_BE_STALE(
+        const capEnabled = getFeatureValue(
           'tengu_otk_slot_v1',
           false,
         )
@@ -880,9 +824,6 @@ async function* queryLoop(
           maxOutputTokensOverride === undefined &&
           !process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS
         ) {
-          logEvent('tengu_max_tokens_escalate', {
-            escalatedTo: ESCALATED_MAX_TOKENS,
-          })
           const next: State = {
             messages: messagesForQuery,
             toolUseContext,
@@ -1016,11 +957,6 @@ async function* queryLoop(
               `Token budget early stop: diminishing returns at ${decision.completionEvent.pct}%`,
             )
           }
-          logEvent('tengu_token_budget_completed', {
-            ...decision.completionEvent,
-            queryChainId: queryChainIdForAnalytics,
-            queryDepth: queryTracking.depth,
-          })
         }
       }
 
@@ -1032,20 +968,6 @@ async function* queryLoop(
 
     queryCheckpoint('query_tool_execution_start')
 
-
-    if (streamingToolExecutor) {
-      logEvent('tengu_streaming_tool_execution_used', {
-        tool_count: toolUseBlocks.length,
-        queryChainId: queryChainIdForAnalytics,
-        queryDepth: queryTracking.depth,
-      })
-    } else {
-      logEvent('tengu_streaming_tool_execution_not_used', {
-        tool_count: toolUseBlocks.length,
-        queryChainId: queryChainIdForAnalytics,
-        queryDepth: queryTracking.depth,
-      })
-    }
 
     const toolUpdates = streamingToolExecutor
       ? streamingToolExecutor.getRemainingResults()
@@ -1179,27 +1101,12 @@ async function* queryLoop(
 
     if (tracking?.compacted) {
       tracking.turnCounter++
-      logEvent('tengu_post_autocompact_turn', {
-        turnId:
-          tracking.turnId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        turnCounter: tracking.turnCounter,
-
-        queryChainId: queryChainIdForAnalytics,
-        queryDepth: queryTracking.depth,
-      })
     }
 
     // Be careful to do this after tool calls are done, because the API
     // will error if we interleave tool_result messages with regular user messages.
 
     // Instrumentation: Track message count before attachments
-    logEvent('tengu_query_before_attachments', {
-      messagesForQueryCount: messagesForQuery.length,
-      assistantMessagesCount: assistantMessages.length,
-      toolResultsCount: toolResults.length,
-      queryChainId: queryChainIdForAnalytics,
-      queryDepth: queryTracking.depth,
-    })
 
     // Get queued commands snapshot before processing attachments.
     // These will be sent as attachments so Claude can respond to them in the current turn.
@@ -1291,12 +1198,6 @@ async function* queryLoop(
         tr.type === 'attachment' && tr.attachment.type === 'edited_text_file',
     )
 
-    logEvent('tengu_query_after_attachments', {
-      totalToolResultsCount: toolResults.length,
-      fileChangeAttachmentCount,
-      queryChainId: queryChainIdForAnalytics,
-      queryDepth: queryTracking.depth,
-    })
 
     // Refresh tools between turns so newly-connected MCP servers become available
     if (updatedToolUseContext.options.refreshTools) {
