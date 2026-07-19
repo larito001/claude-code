@@ -2,78 +2,39 @@ import {
   getModelStrings as getModelStringsState,
   setModelStrings as setModelStringsState,
 } from 'src/bootstrap/state.js'
-import { logError } from '../log.js'
-import { sequential } from '../sequential.js'
 import { getInitialSettings } from '../settings/settings.js'
-import { findFirstMatch, getBedrockInferenceProfiles } from './bedrock.js'
 import {
   ALL_MODEL_CONFIGS,
   CANONICAL_ID_TO_KEY,
   type CanonicalModelId,
   type ModelKey,
 } from './configs.js'
-import { type APIProvider, getAPIProvider } from './providers.js'
 
-/**
- * 将每个模型版本映射到其特定提供商的模型ID字符串。
- * 源自 ALL_MODEL_CONFIGS——在该处添加模型会扩展此类型。
- */
+/** 当前模型别名到实际 API 模型 ID 的映射。 */
 export type ModelStrings = Record<ModelKey, string>
 
 const MODEL_KEYS = Object.keys(ALL_MODEL_CONFIGS) as ModelKey[]
 
-/** 获取 get Builtin Model Strings 对应的数据或状态。 */
-function getBuiltinModelStrings(provider: APIProvider): ModelStrings {
-  const out = {} as ModelStrings
-  for (const key of MODEL_KEYS) {
-    out[key] = ALL_MODEL_CONFIGS[key][provider]
-  }
-  return out
+function getBuiltinModelStrings(): ModelStrings {
+  const modelStrings = {} as ModelStrings
+  for (const key of MODEL_KEYS) modelStrings[key] = ALL_MODEL_CONFIGS[key]
+  return modelStrings
 }
 
-/** 获取 get Bedrock Model Strings 对应的数据或状态。 */
-async function getBedrockModelStrings(): Promise<ModelStrings> {
-  const fallback = getBuiltinModelStrings('bedrock')
-  let profiles: string[] | undefined
-  try {
-    profiles = await getBedrockInferenceProfiles()
-  } catch (error) {
-    logError(error as Error)
-    return fallback
-  }
-  if (!profiles?.length) {
-    return fallback
-  }
-  // 每个配置的 firstParty ID 是我们在用户推理配置文件列表中搜索的规范子字符串（例如 "claude-opus-4-6" 匹配 "eu.anthropic.claude-opus-4-6-v1"）。当未找到匹配配置文件时，回退到硬编码的 bedrock ID。
-  const out = {} as ModelStrings
-  for (const key of MODEL_KEYS) {
-    const needle = ALL_MODEL_CONFIGS[key].firstParty
-    out[key] = findFirstMatch(profiles, needle) || fallback[key]
-  }
-  return out
-}
-
-/**
- * 在提供商派生的模型字符串之上叠加用户配置的 modelOverrides（来自 settings.json）。覆盖项以规范的 first-party model ID（例如 "claude-opus-4-6"）为键，映射到任意的提供商特定字符串——通常是 Bedrock 推理配置文件 ARN。
- */
-function applyModelOverrides(ms: ModelStrings): ModelStrings {
+/** 将用户配置的模型覆盖应用到规范模型列表。 */
+function applyModelOverrides(modelStrings: ModelStrings): ModelStrings {
   const overrides = getInitialSettings().modelOverrides
-  if (!overrides) {
-    return ms
-  }
-  const out = { ...ms }
+  if (!overrides) return modelStrings
+
+  const result = { ...modelStrings }
   for (const [canonicalId, override] of Object.entries(overrides)) {
     const key = CANONICAL_ID_TO_KEY[canonicalId as CanonicalModelId]
-    if (key && override) {
-      out[key] = override
-    }
+    if (key && override) result[key] = override
   }
-  return out
+  return result
 }
 
-/**
- * 将覆盖的模型 ID（例如 Bedrock ARN）解析回其规范的 first-party model ID。如果输入不匹配任何当前覆盖值，则原样返回。在模块初始化期间调用是安全的（如果设置尚未加载，则不执行任何操作）。
- */
+/** 将覆盖后的模型 ID 还原为规范模型 ID。 */
 export function resolveOverriddenModel(modelId: string): string {
   let overrides: Record<string, string> | undefined
   try {
@@ -81,75 +42,27 @@ export function resolveOverriddenModel(modelId: string): string {
   } catch {
     return modelId
   }
-  if (!overrides) {
-    return modelId
-  }
+  if (!overrides) return modelId
+
   for (const [canonicalId, override] of Object.entries(overrides)) {
-    if (override === modelId) {
-      return canonicalId
-    }
+    if (override === modelId) return canonicalId
   }
   return modelId
 }
 
-/** 更新 update Bedrock Model Strings 对应的数据或状态。 */
-const updateBedrockModelStrings = sequential(async () => {
-  if (getModelStringsState() !== null) {
-    // 已初始化。在这里进行检查，结合 `sequential`，允许测试套件在测试之间重置状态，同时仍能防止生产环境中多次 API 调用。
-    return
-  }
-  try {
-    const ms = await getBedrockModelStrings()
-    setModelStringsState(ms)
-  } catch (error) {
-    logError(error as Error)
-  }
-})
-
-/** 执行 init Model Strings 对应的业务处理。 */
-function initModelStrings(): void {
-  const ms = getModelStringsState()
-  if (ms !== null) {
-    // 已初始化
-    return
-  }
-  // 非 Bedrock 提供商使用默认值初始化
-  if (getAPIProvider() !== 'bedrock') {
-    setModelStringsState(getBuiltinModelStrings(getAPIProvider()))
-    return
-  }
-  // 在 Bedrock 上，在后台更新模型字符串，不阻塞。不要在这种情况下设置状态，以便我们可以在 `updateBedrockModelStrings` 上使用 `sequential`，并在多次调用时检查现有状态。
-  void updateBedrockModelStrings()
+function initializeModelStrings(): ModelStrings {
+  const modelStrings = getBuiltinModelStrings()
+  setModelStringsState(modelStrings)
+  return modelStrings
 }
 
-/** 获取 get Model Strings 对应的数据或状态。 */
+/** 获取应用了用户覆盖的模型字符串。 */
 export function getModelStrings(): ModelStrings {
-  const ms = getModelStringsState()
-  if (ms === null) {
-    initModelStrings()
-    // Bedrock 路径会落在此处，而配置文件获取在后台运行——仍对临时默认值使用覆盖。
-    return applyModelOverrides(getBuiltinModelStrings(getAPIProvider()))
-  }
-  return applyModelOverrides(ms)
+  const modelStrings = getModelStringsState() ?? initializeModelStrings()
+  return applyModelOverrides(modelStrings)
 }
 
-/**
- * 确保模型字符串完全初始化。
- * 对于 Bedrock 用户，这会等待配置文件获取完成。
- * 在生成模型选项之前调用此方法，以确保正确的区域字符串。
- */
+/** 保留异步签名，供启动链和 SDK 调用方统一等待。 */
 export async function ensureModelStringsInitialized(): Promise<void> {
-  const ms = getModelStringsState()
-  if (ms !== null) {
-    return
-  }
-
-  // 对于非 Bedrock，同步初始化
-  if (getAPIProvider() !== 'bedrock') {
-    setModelStringsState(getBuiltinModelStrings(getAPIProvider()))
-    return
-  }
-
-  // 对于 Bedrock，等待配置文件获取
-  await updateBedrockModelStrings()
+  if (getModelStringsState() === null) initializeModelStrings()
 }

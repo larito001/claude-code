@@ -1,6 +1,5 @@
 import { MODEL_ALIASES } from './aliases.js'
 import { isModelAllowed } from './modelAllowlist.js'
-import { getAPIProvider } from './providers.js'
 import { sideQuery } from '../sideQuery.js'
 import {
   NotFoundError,
@@ -8,7 +7,6 @@ import {
   APIConnectionError,
   AuthenticationError,
 } from '@anthropic-ai/sdk'
-import { getModelStrings } from './modelStrings.js'
 
 // 缓存有效模型以避免重复的API调用
 const validModelCache = new Map<string, boolean>()
@@ -85,11 +83,9 @@ function handleValidationError(
 ): { valid: boolean; error: string } {
   // NotFoundError（404）表示模型不存在
   if (error instanceof NotFoundError) {
-    const fallback = get3PFallbackSuggestion(modelName)
-    const suggestion = fallback ? `. Try '${fallback}' instead` : ''
     return {
       valid: false,
-      error: `Model '${modelName}' not found${suggestion}`,
+      error: `Model '${modelName}' not found`,
     }
   }
 
@@ -133,23 +129,4 @@ function handleValidationError(
     valid: false,
     error: `Unable to validate model: ${errorMessage}`,
   }
-}
-
-// @[MODEL LAUNCH]: 为新型号→先前版本添加后备建议链
-/** 当所选模型不可用时，为3P用户建议一个后备模型。 */
-function get3PFallbackSuggestion(model: string): string | undefined {
-  if (getAPIProvider() === 'firstParty') {
-    return undefined
-  }
-  const lowerModel = model.toLowerCase()
-  if (lowerModel.includes('opus-4-6') || lowerModel.includes('opus_4_6')) {
-    return getModelStrings().opus41
-  }
-  if (lowerModel.includes('sonnet-4-6') || lowerModel.includes('sonnet_4_6')) {
-    return getModelStrings().sonnet45
-  }
-  if (lowerModel.includes('sonnet-4-5') || lowerModel.includes('sonnet_4_5')) {
-    return getModelStrings().sonnet40
-  }
-  return undefined
 }

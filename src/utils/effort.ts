@@ -1,8 +1,6 @@
 import { isUltrathinkEnabled } from './thinking.js'
 import { getInitialSettings } from './settings/settings.js'
 import { getFeatureValue } from 'src/services/featureConfig.js'
-import { getAPIProvider } from './model/providers.js'
-import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
 import { isEnvTruthy } from './envUtils.js'
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk'
 
@@ -23,10 +21,6 @@ export function modelSupportsEffort(model: string): boolean {
   if (isEnvTruthy(process.env.CLAUDE_CODE_ALWAYS_ENABLE_EFFORT)) {
     return true
   }
-  const supported3P = get3PModelCapabilityOverride(model, 'effort')
-  if (supported3P !== undefined) {
-    return supported3P
-  }
   // Supported by a subset of Claude 4 models
   if (m.includes('opus-4-6') || m.includes('sonnet-4-6')) {
     return true
@@ -40,19 +34,12 @@ export function modelSupportsEffort(model: string): boolean {
   // the model launch DRI and research. This is a sensitive setting that can
   // greatly affect model quality and bashing.
 
-  // Default to true for unknown model strings on 1P.
-  // Do not default to true for 3P as they have different formats for their
-  // model strings (ex. anthropics/claude-code#30795)
-  return getAPIProvider() === 'firstParty'
+  return true
 }
 
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'max' effort.
 // Per API docs, 'max' is Opus 4.6 only for public models — other models return an error.
 export function modelSupportsMaxEffort(model: string): boolean {
-  const supported3P = get3PModelCapabilityOverride(model, 'max_effort')
-  if (supported3P !== undefined) {
-    return supported3P
-  }
   if (model.toLowerCase().includes('opus-4-6')) {
     return true
   }

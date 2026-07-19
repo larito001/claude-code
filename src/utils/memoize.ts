@@ -126,9 +126,8 @@ export function memoizeWithTTLAsync<Args extends unknown[], Result>(
   // provided this: it stored the Promise synchronously before the first
   // await, so concurrent callers shared one f() invocation. This async
   // variant awaits before cache.set, so concurrent cold-miss callers would
-  // each invoke f() independently without this map. For
-  // refreshAndGetAwsCredentials that means N concurrent `aws sso login`
-  // spawns. Same pattern as pending401Handlers in auth.ts:1171.
+  // each invoke f() independently without this map. The map ensures expensive
+  // asynchronous refreshes are shared by all concurrent callers.
   const inFlight = new Map<string, Promise<Result>>()
 
   const memoized = async (...args: Args): Promise<Result> => {
@@ -176,7 +175,7 @@ export function memoizeWithTTLAsync<Args extends unknown[], Result>(
       // storing a newer entry while this refresh is in flight. .then
       // overwriting with the stale refresh's result is worse than .catch
       // deleting - wrong data persists for full TTL (e.g. credentials from
-      // the old awsAuthRefresh command after a settings change).
+      // a stale asynchronous refresh after a settings change).
       const staleEntry = cached
       f(...args)
         .then(newValue => {

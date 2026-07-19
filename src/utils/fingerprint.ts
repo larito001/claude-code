@@ -40,8 +40,8 @@ export function extractFirstMessageText(
 /**
  * Computes 3-character fingerprint for Claude Code attribution.
  * Algorithm: SHA256(SALT + msg[4] + msg[7] + msg[20] + version)[:3]
- * IMPORTANT: Do not change this method without careful coordination with
- * 1P and 3P (Bedrock, Vertex, Azure) APIs.
+ * IMPORTANT: Do not change this method without coordinating API-side
+ * validation.
  *
  * @param messageText - First user message text content
  * @param version - Version string (from MACRO.VERSION)

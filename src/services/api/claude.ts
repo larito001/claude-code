@@ -22,10 +22,7 @@ import type {
 import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { Stream } from '@anthropic-ai/sdk/streaming.mjs'
 import { randomUUID } from 'crypto'
-import {
-  getAPIProvider,
-  isFirstPartyAnthropicBaseUrl,
-} from 'src/utils/model/providers.js'
+import { isFirstPartyAnthropicBaseUrl } from 'src/utils/anthropicUrl.js'
 import {
   getAttributionHeader,
   getCLISyspromptPrefix,
@@ -52,11 +49,7 @@ import {
   splitSysPromptPrefix,
   toolToAPISchema,
 } from '../../utils/api.js'
-import {
-  getBedrockExtraBodyParamsBetas,
-  getMergedBetas,
-  getModelBetas,
-} from '../../utils/betas.js'
+import { getMergedBetas, getModelBetas } from '../../utils/betas.js'
 import {
   CAPPED_DEFAULT_MAX_TOKENS,
   getModelMaxOutputTokens,
@@ -179,7 +172,6 @@ import {
 import { count } from '../../utils/array.js'
 import { validateBoundedIntEnvVar } from '../../utils/envValidation.js'
 import { safeParseJSON } from '../../utils/json.js'
-import { getInferenceProfileBackingModel } from '../../utils/model/bedrock.js'
 import {
   normalizeModelStringForAPI,
   parseUserSpecifiedModel,
@@ -223,13 +215,10 @@ type JsonArray = JsonValue[]
 
 /**
  * 根据 API 请求组装额外的主体参数
- * CLAUDE_CODE_EXTRA_BODY 环境变量（如果存在且在任何测试版上）
- * 标头（主要用于基岩请求）。
- *
- * @param betaHeaders - 要包含在请求中的一组 beta 标头。
+ * CLAUDE_CODE_EXTRA_BODY 环境变量（如果存在）。
  * @returns 表示额外主体参数的 JSON 对象。
  */
-export function getExtraBodyParams(betaHeaders?: string[]): JsonObject {
+export function getExtraBodyParams(): JsonObject {
   // 先解析用户额外的身体参数
   const extraBodyStr = process.env.CLAUDE_CODE_EXTRA_BODY
   let result: JsonObject = {}
@@ -255,22 +244,6 @@ export function getExtraBodyParams(betaHeaders?: string[]): JsonObject {
         `Error parsing CLAUDE_CODE_EXTRA_BODY: ${errorMessage(error)}`,
         { level: 'error' },
       )
-    }
-  }
-
-  // 如果提供了beta头，处理它们
-  if (betaHeaders && betaHeaders.length > 0) {
-    if (result.anthropic_beta && Array.isArray(result.anthropic_beta)) {
-      // 添加到现有数组，避免重复
-      const existingHeaders = result.anthropic_beta as string[]
-      /** 创建 new Headers 对应的数据或状态。 */
-      const newHeaders = betaHeaders.filter(
-        header => !existingHeaders.includes(header),
-      )
-      result.anthropic_beta = [...existingHeaders, ...newHeaders]
-    } else {
-      // 使用beta头创建新数组
-      result.anthropic_beta = betaHeaders
     }
   }
 
@@ -335,15 +308,6 @@ export function getCacheControl({
  * 白名单在STATE中缓存以保证会话稳定性——防止请求中途本地功能配置的磁盘缓存更新时出现混合TTL。
  */
 function should1hCacheTTL(querySource?: QuerySource): boolean {
-  // 3P Bedrock用户在选择通过环境变量加入时获得1小时TTL——他们自行管理计费
-  // 不需要本地功能配置门控，因为3P用户没有配置本地功能配置
-  if (
-    getAPIProvider() === 'bedrock' &&
-    isEnvTruthy(process.env.ENABLE_PROMPT_CACHING_1H_BEDROCK)
-  ) {
-    return true
-  }
-
   // 在引导状态下锁存资格以保证会话稳定性。
   let userEligible = getPromptCache1hEligible()
   if (userEligible === null) {
@@ -994,12 +958,7 @@ async function* queryModel(
 
   // 从查询链中的最后一条 assistant 消息派生出上一个请求 ID。这限定在每个消息数组中（主线程、子代理、队友各自拥有自己的），因此并发代理不会互相干扰请求链追踪。同时也自然处理回滚/撤销，因为已移除的消息不会出现在数组中。
 
-  const resolvedModel =
-    getAPIProvider() === 'bedrock' &&
-    options.model.includes('application-inference-profile')
-      ? ((await getInferenceProfileBackingModel(options.model)) ??
-        options.model)
-      : options.model
+  const resolvedModel = options.model
 
   queryCheckpoint('query_tool_schema_build_start')
   const isAgenticQuery =
@@ -1101,9 +1060,9 @@ async function* queryModel(
     )
   }
 
-  // 如果启用，添加工具搜索 beta 标头——这是接受 defer_loading 所必需的。标头因提供商而异：1P/Foundry 使用 advanced-tool-use，Vertex/Bedrock 使用 tool-search-tool。对于 Bedrock，此标头必须放在 extraBodyParams 中，而不是 betas 数组中。
+  // 如果启用，添加工具搜索 beta 标头——这是接受 defer_loading 所必需的。
   const toolSearchHeader = useToolSearch ? getToolSearchBetaHeader() : null
-  if (toolSearchHeader && getAPIProvider() !== 'bedrock') {
+  if (toolSearchHeader) {
     if (!betas.includes(toolSearchHeader)) {
       betas.push(toolSearchHeader)
     }
@@ -1364,15 +1323,7 @@ async function* queryModel(
       betasParams.push(CONTEXT_1M_BETA_HEADER)
     }
 
-    // 对于 Bedrock，包括基于模型的 beta 和动态添加的工具搜索标头。
-    const bedrockBetas =
-      getAPIProvider() === 'bedrock'
-        ? [
-            ...getBedrockExtraBodyParamsBetas(retryContext.model),
-            ...(toolSearchHeader ? [toolSearchHeader] : []),
-          ]
-        : []
-    const extraBodyParams = getExtraBodyParams(bedrockBetas)
+    const extraBodyParams = getExtraBodyParams()
 
     const outputConfig: BetaOutputConfig = {
       ...((extraBodyParams.output_config as BetaOutputConfig) ?? {}),
@@ -1555,9 +1506,9 @@ async function* queryModel(
           headlessProfilerCheckpoint('api_request_sent')
         }
 
-        // 生成并跟踪客户端请求ID，以便超时（不返回服务器请求ID）仍能与服务器日志关联。仅限第一方——第三方供应商不会记录它（inc-4029类）。
+        // 生成并跟踪客户端请求ID，以便超时仍能与服务端日志关联。
         clientRequestId =
-          getAPIProvider() === 'firstParty' && isFirstPartyAnthropicBaseUrl()
+          isFirstPartyAnthropicBaseUrl()
             ? randomUUID()
             : undefined
 
@@ -2530,7 +2481,6 @@ export function adjustParamsForNonStreaming<
 
 /** 判断是否满足 is Max Tokens Cap Enabled 对应的数据或状态。 */
 function isMaxTokensCapEnabled(): boolean {
-  // 3P 默认值：false（在 Bedrock/Vertex 上未验证）
   return getFeatureValue('tengu_otk_slot_v1', false)
 }
 

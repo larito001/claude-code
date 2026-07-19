@@ -16,14 +16,11 @@ import type {
 } from 'src/types/message.js'
 import { getAnthropicApiKeyWithSource } from 'src/utils/auth.js'
 import { createAssistantAPIErrorMessage } from 'src/utils/messages.js'
-import { getModelStrings } from 'src/utils/model/modelStrings.js'
-import { getAPIProvider } from 'src/utils/model/providers.js'
 import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
 import {
   API_PDF_MAX_PAGES,
   PDF_TARGET_RAW_SIZE,
 } from '../../constants/apiLimits.js'
-import { isEnvTruthy } from '../../utils/envUtils.js'
 import { formatFileSize } from '../../utils/format.js'
 import { ImageResizeError } from '../../utils/imageResizer.js'
 import { ImageSizeError } from '../../utils/imageValidation.js'
@@ -57,7 +54,7 @@ export function isPromptTooLongMessage(msg: AssistantMessage): boolean {
 }
 
 /**
- * 从原始 prompt-too-long API 错误消息中解析实际/限制 token 数量，例如 "prompt is too long: 137500 tokens > 135000 maximum"。原始字符串可能包含 SDK 前缀或 JSON 封装，或具有不同的大小写 (Vertex)，因此此解析有意宽松。
+ * 从原始 prompt-too-long API 错误消息中解析实际/限制 token 数量，例如 "prompt is too long: 137500 tokens > 135000 maximum"。原始字符串可能包含 SDK 前缀、JSON 封装或不同的大小写，因此此解析有意宽松。
  */
 export function parsePromptTooLongTokenCounts(rawMessage: string): {
   actualTokens: number | undefined
@@ -322,29 +319,6 @@ export function isValidAPIMessage(value: unknown): value is BetaMessage {
   )
 }
 
-/** AWS 可能返回的低级错误。 */
-type AmazonError = {
-  Output?: {
-    __type?: string
-  }
-  Version?: string
-}
-
-/** 给定一个看起来不太正确的响应，检查是否包含任何可提取的已知错误类型。 */
-export function extractUnknownErrorFormat(value: unknown): string | undefined {
-  // 首先检查值是否为有效对象
-  if (!value || typeof value !== 'object') {
-    return undefined
-  }
-
-  // Amazon Bedrock 路由错误
-  if ((value as AmazonError).Output?.__type) {
-    return (value as AmazonError).Output!.__type
-  }
-
-  return undefined
-}
-
 /** 获取 get Assistant Message From Error 对应的数据或状态。 */
 export function getAssistantMessageFromError(
   error: unknown,
@@ -408,8 +382,7 @@ export function getAssistantMessageFromError(
     })
   }
 
-  // 处理提示过长错误（Vertex 返回 413，直接 API 返回 400）
-  // 使用不区分大小写的检查，因为 Vertex 返回 "Prompt is too long"（首字母大写）
+  // 兼容直接 API 和兼容网关返回的不同状态码及大小写。
   if (
     error instanceof Error &&
     error.message.toLowerCase().includes('prompt is too long')
@@ -612,30 +585,11 @@ export function getAssistantMessageFromError(
     })
   }
 
-  // Bedrock错误，例如"403 您无权访问具有指定模型ID的模型。"不包含实际的模型ID
-  if (
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) &&
-    error instanceof Error &&
-    error.message.toLowerCase().includes('model id')
-  ) {
-    const switchCmd = getIsNonInteractiveSession() ? '--model' : '/model'
-    const fallbackSuggestion = get3PModelFallbackSuggestion(model)
-    return createAssistantAPIErrorMessage({
-      content: fallbackSuggestion
-        ? `${API_ERROR_MESSAGE_PREFIX} (${model}): ${error.message}. Try ${switchCmd} to switch to ${fallbackSuggestion}.`
-        : `${API_ERROR_MESSAGE_PREFIX} (${model}): ${error.message}. Run ${switchCmd} to pick a different model.`,
-      error: 'invalid_request',
-    })
-  }
-
-  // 404未找到——通常意味着所选模型不存在或不可用。引导用户到/model以便他们选择有效的模型。对于第三方用户，建议他们可以尝试的特定备用模型。
+  // 404未找到——通常意味着所选模型不存在或不可用。
   if (error instanceof APIError && error.status === 404) {
     const switchCmd = getIsNonInteractiveSession() ? '--model' : '/model'
-    const fallbackSuggestion = get3PModelFallbackSuggestion(model)
     return createAssistantAPIErrorMessage({
-      content: fallbackSuggestion
-        ? `The model ${model} is not available on your ${getAPIProvider()} deployment. Try ${switchCmd} to switch to ${fallbackSuggestion}, or ask your admin to enable this model.`
-        : `There's an issue with the selected model (${model}). It may not exist or you may not have access to it. Run ${switchCmd} to pick a different model.`,
+      content: `There's an issue with the selected model (${model}). It may not exist or you may not have access to it. Run ${switchCmd} to pick a different model.`,
       error: 'invalid_request',
     })
   }
@@ -658,28 +612,6 @@ export function getAssistantMessageFromError(
     content: API_ERROR_MESSAGE_PREFIX,
     error: 'unknown',
   })
-}
-
-/** 对于第三方用户，当所选模型不可用时建议备用模型。返回模型名称建议，如果没有适用的建议则返回undefined。 */
-function get3PModelFallbackSuggestion(model: string): string | undefined {
-  if (getAPIProvider() === 'firstParty') {
-    return undefined
-  }
-  // @[MODEL LAUNCH]：为新模型→第三方上一版本添加备用建议链
-  const m = model.toLowerCase()
-  // 如果失败的模型看起来像Opus 4.6变体，建议默认Opus（第三方为4.1）
-  if (m.includes('opus-4-6') || m.includes('opus_4_6')) {
-    return getModelStrings().opus41
-  }
-  // 如果失败的模型看起来像Sonnet 4.6变体，建议Sonnet 4.5
-  if (m.includes('sonnet-4-6') || m.includes('sonnet_4_6')) {
-    return getModelStrings().sonnet45
-  }
-  // 如果失败的模型看起来像Sonnet 4.5变体，建议Sonnet 4
-  if (m.includes('sonnet-4-5') || m.includes('sonnet_4_5')) {
-    return getModelStrings().sonnet40
-  }
-  return undefined
 }
 
 /** 执行 categorize Retryable API Error 对应的业务处理。 */

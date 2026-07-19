@@ -1,22 +1,16 @@
 import { getConfiguredApiKeyHelper, hasAnthropicApiKeyAuth } from './auth.js'
-import {
-  getAPIProvider,
-  type APIProvider,
-} from './model/providers.js'
 
 export type ApiCredentialSources = {
-  provider: APIProvider
   hasApiKey: boolean
   hasApiKeyHelper: boolean
 }
 
 /** 获取 get Api Credential Configuration Error 对应的数据或状态。 */
 export function getApiCredentialConfigurationError({
-  provider,
   hasApiKey,
   hasApiKeyHelper,
 }: ApiCredentialSources): string | null {
-  if (provider !== 'firstParty' || hasApiKey || hasApiKeyHelper) {
+  if (hasApiKey || hasApiKeyHelper) {
     return null
   }
 
@@ -30,7 +24,6 @@ export function getApiCredentialConfigurationError({
 /** 获取 get Current Api Credential Configuration Error 对应的数据或状态。 */
 export function getCurrentApiCredentialConfigurationError(): string | null {
   return getApiCredentialConfigurationError({
-    provider: getAPIProvider(),
     hasApiKey: hasAnthropicApiKeyAuth(),
     hasApiKeyHelper: Boolean(getConfiguredApiKeyHelper()),
   })

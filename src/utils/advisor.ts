@@ -61,7 +61,7 @@ export function isAdvisorEnabled(): boolean {
   if (isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL)) {
     return false
   }
-  // The advisor beta header is first-party only (Bedrock/Vertex 400 on it).
+  // The advisor beta header is only sent to the direct API.
   if (!shouldIncludeFirstPartyOnlyBetas()) {
     return false
   }

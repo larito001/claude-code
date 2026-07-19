@@ -83,52 +83,9 @@ export function parseEnvVars(
 }
 
 /**
- * 获取 AWS 区域，回退到默认值
- * 匹配 Anthropic Bedrock SDK 的区域行为
- */
-export function getAWSRegion(): string {
-  return process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1'
-}
-
-/** 获取默认的 Vertex AI 区域 */
-export function getDefaultVertexRegion(): string {
-  return process.env.CLOUD_ML_REGION || 'us-east5'
-}
-
-/**
  * 检查 bash 命令是否应维护项目工作目录（每条命令后重置为原始目录）
  * @returns 如果 CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR 设置为真值则返回 true
  */
 export function shouldMaintainProjectWorkingDir(): boolean {
   return isEnvTruthy(process.env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR)
-}
-
-// @[MODEL LAUNCH]: 为新模型添加一个用于 Vertex 区域覆盖的环境变量。
-/** 模型前缀 → 用于 Vertex 区域覆盖的环境变量。顺序重要：更具体的前缀必须放在较不具体的前面（例如 'claude-opus-4-1' 在 'claude-opus-4' 之前）。 */
-const VERTEX_REGION_OVERRIDES: ReadonlyArray<[string, string]> = [
-  ['claude-haiku-4-5', 'VERTEX_REGION_CLAUDE_HAIKU_4_5'],
-  ['claude-3-5-haiku', 'VERTEX_REGION_CLAUDE_3_5_HAIKU'],
-  ['claude-3-5-sonnet', 'VERTEX_REGION_CLAUDE_3_5_SONNET'],
-  ['claude-3-7-sonnet', 'VERTEX_REGION_CLAUDE_3_7_SONNET'],
-  ['claude-opus-4-1', 'VERTEX_REGION_CLAUDE_4_1_OPUS'],
-  ['claude-opus-4', 'VERTEX_REGION_CLAUDE_4_0_OPUS'],
-  ['claude-sonnet-4-6', 'VERTEX_REGION_CLAUDE_4_6_SONNET'],
-  ['claude-sonnet-4-5', 'VERTEX_REGION_CLAUDE_4_5_SONNET'],
-  ['claude-sonnet-4', 'VERTEX_REGION_CLAUDE_4_0_SONNET'],
-]
-
-/** 获取特定模型的 Vertex AI 区域。不同模型可能在不同区域可用。 */
-export function getVertexRegionForModel(
-  model: string | undefined,
-): string | undefined {
-  if (model) {
-    /** 执行 match 对应的业务处理。 */
-    const match = VERTEX_REGION_OVERRIDES.find(([prefix]) =>
-      model.startsWith(prefix),
-    )
-    if (match) {
-      return process.env[match[1]] || getDefaultVertexRegion()
-    }
-  }
-  return getDefaultVertexRegion()
 }

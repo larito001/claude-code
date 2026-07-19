@@ -193,7 +193,7 @@ const PTL_RETRY_MARKER = '[earlier conversation truncated for compaction retry]'
 /**
  * Drops the oldest API-round groups from messages until tokenGap is covered.
  * Falls back to dropping 20% of groups when the gap is unparseable (some
- * Vertex/Bedrock error formats). Returns null when nothing can be dropped
+ * compatible-gateway error formats). Returns null when nothing can be dropped
  * without leaving an empty summarize set.
  *
  * This is the last-resort escape hatch for CC-1180 — when the compact request
@@ -388,10 +388,10 @@ export async function compactConversation(
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_start' })
 
-    // 3P default: true — forked-agent path reuses main conversation's prompt cache.
+    // Default: true. The forked-agent path reuses the main conversation's prompt cache.
     // Experiment (Jan 2026) confirmed: false path is 98% cache miss, costs ~0.76% of
     // fleet cache_creation (~38B tok/day), concentrated in ephemeral envs (CCR/GHA/SDK)
-    // for first-run and third-party provider configurations.
+    // for first-run and short-lived environments.
     const promptCacheSharingEnabled = getFeatureValue(
       'tengu_compact_cache_prefix',
       true,
@@ -997,7 +997,7 @@ async function streamCompactSummary({
   // When prompt cache sharing is enabled, use forked agent to reuse the
   // main conversation's cached prefix (system prompt, tools, context messages).
   // Falls back to regular streaming path on failure.
-  // Third-party provider default: true; see the matching configuration above.
+  // Enabled by default; see the matching configuration above.
   const promptCacheSharingEnabled = getFeatureValue(
     'tengu_compact_cache_prefix',
     true,

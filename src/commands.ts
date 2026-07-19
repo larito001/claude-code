@@ -55,7 +55,6 @@ import {
   clearPluginSkillsCache,
 } from './utils/plugins/loadPluginCommands.js'
 import memoize from 'lodash-es/memoize.js'
-import { getAPIProvider } from './utils/model/providers.js'
 import exit from './commands/exit/index.js'
 import exportCommand from './commands/export/index.js'
 import model from './commands/model/index.js'
@@ -187,16 +186,6 @@ async function getSkills(cwd: string): Promise<{
   }
 }
 
-/**
- * 根据声明的 API 提供者需求过滤命令。没有 `availability` 的命令被视为通用。此操作在 `isEnabled()` 之前运行，因此提供者限制的命令会隐藏，无论特性标记状态如何。
- * 未记忆化，因为提供者环境变量可能在调用间变化，因此每次 getCommands() 调用都必须重新评估。
- */
-/** 执行 meets Availability Requirement 对应的业务处理。 */
-export function meetsAvailabilityRequirement(cmd: Command): boolean {
-  if (!cmd.availability) return true
-  return cmd.availability.includes(getAPIProvider())
-}
-
 /** 加载所有命令来源（技能、插件、工作流）。按 cwd 记忆化，因为加载成本高（磁盘 I/O、动态导入）。 */
 /** 获取 load All Commands 对应的数据或状态。 */
 const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
@@ -228,9 +217,7 @@ export async function getCommands(cwd: string): Promise<Command[]> {
 
   // 构建不含动态技能的基础命令
   /** 执行 base Commands 对应的业务处理。 */
-  const baseCommands = allCommands.filter(
-    _ => meetsAvailabilityRequirement(_) && isCommandEnabled(_),
-  )
+  const baseCommands = allCommands.filter(isCommandEnabled)
 
   if (dynamicSkills.length === 0) {
     return baseCommands
@@ -241,9 +228,7 @@ export async function getCommands(cwd: string): Promise<Command[]> {
   /** 执行 unique Dynamic Skills 对应的业务处理。 */
   const uniqueDynamicSkills = dynamicSkills.filter(
     s =>
-      !baseCommandNames.has(s.name) &&
-      meetsAvailabilityRequirement(s) &&
-      isCommandEnabled(s),
+      !baseCommandNames.has(s.name) && isCommandEnabled(s),
   )
 
   if (uniqueDynamicSkills.length === 0) {

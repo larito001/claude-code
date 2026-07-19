@@ -41,9 +41,6 @@ const environmentNames = [
   'ANTHROPIC_API_KEY',
   'CLAUDE_CODE_API_KEY_HELPER_TTL_MS',
   'CLAUDE_CODE_SIMPLE',
-  'CLAUDE_CODE_USE_BEDROCK',
-  'CLAUDE_CODE_USE_FOUNDRY',
-  'CLAUDE_CODE_USE_VERTEX',
 ] as const
 const originalEnvironment = new Map(
   environmentNames.map(name => [name, process.env[name]]),

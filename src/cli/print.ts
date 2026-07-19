@@ -165,9 +165,7 @@ import {
 } from 'src/services/PromptSuggestion/promptSuggestion.js'
 import { getLastCacheSafeParams } from 'src/utils/forkedAgent.js'
 import { getApiCredentialInformation } from 'src/utils/auth.js'
-import { getAPIProvider } from 'src/utils/model/providers.js'
 import type { HookCallbackMatcher } from 'src/types/hooks.js'
-import { AwsAuthStatusManager } from 'src/utils/awsAuthStatusManager.js'
 import type { HookEvent } from 'src/entrypoints/agentSdkTypes.js'
 import {
   registerHookCallbacks,
@@ -439,7 +437,6 @@ export async function runHeadless(
     includePartialMessages: boolean | undefined
     forkSession: boolean | undefined
     rewindFiles: string | undefined
-    enableAuthStatus: boolean | undefined
     agent: string | undefined
     workload: string | undefined
     setupTrigger?: 'init' | 'maintenance' | undefined
@@ -744,7 +741,7 @@ export async function runHeadless(
   headlessProfilerCheckpoint('after_loadInitialMessages')
 
   // 确保在生成模型选项之前初始化模型字符串。
-  // 对于Bedrock用户，这会等待配置文件获取以获取正确的区域字符串。
+  // 在生成模型信息前确保模型字符串已经初始化。
   await ensureModelStringsInitialized()
   headlessProfilerCheckpoint('after_modelStrings')
 
@@ -904,7 +901,6 @@ function runHeadlessStreaming(
     fallbackModel: string | undefined
     replayUserMessages?: boolean | undefined
     includePartialMessages?: boolean | undefined
-    enableAuthStatus?: boolean | undefined
     agent?: string | undefined
     /** 设置并保存 set SDK Status 对应的数据或状态。 */
     setSDKStatus?: (status: SDKStatus) => void
@@ -995,22 +991,6 @@ function runHeadlessStreaming(
     abortController: null,
     inflightPromise: null,
     pendingSuggestion: null,
-  }
-
-  // 如果启用，设置AWS认证状态监听器
-  let unsubscribeAuthStatus: (() => void) | undefined
-  if (options.enableAuthStatus) {
-    const authStatusManager = AwsAuthStatusManager.getInstance()
-    unsubscribeAuthStatus = authStatusManager.subscribe(status => {
-      output.enqueue({
-        type: 'auth_status',
-        isAuthenticating: status.isAuthenticating,
-        output: status.output,
-        error: status.error,
-        uuid: randomUUID(),
-        session_id: getSessionId(),
-      })
-    })
   }
 
   // 用于内部跟踪的消息，由ask()直接修改。这些消息
@@ -2266,7 +2246,6 @@ function runHeadlessStreaming(
         suggestionState.abortController = null
         await finalizePendingAsyncHooks()
         unsubscribeSkillChanges()
-        unsubscribeAuthStatus?.()
         output.done()
       }
     }
@@ -2450,7 +2429,6 @@ function runHeadlessStreaming(
             commands,
             modelInfos,
             structuredIO,
-            !!options.enableAuthStatus,
             options,
             agents,
             getAppState,
@@ -3365,7 +3343,6 @@ function runHeadlessStreaming(
       suggestionState.abortController = null
       await finalizePendingAsyncHooks()
       unsubscribeSkillChanges()
-      unsubscribeAuthStatus?.()
       output.done()
     }
   })()
@@ -3563,7 +3540,6 @@ async function handleInitializeRequest(
   commands: Command[],
   modelInfos: ModelInfo[],
   structuredIO: StructuredIO,
-  enableAuthStatus: boolean,
   options: {
     systemPrompt: string | string[] | undefined
     appendSystemPrompt: string | undefined
@@ -3706,9 +3682,8 @@ async function handleInitializeRequest(
     available_output_styles: Object.keys(availableOutputStyles),
     models: modelInfos,
     account: {
-      // `account` 为与 Claude Agent SDK 线兼容而保留；它仅包含 API 凭据/提供商元数据，绝不含登录会话。
+      // `account` 为与 Claude Agent SDK 线兼容而保留；它仅包含 API Key 来源。
       apiKeySource: credentialInfo?.apiKeySource,
-      apiProvider: getAPIProvider(),
     },
     pid: process.pid,
   }
@@ -3730,21 +3705,6 @@ async function handleInitializeRequest(
     },
   })
 
-  // 在初始化消息之后，检查认证状态——这将会收到变更通知，但我们也希望发送初始状态。
-  if (enableAuthStatus) {
-    const authStatusManager = AwsAuthStatusManager.getInstance()
-    const status = authStatusManager.getStatus()
-    if (status) {
-      output.enqueue({
-        type: 'auth_status',
-        isAuthenticating: status.isAuthenticating,
-        output: status.output,
-        error: status.error,
-        uuid: randomUUID(),
-        session_id: getSessionId(),
-      })
-    }
-  }
 }
 
 /** 处理 handle Rewind Files 对应的数据或状态。 */

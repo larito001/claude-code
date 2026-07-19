@@ -9,7 +9,6 @@ import { getModelStrings, resolveOverriddenModel } from './modelStrings.js'
 import { formatModelPricing, getOpus46CostTier } from '../modelCost.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import type { PermissionMode } from '../permissions/PermissionMode.js'
-import { getAPIProvider } from './providers.js'
 import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
@@ -90,28 +89,18 @@ export function getBestModel(): ModelName {
   return getDefaultOpusModel()
 }
 
-// @[MODEL LAUNCH]：更新默认的 Opus 模型（3P 提供商可能会滞后，因此请保持默认值不变）。
+// @[MODEL LAUNCH]：更新默认的 Opus 模型。
 export function getDefaultOpusModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   }
-  // 3P 提供商（Bedrock、Vertex、Foundry）——作为单独的分支保留
-  // 即使值匹配，由于 3P 可用性落后于firstParty 并且
-  // 这些将在下一个模型发布时再次出现分歧。
-  if (getAPIProvider() !== 'firstParty') {
-    return getModelStrings().opus46
-  }
   return getModelStrings().opus46
 }
 
-// @[MODEL LAUNCH]：更新默认的 Sonnet 模型（3P 提供商可能会滞后，因此请保持默认值不变）。
+// @[MODEL LAUNCH]：更新默认的 Sonnet 模型。
 export function getDefaultSonnetModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
-  }
-  // 3P 默认为 Sonnet 4.5，因为他们可能还没有 4.6
-  if (getAPIProvider() !== 'firstParty') {
-    return getModelStrings().sonnet45
   }
   return getModelStrings().sonnet46
 }
@@ -122,7 +111,7 @@ export function getDefaultHaikuModel(): ModelName {
     return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   }
 
-  // Haiku 4.5 可在所有平台上使用（第一方、Foundry、Bedrock、Vertex）
+  // API 默认使用 Haiku 4.5。
   return getModelStrings().haiku45
 }
 
@@ -239,7 +228,7 @@ export function firstPartyNameToCanonical(name: ModelName): ModelShortName {
  * @returns 如果找到则为短名称（例如“claude-3-5-haiku”），如果不存在映射则为原始名称
  */
 export function getCanonicalName(fullModelName: ModelName): ModelShortName {
-  // 将覆盖的模型 ID（例如 Bedrock ARN）解析回规范名称。
+  // 将覆盖的模型 ID 解析回规范名称。
   // solved 始终是 1P 格式的 ID，因此firstPartyNameToCanonical 可以处理它。
   return firstPartyNameToCanonical(resolveOverriddenModel(fullModelName))
 }
@@ -256,7 +245,6 @@ export function renderDefaultModelSetting(
 
 /** 获取 get Opus46 Pricing Suffix 对应的数据或状态。 */
 export function getOpus46PricingSuffix(fastMode: boolean): string {
-  if (getAPIProvider() !== 'firstParty') return ''
   const pricing = formatModelPricing(getOpus46CostTier(fastMode))
   const fastModeIndicator = fastMode ? ` (${LIGHTNING_BOLT})` : ''
   return ` ·${fastModeIndicator} ${pricing}`
@@ -264,7 +252,7 @@ export function getOpus46PricingSuffix(fastMode: boolean): string {
 
 /** 判断是否满足 is Opus1m Merge Enabled 对应的数据或状态。 */
 export function isOpus1mMergeEnabled(): boolean {
-  if (is1mContextDisabled() || getAPIProvider() !== 'firstParty') {
+  if (is1mContextDisabled()) {
     return false
   }
   return true
@@ -382,7 +370,6 @@ export function parseUserSpecifiedModel(
 
   // Opus 4/4.1 在第一方API上不再可用（与旧别名相同）——静默重新映射到当前的Opus默认值。'opus'别名已解析为4.6，因此只有那些在4.5发布前将这些显式字符串固定在设置/env/--model/SDK中的用户才会受影响。第三方提供商可能尚未具备4.6能力，因此保持不变。
   if (
-    getAPIProvider() === 'firstParty' &&
     isLegacyOpusFirstParty(modelString) &&
     isLegacyModelRemapEnabled()
   ) {
@@ -446,11 +433,6 @@ export function modelDisplayString(model: ModelSetting): string {
 
 // @[MODEL LAUNCH]: 为下面的新模型添加一个市场名称映射。
 export function getMarketingNameForModel(modelId: string): string | undefined {
-  if (getAPIProvider() === 'foundry') {
-    // 部署ID在Foundry中由用户定义，因此可能与实际模型无关。
-    return undefined
-  }
-
   const has1m = modelId.toLowerCase().includes('[1m]')
   const canonical = getCanonicalName(modelId)
 

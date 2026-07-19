@@ -34,10 +34,7 @@ import { getCwd } from './cwd.js'
 import { logForDebugging } from './debug.js'
 import { isEnvTruthy } from './envUtils.js'
 import { createUserMessage } from './messages.js'
-import {
-  getAPIProvider,
-  isFirstPartyAnthropicBaseUrl,
-} from './model/providers.js'
+import { isFirstPartyAnthropicBaseUrl } from './anthropicUrl.js'
 import {
   getPlan,
   getPlanFilePath,
@@ -178,10 +175,9 @@ export async function toolToAPISchema(
     // Enable fine-grained tool streaming via per-tool API field.
     // Without FGTS, the API buffers entire tool input parameters before sending
     // input_json_delta events, causing multi-minute hangs on large tool inputs.
-    // Gated to direct api.anthropic.com: proxies (LiteLLM etc.) and Bedrock/Vertex
-    // with Claude 4.5 reject this field with 400. See GH#32742, PR #21729.
+    // Gated to direct api.anthropic.com because compatible gateways may reject
+    // this field with 400. See GH#32742, PR #21729.
     if (
-      getAPIProvider() === 'firstParty' &&
       isFirstPartyAnthropicBaseUrl() &&
       (getFeatureValue('tengu_fgts', false) ||
         isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING))
@@ -214,13 +210,13 @@ export async function toolToAPISchema(
   }
 
   // CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS is the kill switch for beta API
-  // shapes. Proxy gateways (ANTHROPIC_BASE_URL → LiteLLM → Bedrock) reject
+  // shapes. Some ANTHROPIC_BASE_URL-compatible gateways reject
   // fields like defer_loading with "Extra inputs are not permitted". The gates
   // above each field are scattered and not all provider-aware, so this strips
   // everything not in the base-tool allowlist at the one choke point all tool
   // schemas pass through — including fields added in the future.
   // cache_control is allowlisted: the base {type: 'ephemeral'} shape is
-  // standard prompt caching (Bedrock/Vertex supported); the beta sub-fields
+  // standard prompt caching; the beta sub-fields
   // (scope, ttl) are already gated upstream by shouldIncludeFirstPartyOnlyBetas
   // which independently respects this kill switch.
   // github.com/anthropics/claude-code/issues/20031

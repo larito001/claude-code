@@ -1,6 +1,5 @@
 import { saveGlobalConfig } from '../utils/config.js'
 import { isLegacyModelRemapEnabled } from '../utils/model/model.js'
-import { getAPIProvider } from '../utils/model/providers.js'
 import {
   getSettingsForSource,
   updateSettingsForSource,
@@ -15,10 +14,6 @@ import {
  * 只修改 userSettings。项目/本地/策略设置中的遗留字符串保持不变（我们不能/不应该重写那些），并且在运行时仍由 parseUserSpecifiedModel 重新映射。读取和写入同一源使得此操作在没有完成标志的情况下保持幂等，并避免为仅在一个项目中固定了它的用户静默地将 'opus' 提升为全局默认值。
  */
 export function migrateLegacyOpusToCurrent(): void {
-  if (getAPIProvider() !== 'firstParty') {
-    return
-  }
-
   if (!isLegacyModelRemapEnabled()) {
     return
   }

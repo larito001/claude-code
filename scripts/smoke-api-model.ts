@@ -11,13 +11,7 @@ import {
 import { getAnthropicClient } from '../src/services/api/client.js'
 import { EMPTY_USAGE } from '../src/services/api/emptyUsage.js'
 import { parsePromptTooLongTokenCounts } from '../src/services/api/errors.js'
-import {
-  applyBedrockRegionPrefix,
-  extractModelIdFromArn,
-  getBedrockRegionPrefix,
-} from '../src/utils/model/bedrock.js'
 import { normalizeModelStringForAPI } from '../src/utils/model/model.js'
-import { getAPIProvider } from '../src/utils/model/providers.js'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -147,76 +141,22 @@ assert(
   normalizeModelStringForAPI('claude-opus-4-6[1m]') === 'claude-opus-4-6',
   '模型上下文标签未在 API 请求前移除',
 )
-const profileArn =
-  'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.anthropic.claude-opus-4-6-v1'
-assert(
-  extractModelIdFromArn(profileArn) === 'global.anthropic.claude-opus-4-6-v1',
-  'Bedrock ARN 模型 ID 提取失败',
-)
-assert(getBedrockRegionPrefix(profileArn) === 'global', 'Bedrock 区域前缀识别失败')
-assert(
-  applyBedrockRegionPrefix('us.anthropic.claude-opus-4-6-v1', 'eu') ===
-    'eu.anthropic.claude-opus-4-6-v1',
-  'Bedrock 区域前缀替换失败',
-)
-
-const providerEnvironmentNames = [
+const apiEnvironmentNames = [
   'ANTHROPIC_BASE_URL',
-  'ANTHROPIC_FOUNDRY_BASE_URL',
-  'ANTHROPIC_FOUNDRY_RESOURCE',
-  'ANTHROPIC_VERTEX_PROJECT_ID',
-  'AWS_BEARER_TOKEN_BEDROCK',
-  'AWS_REGION',
-  'CLAUDE_CODE_SKIP_BEDROCK_AUTH',
-  'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
-  'CLAUDE_CODE_SKIP_VERTEX_AUTH',
-  'CLAUDE_CODE_USE_BEDROCK',
-  'CLAUDE_CODE_USE_FOUNDRY',
-  'CLAUDE_CODE_USE_VERTEX',
 ] as const
 const originalEnvironment = new Map(
-  providerEnvironmentNames.map(name => [name, process.env[name]]),
+  apiEnvironmentNames.map(name => [name, process.env[name]]),
 )
 
 try {
-  for (const name of providerEnvironmentNames) delete process.env[name]
+  for (const name of apiEnvironmentNames) delete process.env[name]
   const directClient = await getAnthropicClient({
     apiKey: 'smoke-key',
     maxRetries: 0,
   })
-  assert(getAPIProvider() === 'firstParty', '直接 API Provider 选择失败')
   assert(
     Object.getPrototypeOf(directClient).constructor.name === 'Anthropic',
     '直接 API 客户端构造失败',
-  )
-
-  process.env.CLAUDE_CODE_USE_BEDROCK = '1'
-  process.env.CLAUDE_CODE_SKIP_BEDROCK_AUTH = '1'
-  process.env.AWS_REGION = 'us-east-1'
-  const bedrockClient = await getAnthropicClient({ maxRetries: 0 })
-  assert(
-    Object.getPrototypeOf(bedrockClient).constructor.name === 'AnthropicBedrock',
-    'Bedrock 免认证客户端构造链失败',
-  )
-  delete process.env.CLAUDE_CODE_USE_BEDROCK
-
-  process.env.CLAUDE_CODE_USE_FOUNDRY = '1'
-  process.env.CLAUDE_CODE_SKIP_FOUNDRY_AUTH = '1'
-  process.env.ANTHROPIC_FOUNDRY_BASE_URL = 'https://foundry.example.invalid'
-  const foundryClient = await getAnthropicClient({ maxRetries: 0 })
-  assert(
-    Object.getPrototypeOf(foundryClient).constructor.name === 'AnthropicFoundry',
-    'Foundry 免认证客户端构造链失败',
-  )
-  delete process.env.CLAUDE_CODE_USE_FOUNDRY
-
-  process.env.CLAUDE_CODE_USE_VERTEX = '1'
-  process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH = '1'
-  process.env.ANTHROPIC_VERTEX_PROJECT_ID = 'smoke-project'
-  const vertexClient = await getAnthropicClient({ maxRetries: 0 })
-  assert(
-    Object.getPrototypeOf(vertexClient).constructor.name === 'AnthropicVertex',
-    'Vertex 免认证客户端构造链失败',
   )
 } finally {
   for (const [name, value] of originalEnvironment) {

@@ -416,7 +416,7 @@ export function createAssistantMessage({
             {
               type: 'text' as const,
               text: content === '' ? NO_CONTENT_MESSAGE : content,
-            } as BetaContentBlock, // 注意：Bedrock API 不支持引用字段
+            } as BetaContentBlock,
           ]
         : content,
     usage,
@@ -440,7 +440,7 @@ export function createAssistantAPIErrorMessage({
       {
         type: 'text' as const,
         text: content === '' ? NO_CONTENT_MESSAGE : content,
-      } as BetaContentBlock, // 注意：Bedrock API 不支持引用字段
+      } as BetaContentBlock,
     ],
     isApiErrorMessage: true,
     apiError,
@@ -2027,7 +2027,7 @@ export function normalizeMessagesForAPI(
           return
         }
         case 'user': {
-          // Merge consecutive user messages because Bedrock doesn't support
+          // Merge consecutive user messages because the API requires
           // multiple user messages in a row; 1P API does and merges them
           // into a single user turn
 

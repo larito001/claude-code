@@ -150,28 +150,7 @@ type LocalJSXCommand = {
   load: () => Promise<LocalJSXCommandModule>
 }
 
-/**
- * 声明命令支持的 API 提供者。
- *
- * 这与 isEnabled() 不同：
- *   - availability = 哪些 API 后端可以使用此命令（静态）
- *   - isEnabled()  = 当前是否启用（本地功能配置、平台、环境变量）
- *
- * 没有 availability 的命令在所有地方都可用。
- * 有 availability 的命令仅当用户匹配至少一个
- * 列出的认证类型时才显示。请参见 commands.ts 中的 meetsAvailabilityRequirement()。
- *
- * 示例：`availability: ['firstParty', 'bedrock']` 将命令限制为
- * 与 Anthropic 兼容的 API 和 AWS Bedrock。
- */
-export type CommandAvailability =
-  | 'firstParty'
-  | 'bedrock'
-  | 'vertex'
-  | 'foundry'
-
 export type CommandBase = {
-  availability?: CommandAvailability[]
   description: string
   hasUserSpecifiedDescription?: boolean
   /** 默认为 true。仅在命令有条件启用（功能标志、环境检查等）时设置。 */

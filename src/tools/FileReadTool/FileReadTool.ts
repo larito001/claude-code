@@ -477,7 +477,7 @@ export const FileReadTool = buildTool({
     // The deployment-level killswitch can disable deduplication if the stub
     // message is incompatible with a target model.
     // Default: killswitch off = dedup enabled. Client-side only — no
-    // server support needed, safe for Bedrock/Vertex/Foundry.
+    // server support needed.
     const dedupKillswitch = getFeatureValue(
       'tengu_read_dedup_killswitch',
       false,

@@ -1,9 +1,5 @@
 import { setMainLoopModelOverride } from '../bootstrap/state.js'
-import {
-  clearApiKeyHelperCache,
-  clearAwsCredentialsCache,
-  clearGcpCredentialsCache,
-} from '../utils/auth.js'
+import { clearApiKeyHelperCache } from '../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
 import { toError } from '../utils/errors.js'
 import { logError } from '../utils/log.js'
@@ -119,14 +115,10 @@ export function onChangeAppState({
     }))
   }
 
-  // settings: clear auth-related caches when settings change
-  // This ensures apiKeyHelper and AWS/GCP credential changes take effect immediately
+  // settings: clear the API key helper cache when settings change
   if (newState.settings !== oldState.settings) {
     try {
       clearApiKeyHelperCache()
-      clearAwsCredentialsCache()
-      clearGcpCredentialsCache()
-
       // Re-apply environment variables when settings.env changes
       // This is additive-only: new vars are added, existing may be overwritten, nothing is deleted
       if (newState.settings.env !== oldState.settings.env) {

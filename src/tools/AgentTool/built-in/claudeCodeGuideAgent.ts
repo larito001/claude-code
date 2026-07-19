@@ -64,7 +64,6 @@ function getClaudeCodeGuideBasePrompt(): string {
   - Vision, PDF support, and citations
   - Extended thinking and structured outputs
   - MCP connector for remote MCP servers
-  - Cloud provider integrations (Bedrock, Vertex AI, Foundry)
 
 **Approach:**
 1. Determine which domain the user's question falls into

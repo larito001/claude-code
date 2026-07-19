@@ -16,9 +16,8 @@ import {
   parseUserSpecifiedModel,
 } from './model/model.js'
 import {
-  getAPIProvider,
   isFirstPartyAnthropicBaseUrl,
-} from './model/providers.js'
+} from './anthropicUrl.js'
 import { isEssentialTrafficOnly } from './privacyLevel.js'
 import {
   getInitialSettings,
@@ -32,7 +31,6 @@ export function isFastModeEnabled(): boolean {
 }
 
 function isFastModeBackendSupported(): boolean {
-  if (getAPIProvider() !== 'firstParty') return false
   return (
     isFirstPartyAnthropicBaseUrl() ||
     isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_FAST_MODE)

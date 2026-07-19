@@ -11,7 +11,7 @@ import { safeParseJSON } from '../json.js'
 import { lazySchema } from '../lazySchema.js'
 import { isEssentialTrafficOnly } from '../privacyLevel.js'
 import { jsonStringify } from '../slowOperations.js'
-import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from './providers.js'
+import { isFirstPartyAnthropicBaseUrl } from '../anthropicUrl.js'
 
 // .strip() — 不要将仅内部使用的字段（如 mycro_deployments 等）持久化到磁盘
 const ModelCapabilitySchema = lazySchema(() =>
@@ -46,7 +46,6 @@ function getCachePath(): string {
 
 /** 判断是否满足 is Model Capabilities Eligible 对应的数据或状态。 */
 function isModelCapabilitiesEligible(): boolean {
-  if (getAPIProvider() !== 'firstParty') return false
   if (!isFirstPartyAnthropicBaseUrl()) return false
   return true
 }

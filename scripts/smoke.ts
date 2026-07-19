@@ -22,10 +22,7 @@ import {
   clearAllAsyncHooks,
   getPendingAsyncHooks,
 } from '../src/utils/hooks/AsyncHookRegistry.js'
-import {
-  getAPIProvider,
-  isFirstPartyAnthropicBaseUrl,
-} from '../src/utils/model/providers.js'
+import { isFirstPartyAnthropicBaseUrl } from '../src/utils/anthropicUrl.js'
 import {
   permissionModeFromString,
   toExternalPermissionMode,
@@ -46,7 +43,6 @@ assert(!feature('KAIROS'), 'Unsupported product features must remain disabled')
 
 assert(
   getApiCredentialConfigurationError({
-    provider: 'firstParty',
     hasApiKey: false,
     hasApiKeyHelper: false,
   })?.includes('ANTHROPIC_API_KEY'),
@@ -54,7 +50,6 @@ assert(
 )
 assert(
   getApiCredentialConfigurationError({
-    provider: 'firstParty',
     hasApiKey: true,
     hasApiKeyHelper: false,
   }) === null,
@@ -68,15 +63,6 @@ assert(
   }) === null,
   'apiKeyHelper configuration was rejected',
 )
-assert(
-  getApiCredentialConfigurationError({
-    provider: 'bedrock',
-    hasApiKey: false,
-    hasApiKeyHelper: false,
-  }) === null,
-  'Bedrock must use its provider-specific credentials',
-)
-
 initBackgroundHousekeepingServices()
 
 const baseToolNames = new Set(getAllBaseTools().map(toolDefinition => toolDefinition.name))
@@ -156,28 +142,15 @@ assert(
   'Windows system-directory mapping is broken',
 )
 
-const providerEnvironmentNames = [
-  'CLAUDE_CODE_USE_BEDROCK',
-  'CLAUDE_CODE_USE_VERTEX',
-  'CLAUDE_CODE_USE_FOUNDRY',
+const apiEnvironmentNames = [
   'CLAUDE_CODE_ENABLE_FAST_MODE',
   'ANTHROPIC_BASE_URL',
 ] as const
-const originalProviderEnvironment = new Map(
-  providerEnvironmentNames.map(name => [name, process.env[name]]),
+const originalApiEnvironment = new Map(
+  apiEnvironmentNames.map(name => [name, process.env[name]]),
 )
 try {
-  for (const name of providerEnvironmentNames) delete process.env[name]
-  assert(getAPIProvider() === 'firstParty', 'Default API provider is incorrect')
-  process.env.CLAUDE_CODE_USE_BEDROCK = '1'
-  assert(getAPIProvider() === 'bedrock', 'Bedrock provider selection is broken')
-  delete process.env.CLAUDE_CODE_USE_BEDROCK
-  process.env.CLAUDE_CODE_USE_VERTEX = '1'
-  assert(getAPIProvider() === 'vertex', 'Vertex provider selection is broken')
-  delete process.env.CLAUDE_CODE_USE_VERTEX
-  process.env.CLAUDE_CODE_USE_FOUNDRY = '1'
-  assert(getAPIProvider() === 'foundry', 'Foundry provider selection is broken')
-  delete process.env.CLAUDE_CODE_USE_FOUNDRY
+  for (const name of apiEnvironmentNames) delete process.env[name]
 
   assert(isFirstPartyAnthropicBaseUrl(), 'Default Anthropic URL was rejected')
   process.env.ANTHROPIC_BASE_URL = 'https://api.deepseek.com/anthropic'
@@ -190,7 +163,7 @@ try {
     'Compatible API endpoints must not receive Anthropic Fast Mode prefetches',
   )
 } finally {
-  for (const [name, value] of originalProviderEnvironment) {
+  for (const [name, value] of originalApiEnvironment) {
     if (value === undefined) delete process.env[name]
     else process.env[name] = value
   }

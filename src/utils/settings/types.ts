@@ -259,20 +259,6 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe('Path to a script that outputs authentication values'),
-      awsCredentialExport: z
-        .string()
-        .optional()
-        .describe('Path to a script that exports AWS credentials'),
-      awsAuthRefresh: z
-        .string()
-        .optional()
-        .describe('Path to a script that refreshes AWS authentication'),
-      gcpAuthRefresh: z
-        .string()
-        .optional()
-        .describe(
-          'Command to refresh GCP authentication (e.g., gcloud auth application-default login)',
-        ),
       // 受保护，使得 SDK 生成器（未设置 CLAUDE_CODE_ENABLE_XAA 时运行）
       // 不会在 GlobalClaudeSettings 中暴露此项。通过 getXaaIdpSettings() 读取。
       // 外部对象上的 .passthrough() 在环境变量关闭的会话中保持已有的 settings.json 键
@@ -388,9 +374,8 @@ export const SettingsSchema = lazySchema(() =>
         .record(z.string(), z.string())
         .optional()
         .describe(
-          'Override mapping from Anthropic model ID (e.g. "claude-opus-4-6") to provider-specific ' +
-            'model ID (e.g. a Bedrock inference profile ARN). Typically set in managed settings by ' +
-            'enterprise administrators.',
+          'Override mapping from a canonical Anthropic model ID to a custom API model ID. ' +
+            'Typically set in managed settings by enterprise administrators.',
         ),
       // 是否自动批准项目中的所有 MCP 服务器
       enableAllProjectMcpServers: z

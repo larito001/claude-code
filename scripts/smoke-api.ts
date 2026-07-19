@@ -54,9 +54,6 @@ function withoutApiCredentials(
   for (const name of [
     'ANTHROPIC_API_KEY',
     'DEEPSEEK_API_KEY',
-    'CLAUDE_CODE_USE_BEDROCK',
-    'CLAUDE_CODE_USE_VERTEX',
-    'CLAUDE_CODE_USE_FOUNDRY',
   ]) {
     delete env[name]
   }

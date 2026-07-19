@@ -1116,10 +1116,6 @@ export const ApiBackendInfoSchema = lazySchema(() =>
   z
     .object({
       apiKeySource: z.string().optional(),
-      apiProvider: z
-        .enum(['firstParty', 'bedrock', 'vertex', 'foundry'])
-        .optional()
-        .describe('Active API backend.'),
     })
     .describe('Information about the configured API backend.'),
 )
@@ -1667,18 +1663,6 @@ export const SDKToolProgressMessageSchema = lazySchema(() =>
   }),
 )
 
-/** 渲染 SDK Auth Status Message Schema 组件。 */
-export const SDKAuthStatusMessageSchema = lazySchema(() =>
-  z.object({
-    type: z.literal('auth_status'),
-    isAuthenticating: z.boolean(),
-    output: z.array(z.string()),
-    error: z.string().optional(),
-    uuid: UUIDPlaceholder(),
-    session_id: z.string(),
-  }),
-)
-
 /** 渲染 SDK Files Persisted Event Schema 组件。 */
 export const SDKFilesPersistedEventSchema = lazySchema(() =>
   z.object({
@@ -1882,7 +1866,6 @@ export const SDKMessageSchema = lazySchema(() =>
     SDKHookProgressMessageSchema(),
     SDKHookResponseMessageSchema(),
     SDKToolProgressMessageSchema(),
-    SDKAuthStatusMessageSchema(),
     SDKTaskNotificationMessageSchema(),
     SDKTaskStartedMessageSchema(),
     SDKTaskProgressMessageSchema(),

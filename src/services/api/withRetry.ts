@@ -7,11 +7,10 @@ import {
 } from '@anthropic-ai/sdk'
 import type { QuerySource } from 'src/constants/querySource.js'
 import type { SystemAPIErrorMessage } from 'src/types/message.js'
-import { isAwsCredentialsProviderError } from 'src/utils/aws.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { logError } from 'src/utils/log.js'
 import { createSystemAPIErrorMessage } from 'src/utils/messages.js'
-import { clearApiKeyHelperCache, clearAwsCredentialsCache, clearGcpCredentialsCache } from '../../utils/auth.js'
+import { clearApiKeyHelperCache } from '../../utils/auth.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
 import {
@@ -173,8 +172,6 @@ export async function* withRetry<T>(
     try {
       // 在首次尝试或认证错误后获取新的客户端实例
       // - 401 表示第一方API密钥认证失败
-      // - Bedrock特有的认证错误（403或CredentialsProviderError）
-      // - Vertex特有的认证错误（凭证刷新失败，401）
       // - ECONNRESET/EPIPE：保持连接套接字过期；禁用连接池并重新连接
       const isStaleConnection = isStaleConnectionError(lastError)
       if (
@@ -193,8 +190,6 @@ export async function* withRetry<T>(
       if (
         client === null ||
         (lastError instanceof APIError && lastError.status === 401) ||
-        isBedrockAuthError(lastError) ||
-        isVertexAuthError(lastError) ||
         isStaleConnection
       ) {
         client = await getClient()
@@ -288,11 +283,7 @@ export async function* withRetry<T>(
         throw new CannotRetryError(error, retryContext)
       }
 
-      // AWS/GCP错误不总是APIError，但可以重试
-      const handledCloudAuthError =
-        handleAwsCredentialError(error) || handleGcpCredentialError(error)
       if (
-        !handledCloudAuthError &&
         (!(error instanceof APIError) || !shouldRetry(error))
       ) {
         throw new CannotRetryError(error, retryContext)
@@ -510,73 +501,6 @@ export function is529Error(error: unknown): boolean {
     // 见下文：SDK 有时在流式传输期间无法正确传递 529 状态码
     (error.message?.includes('"type":"overloaded_error"') ?? false)
   )
-}
-
-/** 判断是否满足 is Bedrock Auth Error 对应的数据或状态。 */
-function isBedrockAuthError(error: unknown): boolean {
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) {
-    // 如果 .aws 包含过去的 Expiration 值，AWS 库会拒绝而不进行 API 调用；
-    // 否则，接收过期令牌的 API 调用会给出通用 403
-    // 此时服务端通常返回“The security token included in the request is invalid”。
-    if (
-      isAwsCredentialsProviderError(error) ||
-      (error instanceof APIError && error.status === 403)
-    ) {
-      return true
-    }
-  }
-  return false
-}
-
-/**
- * 清除 AWS 认证缓存（如果适用）。
- * @returns 如果执行了操作则返回 true。
- */
-function handleAwsCredentialError(error: unknown): boolean {
-  if (isBedrockAuthError(error)) {
-    clearAwsCredentialsCache()
-    return true
-  }
-  return false
-}
-
-// google-auth-library 抛出普通 Error（没有像 AWS 的
-// CredentialsProviderError 那样的类型化名称）。匹配常见的 SDK 级凭证失败消息。
-function isGoogleAuthLibraryCredentialError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  const msg = error.message
-  return (
-    msg.includes('Could not load the default credentials') ||
-    msg.includes('Could not refresh access token') ||
-    msg.includes('invalid_grant')
-  )
-}
-
-/** 判断是否满足 is Vertex Auth Error 对应的数据或状态。 */
-function isVertexAuthError(error: unknown): boolean {
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) {
-    // SDK 级别：google-auth-library 在 HTTP 调用之前的 prepareOptions() 中失败
-    if (isGoogleAuthLibraryCredentialError(error)) {
-      return true
-    }
-    // 服务器端：Vertex 对过期/无效令牌返回 401
-    if (error instanceof APIError && error.status === 401) {
-      return true
-    }
-  }
-  return false
-}
-
-/**
- * 清除 GCP 认证缓存（如果适用）。
- * @returns 如果执行了操作则返回 true。
- */
-function handleGcpCredentialError(error: unknown): boolean {
-  if (isVertexAuthError(error)) {
-    clearGcpCredentialsCache()
-    return true
-  }
-  return false
 }
 
 /** 判断是否满足 should Retry 对应的数据或状态。 */

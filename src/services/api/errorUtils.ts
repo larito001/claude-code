@@ -124,7 +124,7 @@ export function sanitizeAPIError(apiError: APIError): string {
  * 经过 JSON 往返后，SDK 的 APIError 丢失了其 `.message` 属性。
  * 实际消息位于不同的嵌套层级，具体取决于提供商：
  *
- * - Bedrock/代理：`{ error: { message: "..." } }`
+ * - 兼容网关：`{ error: { message: "..." } }`
  * - 标准 Anthropic API：`{ error: { error: { message: "..." } } }`
  *   （外层的 `.error` 是响应体，内层的 `.error` 是 API 错误）
  *
@@ -153,7 +153,7 @@ function hasNestedError(value: unknown): value is NestedAPIError {
  *
  * 检查两个嵌套层级（先深后浅以获取特异性）：
  * 1. `error.error.error.message` — 标准 Anthropic API 结构
- * 2. `error.error.message` — Bedrock 结构
+ * 2. `error.error.message` — 兼容网关结构
  */
 function extractNestedErrorMessage(error: APIError): string | null {
   if (!hasNestedError(error)) {
@@ -173,7 +173,7 @@ function extractNestedErrorMessage(error: APIError): string | null {
     }
   }
 
-  // Bedrock 结构：{ error: { message } }
+  // 兼容网关结构：{ error: { message } }
   const msg = nested?.message
   if (typeof msg === 'string' && msg.length > 0) {
     const sanitized = sanitizeMessageHTML(msg)
