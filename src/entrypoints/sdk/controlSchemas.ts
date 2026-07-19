@@ -50,15 +50,6 @@ const SDKAdditionalMessageSchema = lazySchema(
     z.union([
       z.object({
         type: z.literal('system'),
-        subtype: z.literal('plugin_install'),
-        status: z.enum(['started', 'installed', 'failed', 'completed']),
-        name: z.string().optional(),
-        error: z.string().optional(),
-        uuid: z.string(),
-        session_id: z.string(),
-      }),
-      z.object({
-        type: z.literal('system'),
         subtype: z.literal('task_updated'),
         task_id: z.string(),
         patch: z.object({

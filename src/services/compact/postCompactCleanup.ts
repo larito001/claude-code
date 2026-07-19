@@ -53,6 +53,6 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
   // skill_listing (~4K tokens) post-compact is pure cache_creation. The
   // model still has SkillTool in schema, invoked_skills preserves used
   // skills, and dynamic additions are handled by skillChangeDetector /
-  // cacheUtils resets. See compactConversation() for full rationale.
+  // in-memory cache resets. See compactConversation() for full rationale.
   clearSessionMessagesCache()
 }

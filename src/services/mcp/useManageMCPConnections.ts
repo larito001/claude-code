@@ -132,9 +132,7 @@ export function useManageMCPConnections(
   // Dedup the --channels blocked warning per skip kind so that a user who
   // skips account-authenticated channels in API-key-only builds
   // gets a second toast.
-  const channelWarnedKindsRef = useRef<
-    Set<'disabled' | 'auth' | 'policy' | 'marketplace' | 'allowlist'>
-  >(new Set())
+  const channelWarnedKindsRef = useRef<Set<'disabled'>>(new Set())
   // Channel permission callbacks — constructed once, stable ref. Stored in
   // AppState so interactiveHandler can subscribe. The pending Map lives inside
   // the closure (not module-level, not AppState — functions-in-state is brittle).
@@ -447,7 +445,6 @@ export function useManageMCPConnections(
             const gate = gateChannelServer(
               client.name,
               client.capabilities,
-              client.config.pluginSource,
             )
             switch (gate.action) {
               case 'register':
@@ -518,32 +515,17 @@ export function useManageMCPConnections(
                 // blocked. This is the only
                 // user-visible signal (logMCPDebug above requires --debug).
                 // Capability/session skips are expected noise and stay
-                // debug-only. marketplace/allowlist run after session — if
                 // we're here with those kinds, the user asked for it.
                 if (
-                  gate.kind !== 'capability' &&
-                  gate.kind !== 'session' &&
-                  !channelWarnedKindsRef.current.has(gate.kind) &&
-                  (gate.kind === 'marketplace' ||
-                    gate.kind === 'allowlist' ||
-                    entry !== undefined)
+                  gate.kind === 'disabled' &&
+                  entry !== undefined &&
+                  !channelWarnedKindsRef.current.has(gate.kind)
                 ) {
                   channelWarnedKindsRef.current.add(gate.kind)
-                  // disabled/auth/policy get custom toast copy (shorter, actionable);
-                  // marketplace/allowlist reuse the gate's reason verbatim
-                  // since it already names the mismatch.
-                  const text =
-                    gate.kind === 'disabled'
-                      ? 'Channels are not currently available'
-                      : gate.kind === 'auth'
-                        ? 'Channels are unavailable in this API-key-only build'
-                        : gate.kind === 'policy'
-                          ? 'Channels are not enabled for your org · have an administrator set channelsEnabled: true in managed settings'
-                          : gate.reason
                   addNotification({
                     key: `channels-blocked-${gate.kind}`,
                     priority: 'high',
-                    text,
+                    text: 'Channels are not currently available',
                     color: 'warning',
                     timeoutMs: 12000,
                   })

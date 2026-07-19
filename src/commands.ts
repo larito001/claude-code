@@ -33,7 +33,6 @@ import hooks from './commands/hooks/index.js'
 import files from './commands/files/index.js'
 import branch from './commands/branch/index.js'
 import agents from './commands/agents/index.js'
-import plugin from './commands/plugin/index.js'
 import reloadPlugins from './commands/reload-plugins/index.js'
 import rewind from './commands/rewind/index.js'
 import version from './commands/version.js'
@@ -47,7 +46,6 @@ import {
   getDynamicSkills,
 } from './skills/loadSkillsDir.js'
 import { getBundledSkills } from './skills/bundledSkills.js'
-import { getBuiltinPluginSkillCommands } from './plugins/builtinPlugins.js'
 import {
   getPluginCommands,
   clearPluginCommandCache,
@@ -110,7 +108,6 @@ const COMMANDS = memoize((): Command[] => [
   memory,
   model,
   outputStyle,
-  plugin,
   reloadPlugins,
   rename,
   resume,
@@ -143,7 +140,6 @@ async function getSkills(cwd: string): Promise<{
   skillDirCommands: Command[]
   pluginSkills: Command[]
   bundledSkills: Command[]
-  builtinPluginSkills: Command[]
 }> {
   try {
     const [skillDirCommands, pluginSkills] = await Promise.all([
@@ -162,16 +158,13 @@ async function getSkills(cwd: string): Promise<{
     ])
     // 捆绑的技能在启动时同步注册
     const bundledSkills = getBundledSkills()
-    // 内置插件技能来自已启用的内置插件
-    const builtinPluginSkills = getBuiltinPluginSkillCommands()
     logForDebugging(
-      `getSkills returning: ${skillDirCommands.length} skill dir commands, ${pluginSkills.length} plugin skills, ${bundledSkills.length} bundled skills, ${builtinPluginSkills.length} builtin plugin skills`,
+      `getSkills returning: ${skillDirCommands.length} skill dir commands, ${pluginSkills.length} plugin skills, ${bundledSkills.length} bundled skills`,
     )
     return {
       skillDirCommands,
       pluginSkills,
       bundledSkills,
-      builtinPluginSkills,
     }
   } catch (err) {
     // 已经在 Promise 层面捕获，但为保险起见，这不应发生。
@@ -181,7 +174,6 @@ async function getSkills(cwd: string): Promise<{
       skillDirCommands: [],
       pluginSkills: [],
       bundledSkills: [],
-      builtinPluginSkills: [],
     }
   }
 }
@@ -190,7 +182,7 @@ async function getSkills(cwd: string): Promise<{
 /** 获取 load All Commands 对应的数据或状态。 */
 const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
   const [
-    { skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills },
+    { skillDirCommands, pluginSkills, bundledSkills },
     pluginCommands,
   ] = await Promise.all([
     getSkills(cwd),
@@ -199,7 +191,6 @@ const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
 
   return [
     ...bundledSkills,
-    ...builtinPluginSkills,
     ...skillDirCommands,
     ...pluginCommands,
     ...pluginSkills,

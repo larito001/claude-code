@@ -6,7 +6,6 @@ import {
   normalizePatternsToPath,
 } from './permissions/filesystem.js'
 import { getPlatform } from './platform.js'
-import { getGlobExclusionsForPluginCache } from './plugins/orphanedPluginFilter.js'
 import { ripGrep } from './ripgrep.js'
 
 /**
@@ -109,11 +108,6 @@ export async function glob(
   // Add ignore patterns
   for (const pattern of ignorePatterns) {
     args.push('--glob', `!${pattern}`)
-  }
-
-  // Exclude orphaned plugin version directories
-  for (const exclusion of await getGlobExclusionsForPluginCache(searchDir)) {
-    args.push('--glob', exclusion)
   }
 
   const allPaths = await ripGrep(args, searchDir, abortSignal)

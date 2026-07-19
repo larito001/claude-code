@@ -29,8 +29,6 @@ import { createCommandInputMessage, createSyntheticUserCaveatMessage, createSyst
 import type { ModelAlias } from '../model/aliases.js';
 import { parseToolListFromCLI } from '../permissions/permissionSetup.js';
 import { hasPermissionsToUseTool } from '../permissions/permissions.js';
-import { parsePluginIdentifier } from '../plugins/pluginIdentifier.js';
-import { isRestrictedToPluginOnly, isSourceAdminTrusted } from '../settings/pluginOnlyPolicy.js';
 import { parseSlashCommand } from '../slashCommandParsing.js';
 import { recordSkillUsage } from '../suggestions/skillUsageTracking.js';
 import { getAssistantMessageContentLength } from '../tokens.js';
@@ -45,7 +43,6 @@ type SlashCommandResult = ProcessUserInputBaseResult & {
  */
 async function executeForkedSlashCommand(command: CommandBase & PromptCommand, args: string, context: ProcessUserInputContext, precedingInputBlocks: ContentBlockParam[], setToolJSX: SetToolJSXFn, canUseTool: CanUseToolFn): Promise<SlashCommandResult> {
   const agentId = createAgentId();
-  const pluginMarketplace = command.pluginInfo ? parsePluginIdentifier(command.pluginInfo.repository).marketplace : undefined;
   const {
     skillContent,
     modifiedGetAppState,
@@ -636,8 +633,7 @@ async function getMessagesForPromptSlashCommand(command: CommandBase & PromptCom
   // Register skill hooks if defined. Under ["hooks"]-only (skills not locked),
   // user skills still load and reach this point — block hook REGISTRATION here
   // where source is known. Mirrors the agent frontmatter gate in runAgent.ts.
-  const hooksAllowedForThisSkill = !isRestrictedToPluginOnly('hooks') || isSourceAdminTrusted(command.source);
-  if (command.hooks && hooksAllowedForThisSkill) {
+  if (command.hooks) {
     const sessionId = getSessionId();
     registerSkillHooks(context.setAppState, sessionId, command.hooks, command.name, command.type === 'prompt' ? command.skillRoot : undefined);
   }

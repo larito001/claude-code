@@ -319,13 +319,4 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       escape: 'select:cancel',
     },
   },
-  // Plugin dialog actions (manage, browse, discover plugins)
-  // Navigation (select:*) uses the Select context above
-  {
-    context: 'Plugin',
-    bindings: {
-      space: 'plugin:toggle',
-      i: 'plugin:install',
-    },
-  },
 ]

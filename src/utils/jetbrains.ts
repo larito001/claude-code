@@ -82,7 +82,7 @@ function buildCommonPluginDirectoryPaths(ideName: string): string[] {
 }
 
 // Find all actual plugin directories that exist
-async function detectPluginDirectories(ideName: string): Promise<string[]> {
+async function detectIdeIntegrationDirectories(ideName: string): Promise<string[]> {
   const foundDirectories: string[] = []
   const fs = getFsImplementation()
 
@@ -134,7 +134,7 @@ async function detectPluginDirectories(ideName: string): Promise<string[]> {
 export async function isJetBrainsPluginInstalled(
   ideType: IdeType,
 ): Promise<boolean> {
-  const pluginDirs = await detectPluginDirectories(ideType)
+  const pluginDirs = await detectIdeIntegrationDirectories(ideType)
   for (const dir of pluginDirs) {
     const pluginPath = join(dir, PLUGIN_PREFIX)
     try {

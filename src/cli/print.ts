@@ -66,13 +66,7 @@ import {
   ChannelMessageNotificationSchema,
   gateChannelServer,
   wrapChannelMessage,
-  findChannelEntry,
 } from 'src/services/mcp/channelNotification.js'
-import {
-  isChannelAllowlisted,
-  isChannelsEnabled,
-} from 'src/services/mcp/channelAllowlist.js'
-import { parsePluginIdentifier } from 'src/utils/plugins/pluginIdentifier.js'
 import { validateUuid } from 'src/utils/uuid.js'
 import { fromArray } from 'src/utils/generators.js'
 import { ask } from 'src/QueryEngine.js'
@@ -284,12 +278,7 @@ import { asSessionId } from 'src/types/ids.js'
 import { jsonStringify } from '../utils/slowOperations.js'
 import { skillChangeDetector } from '../utils/skills/skillChangeDetector.js'
 import { getCommands, clearCommandsCache } from '../commands.js'
-import {
-  isBareMode,
-  isEnvTruthy,
-  isEnvDefinedFalsy,
-} from '../utils/envUtils.js'
-import { installPluginsForHeadless } from '../utils/plugins/headlessPluginInstall.js'
+import { isEnvTruthy, isEnvDefinedFalsy } from '../utils/envUtils.js'
 import { refreshActivePlugins } from '../utils/plugins/refresh.js'
 import { loadAllPluginsCacheOnly } from '../utils/plugins/pluginLoader.js'
 import {
@@ -1454,13 +1443,6 @@ function runHeadlessStreaming(
         connection.capabilities.experimental
       ) {
         const exp = { ...connection.capabilities.experimental }
-        if (
-          exp['claude/channel'] &&
-          (!isChannelsEnabled() ||
-            !isChannelAllowlisted(connection.config.pluginSource))
-        ) {
-          delete exp['claude/channel']
-        }
         if (Object.keys(exp).length > 0) {
           capabilities = { experimental: exp }
         }
@@ -1480,51 +1462,12 @@ function runHeadlessStreaming(
   }
 
   // 注意：需要嵌套函数——需要闭包访问applyMcpServerChanges和updateSdkMcp
-  async function installPluginsAndApplyMcpInBackground(): Promise<void> {
-    try {
-      const pluginsInstalled = await installPluginsForHeadless()
-
-      if (pluginsInstalled) {
-        await applyPluginMcpDiff()
-      }
-    } catch (error) {
-      logError(error)
-    }
-  }
-
-  // 所有无头用户的插件后台安装。从extraKnownMarketplaces安装市场插件，并安装缺失的已启用插件。CLAUDE_CODE_SYNC_PLUGIN_INSTALL=true：在第一次查询前的run()中解析，确保插件在第一次ask()时可用。
-  let pluginInstallPromise: Promise<void> | null = null
-  // --bare / SIMPLE：跳过插件安装。脚本调用在会话期间不添加插件；下次交互式运行时会同步。
-  if (!isBareMode()) {
-    if (isEnvTruthy(process.env.CLAUDE_CODE_SYNC_PLUGIN_INSTALL)) {
-      pluginInstallPromise = installPluginsAndApplyMcpInBackground()
-    } else {
-      void installPluginsAndApplyMcpInBackground()
-    }
-  }
-
   // 空闲超时管理
   const idleTimeout = createIdleTimeoutManager(() => !running)
 
   // 用于热重载的可变命令和代理
   let currentCommands = commands
   let currentAgents = agents
-
-  // 清除所有插件相关缓存，重新加载命令/代理/钩子。在CLAUDE_CODE_SYNC_PLUGIN_INSTALL完成后（首次查询前）以及非同步后台安装完成后调用。refreshActivePlugins调用clearAllCaches()，这是因为loadAllPlugins()可能在main.tsx启动时、在获取托管设置之前已经运行。如果不清除，getCommands()将根据过时的插件列表重建。
-  async function refreshPluginState(): Promise<void> {
-    // refreshActivePlugins处理完全缓存清理(clearAllCaches)，重新加载所有插件组件加载器，写入AppState.plugins和AppState.agentDefinitions，注册钩子，并增加mcp.pluginReconnectKey。
-    const { agentDefinitions: freshAgentDefs } =
-      await refreshActivePlugins(setAppState)
-
-    // 无头特定：currentCommands/currentAgents是由查询循环捕获的本地可变引用（REPL使用AppState代替）。getCommands是新鲜的，因为refreshActivePlugins清除了它的缓存。
-    currentCommands = await getCommands(cwd())
-
-    // 保留SDK提供的代理（--agents CLI标志或SDK初始化control_request）——两者都通过parseAgentsFromJson注入，source='flagSettings'。loadMarkdownFilesForSubdir从不分配此来源，因此它清楚地识别出"注入的，不可从磁盘加载"。
-    //
-    // 之前的过滤器使用负集合差集(!freshAgentTypes.has(a))，这也匹配了在受污染的初始currentAgents中的插件代理，但在应用托管设置后正确地将其从freshAgentDefs中排除——导致策略阻止的代理泄漏到初始化消息中。参见gh-23085：在Commander定义时，isBridgeEnabled()在setEligibility(true)运行之前污染了设置缓存。
-    const sdkAgents = currentAgents.filter(a => a.source === 'flagSettings')
-    currentAgents = [...freshAgentDefs.allAgents, ...sdkAgents]
-  }
 
   // 插件状态更改后重新比较MCP配置。过滤到process-transport-supported类型并携带SDK模式服务器，以便applyMcpServerChanges的差异比较不会关闭它们的传输。嵌套：需要闭包访问sdkMcpConfigs, applyMcpServerChanges, updateSdkMcp。
   async function applyPluginMcpDiff(): Promise<void> {
@@ -1613,38 +1556,6 @@ function runHeadlessStreaming(
     // 首次查询前刷新 SDK MCP 工具，使初始化后动态提供的服务器进入工具池。
     await updateSdkMcp()
     headlessProfilerCheckpoint('after_updateSdkMcp')
-
-    // 解析延迟的插件安装(CLAUDE_CODE_SYNC_PLUGIN_INSTALL)。promise被急切地启动，以便安装与其他初始化重叠。在此处等待确保插件在第一次ask()之前可用。如果设置了CLAUDE_CODE_SYNC_PLUGIN_INSTALL_TIMEOUT_MS，则与该截止时间竞态，超时后不带插件继续（记录错误）。
-    if (pluginInstallPromise) {
-      const timeoutMs = parseInt(
-        process.env.CLAUDE_CODE_SYNC_PLUGIN_INSTALL_TIMEOUT_MS || '',
-        10,
-      )
-      if (timeoutMs > 0) {
-        /** 执行 timeout 对应的业务处理。 */
-        const timeout = sleep(timeoutMs).then(() => 'timeout' as const)
-        const result = await Promise.race([pluginInstallPromise, timeout])
-        if (result === 'timeout') {
-          logError(
-            new Error(
-              `CLAUDE_CODE_SYNC_PLUGIN_INSTALL: plugin installation timed out after ${timeoutMs}ms`,
-            ),
-          )
-        }
-      } else {
-        await pluginInstallPromise
-      }
-      pluginInstallPromise = null
-
-      // 既然插件已安装，刷新命令、代理和钩子
-      await refreshPluginState()
-
-      // 既然初始安装已完成，为插件钩子设置热重载。在同步安装模式下，setup.ts跳过此项以避免与安装竞态。
-      const { setupPluginHookHotReload } = await import(
-        '../utils/plugins/loadPluginHooks.js'
-      )
-      setupPluginHookHotReload()
-    }
 
     // 仅主线程命令（agentId===undefined）——子代理通知由子代理在query.ts中的回合中门控排出。定义在try块外部，以便在run()底部的finally后队列重新检查中可访问。
     const isMainThread = (cmd: QueuedCommand) => cmd.agentId === undefined
@@ -3834,7 +3745,6 @@ function handleSetPermissionMode(
 }
 
 /**
- * IDE 触发的通道启用。从连接的 pluginSource 派生 ChannelEntry（IDE 无法伪造 kind/marketplace——我们只取服务器名称），将其附加到会话的 allowedChannels，并运行完整的门控。门控失败时，回滚追加。成功时，注册一个通知处理程序，该处理程序将通道消息以 priority:'next' 入队——drainCommandQueue 会在回合之间拾取它们。故意不注册 useManageMCPConnections 为交互模式设置的 claude/channel/permission 处理程序。该处理程序会在 handleInteractivePermission 内部解析待处理的对话框——但 print.ts 从不调用 handleInteractivePermission。当 SDK 权限落于 'ask' 时，它会通过 stdio 去往消费者的 canUseTool 回调；不存在 CLI 端的对话框供远程“yes tbxkq”来解析。如果 IDE 想要通过通道转发工具批准，那是 IDE 端针对其自身待处理映射的管道。（也由 tengu_harbor_permissions 单独门控——在交互模式下尚未发布。）
  */
 function handleChannelEnable(
   requestId: string,
@@ -3861,35 +3771,19 @@ function handleChannelEnable(
     return respondError(`server ${serverName} is not connected`)
   }
 
-  const pluginSource = connection.config.pluginSource
-  const parsed = pluginSource ? parsePluginIdentifier(pluginSource) : undefined
-  if (!parsed?.marketplace) {
-    // 无 pluginSource 或无 @ 的来源——永远无法通过 {plugin, marketplace} 键控的允许列表。短路并产生与门控相同的原因。
-    return respondError(
-      `server ${serverName} is not plugin-sourced; channel_enable requires a marketplace plugin`,
-    )
-  }
-
   const entry: ChannelEntry = {
-    kind: 'plugin',
-    name: parsed.name,
-    marketplace: parsed.marketplace,
+    kind: 'server',
+    name: serverName,
   }
   // 幂等性：重复启用时不重复追加。
   const prior = getAllowedChannels()
   /** 执行 already 对应的业务处理。 */
-  const already = prior.some(
-    e =>
-      e.kind === 'plugin' &&
-      e.name === entry.name &&
-      e.marketplace === entry.marketplace,
-  )
+  const already = prior.some(e => e.name === entry.name)
   if (!already) setAllowedChannels([...prior, entry])
 
   const gate = gateChannelServer(
     serverName,
     connection.capabilities,
-    pluginSource,
   )
   if (gate.action === 'skip') {
     // 回滚——仅移除我们追加的条目。
@@ -3897,8 +3791,6 @@ function handleChannelEnable(
     return respondError(gate.reason)
   }
 
-  const pluginId =
-    `${entry.name}@${entry.marketplace}`
   logMCPDebug(serverName, 'Channel notifications registered')
 
   // 与 useManageMCPConnections 中交互式注册块相同的入队形状。drainCommandQueue 在回合之间处理它——通道消息以优先级 'next' 入队，并在到达后的下一回合被模型看到。
@@ -3943,15 +3835,8 @@ function reregisterChannelHandlerAfterReconnect(
   const gate = gateChannelServer(
     connection.name,
     connection.capabilities,
-    connection.config.pluginSource,
   )
   if (gate.action !== 'register') return
-
-  const entry = findChannelEntry(connection.name, getAllowedChannels())
-  const pluginId =
-    entry?.kind === 'plugin'
-      ? (`${entry.name}@${entry.marketplace}`)
-      : undefined
 
   logMCPDebug(
     connection.name,

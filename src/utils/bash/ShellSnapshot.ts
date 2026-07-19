@@ -144,7 +144,7 @@ const VCS_DIRECTORIES_TO_EXCLUDE = [
  * Not replicated from GrepTool:
  * - `--max-columns 500`: ugrep's `--width` hard-truncates output which could
  *   break pipelines; rg's version replaces the line with a placeholder.
- * - Read deny rules / plugin cache exclusions: require toolPermissionContext
+ * - Read deny rules: require toolPermissionContext
  *   which isn't available at shell-snapshot creation time.
  *
  * Returns null if embedded search tools are not available in this build.

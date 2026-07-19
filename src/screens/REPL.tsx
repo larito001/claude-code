@@ -117,7 +117,6 @@ import { useMergedTools } from '../hooks/useMergedTools.js';
 import { mergeAndFilterTools } from '../utils/toolPool.js';
 import { useMergedCommands } from '../hooks/useMergedCommands.js';
 import { useSkillsChange } from '../hooks/useSkillsChange.js';
-import { useManagePlugins } from '../hooks/useManagePlugins.js';
 import { Messages } from '../components/Messages.js';
 import { TaskListV2 } from '../components/TaskListV2.js';
 import { TeammateViewHeader } from '../components/TeammateViewHeader.js';
@@ -197,11 +196,6 @@ import { useMcpConnectivityStatus } from 'src/hooks/notifs/useMcpConnectivitySta
 import { useAutoModeUnavailableNotification } from 'src/hooks/notifs/useAutoModeUnavailableNotification.js';
 import { AUTO_MODE_DESCRIPTION } from 'src/components/AutoModeOptInDialog.js';
 import { useLspInitializationNotification } from 'src/hooks/notifs/useLspInitializationNotification.js';
-import { useLspPluginRecommendation } from 'src/hooks/useLspPluginRecommendation.js';
-import { LspRecommendationMenu } from 'src/components/LspRecommendation/LspRecommendationMenu.js';
-import { usePluginInstallationStatus } from 'src/hooks/notifs/usePluginInstallationStatus.js';
-import { usePluginAutoupdateNotification } from 'src/hooks/notifs/usePluginAutoupdateNotification.js';
-import { performStartupChecks } from 'src/utils/plugins/performStartupChecks.js';
 import { UserTextMessage } from 'src/components/messages/UserTextMessage.js';
 import { useDeprecationWarningNotification } from 'src/hooks/notifs/useDeprecationWarningNotification.js';
 import { useIDEStatusIndicator } from 'src/hooks/notifs/useIDEStatusIndicator.js';
@@ -639,40 +633,18 @@ export function REPL({
     mcpClients
   });
   useAutoModeUnavailableNotification();
-  usePluginInstallationStatus();
-  usePluginAutoupdateNotification();
   useSettingsErrors();
   useFastModeNotification();
   useDeprecationWarningNotification(mainLoopModel);
   useLspInitializationNotification();
   useTeammateLifecycleNotification();
-  const {
-    recommendation: lspRecommendation,
-    handleResponse: handleLspResponse
-  } = useLspPluginRecommendation();
 
   // Memoize the combined initial tools array to prevent reference changes
   const combinedInitialTools = useMemo(() => {
     return [...localTools, ...initialTools];
   }, [localTools, initialTools]);
 
-  // Initialize plugin management
-  useManagePlugins({
-    enabled: true
-  });
   const tasksV2 = useTasksV2WithCollapseEffect();
-
-  // Start background plugin installations
-
-  // SECURITY: This code is guaranteed to run ONLY after the "trust this folder" dialog
-  // has been confirmed by the user. The trust dialog is shown in cli.tsx (line ~387)
-  // before the REPL component is rendered. The dialog blocks execution until the user
-  // accepts, and only then is the REPL component mounted and this effect runs.
-  // This ensures that plugin installations from repository and user settings only
-  // happen after explicit user consent to trust the current working directory.
-  useEffect(() => {
-    void performStartupChecks(setAppState);
-  }, [setAppState]);
 
   // Initialize swarm features: teammate hooks and context
   // Handles both fresh spawns and resumed teammate sessions
@@ -1652,7 +1624,7 @@ export function REPL({
   // 即使设置了 toolJSX，也可以显示权限和交互式对话框，
   // 只要 shouldContinueAnimation 为 true 即可。这可以防止死锁
   // 代理在等待用户交互时设置后台提示。
-  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'lsp-recommendation' | undefined {
+  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | undefined {
     // 退出状态始终优先
     if (isExiting || exitFlow) return undefined;
 
@@ -1675,11 +1647,6 @@ export function REPL({
 
     // 入职对话框（特殊条件）
     if (allowDialogsWithAnimation && showIdeOnboarding) return 'ide-onboarding';
-
-    // LSP插件推荐（最低优先级-非阻塞建议）
-    if (allowDialogsWithAnimation && lspRecommendation) return 'lsp-recommendation';
-
-    // 来自 CLI/SDK stderr 的插件提示（与 LSP rec 相同的优先级带）
 
     return undefined;
   }
@@ -4003,8 +3970,6 @@ export function REPL({
             });
           }} />}
                 {focusedInputDialog === 'ide-onboarding' && <IdeOnboardingDialog onDone={() => setShowIdeOnboarding(false)} installationStatus={ideInstallationStatus} />}
-
-                {focusedInputDialog === 'lsp-recommendation' && lspRecommendation && <LspRecommendationMenu pluginName={lspRecommendation.pluginName} pluginDescription={lspRecommendation.pluginDescription} fileExtension={lspRecommendation.fileExtension} onResponse={handleLspResponse} />}
 
                 {!toolJSX?.shouldHidePromptInput && !focusedInputDialog && !isExiting && !disabled && !cursor && <>
                       <PromptInput debug={debug} ideSelection={ideSelection} hasSuppressedDialogs={!!hasSuppressedDialogs} isLocalJSXCommandActive={isShowingLocalJSXCommand} getToolUseContext={getToolUseContext} toolPermissionContext={toolPermissionContext} setToolPermissionContext={setToolPermissionContext} apiKeyStatus={apiKeyStatus} commands={commands} agents={agentDefinitions.activeAgents} isLoading={isLoading} onExit={handleExit} verbose={verbose} messages={messages} input={inputValue} onInputChange={setInputValue} mode={inputMode} onModeChange={setInputMode} stashedPrompt={stashedPrompt} setStashedPrompt={setStashedPrompt} submitCount={submitCount} onShowMessageSelector={handleShowMessageSelector} onMessageActionsEnter={feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions ? enterMessageActions : undefined} mcpClients={mcpClients} pastedContents={pastedContents} setPastedContents={setPastedContents} vimMode={vimMode} setVimMode={setVimMode} showBashesDialog={showBashesDialog} setShowBashesDialog={setShowBashesDialog} onSubmit={onSubmit} onAgentSubmit={onAgentSubmit} isSearchingHistory={isSearchingHistory} setIsSearchingHistory={setIsSearchingHistory} helpOpen={isHelpOpen} setHelpOpen={setIsHelpOpen} />

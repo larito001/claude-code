@@ -1,13 +1,9 @@
-import { readFile, realpath } from 'fs/promises'
+import { realpath } from 'fs/promises'
 import { isInBundledMode } from './bundledMode.js'
 import { getCwd } from './cwd.js'
 import { getPlatform } from './platform.js'
 import { getRipgrepStatus } from './ripgrep.js'
 import { SandboxManager } from './sandbox/sandbox-adapter.js'
-import { getManagedFilePath } from './settings/managedPath.js'
-import { CUSTOMIZATION_SURFACES } from './settings/types.js'
-import { jsonParse } from './slowOperations.js'
-import { join } from 'path'
 
 export type DiagnosticWarning = { issue: string; fix: string }
 
@@ -41,47 +37,6 @@ async function getRuntimePath(): Promise<string> {
   return process.argv[1] || process.argv[0] || 'unknown'
 }
 
-async function detectManagedSettingsWarnings(): Promise<DiagnosticWarning[]> {
-  try {
-    const raw = await readFile(
-      join(getManagedFilePath(), 'managed-settings.json'),
-      'utf-8',
-    )
-    const parsed: unknown = jsonParse(raw)
-    const field =
-      parsed && typeof parsed === 'object'
-        ? (parsed as Record<string, unknown>).strictPluginOnlyCustomization
-        : undefined
-
-    if (field === undefined || typeof field === 'boolean') return []
-    if (!Array.isArray(field)) {
-      return [
-        {
-          issue:
-            'managed-settings.json: strictPluginOnlyCustomization has an invalid value',
-          fix: `Set it to true or an array of: ${CUSTOMIZATION_SURFACES.join(', ')}.`,
-        },
-      ]
-    }
-
-    const unknown = field.filter(
-      value =>
-        typeof value === 'string' &&
-        !(CUSTOMIZATION_SURFACES as readonly string[]).includes(value),
-    )
-    return unknown.length === 0
-      ? []
-      : [
-          {
-            issue: `managed-settings.json contains unknown customization surfaces: ${unknown.join(', ')}`,
-            fix: `Use supported surfaces: ${CUSTOMIZATION_SURFACES.join(', ')}.`,
-          },
-        ]
-  } catch {
-    return []
-  }
-}
-
 function detectLinuxGlobPatternWarnings(): DiagnosticWarning[] {
   if (getPlatform() !== 'linux') return []
   const patterns = SandboxManager.getLinuxGlobPatternWarnings()
@@ -104,7 +59,6 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
     runtimePath: await getRuntimePath(),
     invokedBinary: process.argv[1] || process.execPath || 'unknown',
     warnings: [
-      ...(await detectManagedSettingsWarnings()),
       ...detectLinuxGlobPatternWarnings(),
     ],
     ripgrepStatus: {

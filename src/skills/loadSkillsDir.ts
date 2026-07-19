@@ -55,7 +55,6 @@ import { executeShellCommandsInPrompt } from '../utils/promptShellExecution.js'
 import type { SettingSource } from '../utils/settings/constants.js'
 import { isSettingSourceEnabled } from '../utils/settings/constants.js'
 import { getManagedFilePath } from '../utils/settings/managedPath.js'
-import { isRestrictedToPluginOnly } from '../utils/settings/pluginOnlyPolicy.js'
 import { HooksSchema, type HooksSettings } from '../utils/settings/types.js'
 import { createSignal } from '../utils/signal.js'
 import { registerMCPSkillBuilders } from './mcpSkillBuilders.js'
@@ -643,9 +642,7 @@ export const getSkillDirCommands = memoize(
 
     // Load from additional directories (--add-dir)
     const additionalDirs = getAdditionalDirectoriesForClaudeMd()
-    const skillsLocked = isRestrictedToPluginOnly('skills')
-    const projectSettingsEnabled =
-      isSettingSourceEnabled('projectSettings') && !skillsLocked
+    const projectSettingsEnabled = isSettingSourceEnabled('projectSettings')
 
     // --bare: skip auto-discovery (managed/user/project dir walks + legacy
     // commands-dir). Load ONLY explicit --add-dir paths. Bundled skills
@@ -682,7 +679,7 @@ export const getSkillDirCommands = memoize(
       isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_POLICY_SKILLS)
         ? Promise.resolve([])
         : loadSkillsFromSkillsDir(managedSkillsDir, 'policySettings'),
-      isSettingSourceEnabled('userSettings') && !skillsLocked
+      isSettingSourceEnabled('userSettings')
         ? loadSkillsFromSkillsDir(userSkillsDir, 'userSettings')
         : Promise.resolve([]),
       projectSettingsEnabled
@@ -706,7 +703,7 @@ export const getSkillDirCommands = memoize(
       // subdir='commands', which our agents-only guard there skips. Block
       // here when skills are locked — these ARE skills, regardless of the
       // directory they load from.
-      skillsLocked ? Promise.resolve([]) : loadSkillsFromCommandsDir(cwd),
+      loadSkillsFromCommandsDir(cwd),
     ])
 
     // Flatten and combine all skills
@@ -917,12 +914,9 @@ export async function discoverSkillDirsForPaths(
  * @param dirs Array of skill directories to load from (should be sorted deepest first)
  */
 export async function addSkillDirectories(dirs: string[]): Promise<void> {
-  if (
-    !isSettingSourceEnabled('projectSettings') ||
-    isRestrictedToPluginOnly('skills')
-  ) {
+  if (!isSettingSourceEnabled('projectSettings')) {
     logForDebugging(
-      '[skills] Dynamic skill discovery skipped: projectSettings disabled or plugin-only policy',
+      '[skills] Dynamic skill discovery skipped: projectSettings disabled',
     )
     return
   }

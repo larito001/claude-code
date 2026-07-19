@@ -15,10 +15,11 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'claude-extensions-smoke-'))
 const tempConfig = join(tempRoot, 'config')
 const tempProject = join(tempRoot, 'project')
 const pluginRoot = join(tempRoot, 'core-extension')
+const dependentPluginRoot = join(tempRoot, 'dependent-extension')
 const missingPluginRoot = join(tempRoot, 'missing-plugin')
 const mcpFixture = resolve(import.meta.dir, 'fixtures/mcp-smoke-server.ts')
 const previousEnvironment = new Map(
-  ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_SIMPLE'].map(name => [
+  ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_SIMPLE', 'LOCAL_PLUGIN_SMOKE_VALUE'].map(name => [
     name,
     process.env[name],
   ]),
@@ -26,6 +27,7 @@ const previousEnvironment = new Map(
 
 process.env.CLAUDE_CONFIG_DIR = tempConfig
 delete process.env.CLAUDE_CODE_SIMPLE
+process.env.LOCAL_PLUGIN_SMOKE_VALUE = 'LOCAL_PLUGIN_ENV_OK'
 
 try {
   await Promise.all([
@@ -36,6 +38,9 @@ try {
     mkdir(join(pluginRoot, 'commands'), { recursive: true }),
     mkdir(join(pluginRoot, 'agents'), { recursive: true }),
     mkdir(join(pluginRoot, 'skills', 'quality'), { recursive: true }),
+    mkdir(join(pluginRoot, 'hooks'), { recursive: true }),
+    mkdir(join(pluginRoot, 'output-styles'), { recursive: true }),
+    mkdir(join(dependentPluginRoot, '.claude-plugin'), { recursive: true }),
   ])
 
   await Promise.all([
@@ -95,6 +100,58 @@ try {
         'PLUGIN_SKILL_OK ${CLAUDE_SKILL_DIR} $ARGUMENTS',
       ].join('\n'),
     ),
+    writeFile(
+      join(pluginRoot, 'hooks', 'hooks.json'),
+      JSON.stringify({
+        hooks: {
+          SessionStart: [
+            { hooks: [{ type: 'command', command: 'echo LOCAL_PLUGIN_HOOK_OK' }] },
+          ],
+        },
+      }),
+    ),
+    writeFile(
+      join(pluginRoot, 'output-styles', 'commercial.md'),
+      [
+        '---',
+        'name: commercial',
+        'description: Commercial framework output style',
+        '---',
+        'LOCAL_PLUGIN_OUTPUT_STYLE_OK',
+      ].join('\n'),
+    ),
+    writeFile(
+      join(pluginRoot, '.mcp.json'),
+      JSON.stringify({
+        local: {
+          type: 'stdio',
+          command: process.execPath,
+          args: [
+            '${CLAUDE_PLUGIN_ROOT}/server.ts',
+            '${CLAUDE_PLUGIN_DATA}',
+            '${LOCAL_PLUGIN_SMOKE_VALUE}',
+          ],
+        },
+      }),
+    ),
+    writeFile(
+      join(pluginRoot, '.lsp.json'),
+      JSON.stringify({
+        local: {
+          command: process.execPath,
+          args: ['${CLAUDE_PLUGIN_ROOT}/language-server.ts'],
+          extensionToLanguage: { '.core': 'core' },
+          env: { SMOKE_VALUE: '${LOCAL_PLUGIN_SMOKE_VALUE}' },
+        },
+      }),
+    ),
+    writeFile(
+      join(dependentPluginRoot, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({
+        name: 'dependent-extension',
+        dependencies: ['missing-local-extension'],
+      }),
+    ),
   ])
 
   const [
@@ -126,6 +183,9 @@ try {
       getPluginSkills,
     },
     { clearPluginAgentCache, loadPluginAgents },
+    { getPluginMcpServers },
+    { getPluginLspServers },
+    { clearPluginOutputStyleCache, loadPluginOutputStyles },
     { clearCommandsCache, getCommands },
     { SkillTool },
     { enableConfigs },
@@ -139,6 +199,9 @@ try {
     import('../src/utils/plugins/pluginLoader.js'),
     import('../src/utils/plugins/loadPluginCommands.js'),
     import('../src/utils/plugins/loadPluginAgents.js'),
+    import('../src/utils/plugins/mcpPluginIntegration.js'),
+    import('../src/utils/plugins/lspPluginIntegration.js'),
+    import('../src/utils/plugins/loadPluginOutputStyles.js'),
     import('../src/commands.js'),
     import('../src/tools/SkillTool/SkillTool.js'),
     import('../src/utils/config.js'),
@@ -150,11 +213,12 @@ try {
   setOriginalCwd(tempProject)
   setProjectRoot(tempProject)
   setCwdState(tempProject)
-  setInlinePlugins([pluginRoot, missingPluginRoot])
+  setInlinePlugins([pluginRoot, dependentPluginRoot, missingPluginRoot])
   clearPluginCache('extension-chain smoke setup')
   clearPluginCommandCache()
   clearPluginSkillsCache()
   clearPluginAgentCache()
+  clearPluginOutputStyleCache()
   clearCommandsCache()
 
   const windowsNpx = normalizeMcpServerForPlatform(
@@ -312,6 +376,58 @@ try {
   assert(
     pluginResult.errors.some(error => error.type === 'path-not-found'),
     'Missing inline plugin did not produce an isolated load error',
+  )
+  assert(
+    pluginResult.disabled.some(item => item.name === 'dependent-extension') &&
+      pluginResult.errors.some(error => error.type === 'dependency-unsatisfied'),
+    'Missing local dependency did not demote only the dependent plugin',
+  )
+  assert(
+    plugin.hooksConfig?.SessionStart?.some(matcher =>
+      matcher.hooks.some(hook =>
+        'command' in hook && hook.command.includes('LOCAL_PLUGIN_HOOK_OK'),
+      ),
+    ),
+    'Local plugin hooks were not loaded',
+  )
+  const integrationErrors: typeof pluginResult.errors = []
+  const [pluginMcpServers, pluginLspServers, pluginOutputStyles] =
+    await Promise.all([
+      getPluginMcpServers(plugin, integrationErrors),
+      getPluginLspServers(plugin, integrationErrors),
+      loadPluginOutputStyles(),
+    ])
+  const localPluginMcp = pluginMcpServers?.['plugin:core-extension:local']
+  assert(
+    localPluginMcp &&
+      'args' in localPluginMcp &&
+      localPluginMcp.args?.some(arg =>
+        arg.replace(/\\/g, '/').includes(pluginRoot.replace(/\\/g, '/')),
+      ) &&
+      localPluginMcp.args?.some(arg =>
+        arg.replace(/\\/g, '/').includes('/plugin-data/local-core-extension'),
+      ) &&
+      localPluginMcp.args?.includes('LOCAL_PLUGIN_ENV_OK'),
+    'Local plugin MCP configuration did not expand root and environment values',
+  )
+  const localPluginLsp = pluginLspServers?.['plugin:core-extension:local']
+  assert(
+    localPluginLsp?.args?.some(arg =>
+      arg.replace(/\\/g, '/').includes(pluginRoot.replace(/\\/g, '/')),
+    ) && localPluginLsp.env?.SMOKE_VALUE === 'LOCAL_PLUGIN_ENV_OK',
+    'Local plugin LSP configuration did not expand root and environment values',
+  )
+  assert(
+    integrationErrors.length === 0,
+    `Local plugin integration produced errors: ${JSON.stringify(integrationErrors)}`,
+  )
+  assert(
+    pluginOutputStyles.some(
+      style =>
+        style.name === 'core-extension:commercial' &&
+        style.prompt.includes('LOCAL_PLUGIN_OUTPUT_STYLE_OK'),
+    ),
+    'Local plugin output style was not loaded',
   )
   const [pluginCommands, pluginSkills, pluginAgents] = await Promise.all([
     getPluginCommands(),

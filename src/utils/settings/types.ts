@@ -7,7 +7,6 @@ import {
   EXTERNAL_PERMISSION_MODES,
   PERMISSION_MODES,
 } from '../permissions/PermissionMode.js'
-import { MarketplaceSourceSchema } from '../plugins/schemas.js'
 import { CLAUDE_CODE_SETTINGS_SCHEMA_URL } from './constants.js'
 import { PermissionRuleSchema } from './permissionValidation.js'
 
@@ -82,27 +81,7 @@ export const PermissionsSchema = lazySchema(() =>
 
 /**
  * 在仓库设置中定义的额外市场模式
- * 与 KnownMarketplace 相同，但无 lastUpdated（该字段自动管理）
  */
-export const ExtraKnownMarketplaceSchema = lazySchema(() =>
-  z.object({
-    source: MarketplaceSourceSchema().describe(
-      'Where to fetch the marketplace from',
-    ),
-    installLocation: z
-      .string()
-      .optional()
-      .describe(
-        'Local cache path where marketplace manifest is stored (auto-generated if not provided)',
-      ),
-    autoUpdate: z
-      .boolean()
-      .optional()
-      .describe(
-        'Whether to automatically update this marketplace and its installed plugins on startup',
-      ),
-  }),
-)
 
 /**
  * 企业允许列表中允许的 MCP 服务器条目的模式。
@@ -235,17 +214,6 @@ export const DeniedMcpServerEntrySchema = lazySchema(() =>
  * - .passthrough() 保留 permissions 对象中的未知字段
  * - 无效设置仅不被使用，但保留在文件中供用户修复
  */
-
-/**
- * 可由 `strictPluginOnlyCustomization` 锁定的配置项。导出以便
- * 下面的模式预处理和运行时助手 (pluginOnlyPolicy.ts) 共享同一事实来源。
- */
-export const CUSTOMIZATION_SURFACES = [
-  'skills',
-  'agents',
-  'hooks',
-  'mcp',
-] as const
 
 /** 渲染 Settings Schema 组件。 */
 export const SettingsSchema = lazySchema(() =>
@@ -496,28 +464,6 @@ export const SettingsSchema = lazySchema(() =>
             'Users can still add their own MCP servers, but only the admin-defined allowlist applies.',
         ),
       // 仅通过插件强制自定义（LinkedIn通过GTM请求）
-      strictPluginOnlyCustomization: z
-        .preprocess(
-          // 向前兼容：丢弃未知的表面名称，这样未来的枚举值（如'commands'）不会导致safeParse失败并清空整个managed-settings文件（settings.ts:101）。旧客户端上的["skills","commands"]变为["skills"]→锁定已知项，忽略未知项。降级为较少锁定，绝不会变为完全解锁。
-          v =>
-            Array.isArray(v)
-              ? v.filter(x =>
-                  (CUSTOMIZATION_SURFACES as readonly string[]).includes(x),
-                )
-              : v,
-          z.union([z.boolean(), z.array(z.enum(CUSTOMIZATION_SURFACES))]),
-        )
-        .optional()
-        // 非数组的无效值（如 "skills" 字符串、{object}）会原样通过预处理，并导致联合类型失败 → 整个 managed-settings 文件变为 null。.catch 将该字段降级为 undefined 而非整体崩溃。降级为“此字段未锁定”，而绝不会变成“全部损坏”。Doctor 会标记原始值。
-        .catch(undefined)
-        .describe(
-          'When set in managed settings, blocks non-plugin customization sources for the listed surfaces. ' +
-            'Array form locks specific surfaces (e.g. ["skills", "hooks"]); `true` locks all four; `false` is an explicit no-op. ' +
-            'Blocked: ~/.claude/{surface}/, .claude/{surface}/ (project), settings.json hooks, .mcp.json. ' +
-            'NOT blocked: managed (policySettings) sources, plugin-provided customizations. ' +
-            'Composes with strictKnownMarketplaces for end-to-end admin control — plugins gated by ' +
-            'marketplace allowlist, everything else blocked here.',
-        ),
       // 自定义状态行显示的状态行
       statusLine: z
         .object({
@@ -528,62 +474,6 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe('Custom status line display configuration'),
       // 使用市场优先格式启用的插件
-      enabledPlugins: z
-        .record(
-          z.string(),
-          z.union([z.array(z.string()), z.boolean(), z.undefined()]),
-        )
-        .optional()
-        .describe(
-          'Enabled plugins using plugin-id@marketplace-id format. Example: { "formatter@anthropic-tools": true }. Also supports extended format with version constraints.',
-        ),
-      // 此仓库的额外市场（通常用于项目设置）
-      extraKnownMarketplaces: z
-        .record(z.string(), ExtraKnownMarketplaceSchema())
-        .check(ctx => {
-          // 对于设置源，键必须等于source.name。diffMarketplaces通过字典键查找物化状态；addMarketplaceSource存储在marketplace.name下（对于设置，等于source.name）。不匹配意味着协调器永不收敛——每个会话：键查找未命中→'missing'→源幂等性返回alreadyMaterialized但仍在增加installed++→无意义的缓存清除。对于github/git/url，名称来自获取的marketplace.json（不匹配是预期的且无害）；对于设置，键和名称都是用户在同一JSON对象中编写的。
-          for (const [key, entry] of Object.entries(ctx.value)) {
-            if (
-              entry.source.source === 'settings' &&
-              entry.source.name !== key
-            ) {
-              ctx.issues.push({
-                code: 'custom',
-                input: entry.source.name,
-                path: [key, 'source', 'name'],
-                message:
-                  `Settings-sourced marketplace name must match its extraKnownMarketplaces key ` +
-                  `(got key "${key}" but source.name "${entry.source.name}")`,
-              })
-            }
-          }
-        })
-        .optional()
-        .describe(
-          'Additional marketplaces to make available for this repository. Typically used in repository .claude/settings.json to ensure team members have required plugin sources.',
-        ),
-      // 企业允许的市场来源严格列表（仅策略设置）
-      // 设置后，只能添加这些确切的来源。检查发生在下载之前。
-      strictKnownMarketplaces: z
-        .array(MarketplaceSourceSchema())
-        .optional()
-        .describe(
-          'Enterprise strict list of allowed marketplace sources. When set in managed settings, ' +
-            'ONLY these exact sources can be added as marketplaces. The check happens BEFORE ' +
-            'downloading, so blocked sources never touch the filesystem. ' +
-            'Note: this is a policy gate only — it does NOT register marketplaces. ' +
-            'To pre-register allowed marketplaces for users, also set extraKnownMarketplaces.',
-        ),
-      // 企业禁止的市场来源列表（仅策略设置）
-      // 设置后，这些确切的来源被阻止。检查发生在下载之前。
-      blockedMarketplaces: z
-        .array(MarketplaceSourceSchema())
-        .optional()
-        .describe(
-          'Enterprise blocklist of marketplace sources. When set in managed settings, ' +
-            'these exact sources are blocked from being added as marketplaces. The check happens BEFORE ' +
-            'downloading, so blocked sources never touch the filesystem.',
-        ),
       otelHeadersHelper: z
         .string()
         .optional()
@@ -699,47 +589,6 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Company announcements to display at startup (one will be randomly selected if multiple are provided)',
         ),
-      pluginConfigs: z
-        .record(
-          z.string(),
-          z.object({
-            mcpServers: z
-              .record(
-                z.string(),
-                z.record(
-                  z.string(),
-                  z.union([
-                    z.string(),
-                    z.number(),
-                    z.boolean(),
-                    z.array(z.string()),
-                  ]),
-                ),
-              )
-              .optional()
-              .describe(
-                'User configuration values for MCP servers keyed by server name',
-              ),
-            options: z
-              .record(
-                z.string(),
-                z.union([
-                  z.string(),
-                  z.number(),
-                  z.boolean(),
-                  z.array(z.string()),
-                ]),
-              )
-              .optional()
-              .describe(
-                'Non-sensitive option values from plugin manifest userConfig, keyed by option name. Sensitive values go to secure storage instead.',
-              ),
-          }),
-        )
-        .optional()
-        .describe(
-          'Per-plugin configuration including MCP server user configs, keyed by plugin ID (plugin@marketplace format)',
-        ),
       plansDirectory: z
         .string()
         .optional()
@@ -786,20 +635,6 @@ export const SettingsSchema = lazySchema(() =>
             'Set true to allow; users then select servers via --channels.',
         ),
       // 组织级渠道插件允许列表。设置后，替换Anthropic ledger——管理员拥有信任决策。未定义则回退到ledger。仅插件条目形状（与ledger相同）；服务器类条目仍需要开发标志。
-      allowedChannelPlugins: z
-        .array(
-          z.object({
-            marketplace: z.string(),
-            plugin: z.string(),
-          }),
-        )
-        .optional()
-        .describe(
-          'Teams/Enterprise allowlist of channel plugins. When set, ' +
-            'replaces the default Anthropic allowlist — admins decide which ' +
-            'plugins may push inbound messages. Undefined falls back to the default. ' +
-            'Requires channelsEnabled: true.',
-        ),
       prefersReducedMotion: z
         .boolean()
         .optional()
@@ -928,15 +763,6 @@ export const SettingsSchema = lazySchema(() =>
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
             'Examples: "/home/user/monorepo/CLAUDE.md", "**/code/CLAUDE.md", "**/some-dir/.claude/rules/**"',
         ),
-      pluginTrustMessage: z
-        .string()
-        .optional()
-        .describe(
-          'Custom message to append to the plugin trust warning shown before installation. ' +
-            'Only read from policy settings (managed-settings.json / MDM). ' +
-            'Useful for enterprise administrators to add organization-specific context ' +
-            '(e.g., "All plugins from our internal marketplace are vetted and approved.").',
-        ),
     })
     .passthrough(),
 )
@@ -947,7 +773,7 @@ export type PluginHookMatcher = {
   hooks: HookCommand[]
   pluginRoot: string
   pluginName: string
-  pluginId: string // 格式："pluginName@marketplaceName"
+  pluginId: string
 }
 
 /** 技能钩子的内部类型 - 包括用于执行的技能上下文。不是Zod模式，因为它不面向用户（技能提供原生钩子）。 */
@@ -985,17 +811,4 @@ export function isMcpServerUrlEntry(
   entry: AllowedMcpServerEntry | DeniedMcpServerEntry,
 ): entry is { serverUrl: string } {
   return 'serverUrl' in entry && entry.serverUrl !== undefined
-}
-
-/** MCPB MCP服务器的用户配置值 */
-export type UserConfigValues = Record<
-  string,
-  string | number | boolean | string[]
->
-
-/** 存储在settings.json中的插件配置 */
-export type PluginConfig = {
-  mcpServers?: {
-    [serverName: string]: UserConfigValues
-  }
 }

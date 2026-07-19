@@ -213,33 +213,16 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     }
     if (devChannels && devChannels.length > 0) {
       const {
-        isChannelsEnabled
-      } = await import('./services/mcp/channelAllowlist.js');
-      // 当频道禁用时跳过对话框。
-      // 附加开发条目以便频道门控可以命名它们。
-      // （hasNonDev 检查）；白名单绕过它也无意义，
-      // 因为门控在上游阻止。
-      if (!isChannelsEnabled()) {
+        DevChannelsDialog
+      } = await import('./components/DevChannelsDialog.js');
+      await showSetupDialog(root, done => <DevChannelsDialog channels={devChannels} onAccept={() => {
         setAllowedChannels([...getAllowedChannels(), ...devChannels.map(c => ({
           ...c,
           dev: true
         }))]);
         setHasDevChannels(true);
-      } else {
-        const {
-          DevChannelsDialog
-        } = await import('./components/DevChannelsDialog.js');
-        await showSetupDialog(root, done => <DevChannelsDialog channels={devChannels} onAccept={() => {
-          // 按条目标记开发条目，以便白名单绕过不会泄漏
-          // 当两个标志都传递时，不会泄漏到 --channels 条目。
-          setAllowedChannels([...getAllowedChannels(), ...devChannels.map(c => ({
-            ...c,
-            dev: true
-          }))]);
-          setHasDevChannels(true);
-          void done();
-        }} />);
-      }
+        void done();
+      }} />);
     }
   }
 

@@ -6,7 +6,6 @@ import {
   getFlagSettingsInline,
   getFlagSettingsPath,
   getOriginalCwd,
-  getUseCoworkPlugins,
 } from '../../bootstrap/state.js'
 import { uniq } from '../array.js'
 import { logForDebugging } from '../debug.js'
@@ -241,22 +240,8 @@ export function getSettingsRootPathForSource(source: SettingSource): string {
   }
 }
 
-/**
- * 根据协作模式获取用户设置文件名。
- * 在协作模式下返回 'cowork_settings.json'，否则返回 'settings.json'。
- *
- * 优先级：
- * 1. 会话状态（由 CLI 标志 --cowork 设置）
- * 2. 环境变量 CLAUDE_CODE_USE_COWORK_PLUGINS
- * 3. 默认值：'settings.json'
- */
+/** 获取标准用户设置文件名。 */
 function getUserSettingsFilePath(): string {
-  if (
-    getUseCoworkPlugins() ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_COWORK_PLUGINS)
-  ) {
-    return 'cowork_settings.json'
-  }
   return 'settings.json'
 }
 
@@ -390,7 +375,7 @@ export function getPolicySettingsOrigin():
 /**
  * 使用 lodash mergeWith 将 `settings` 合并到 `source` 的现有设置中。
  *
- * 要删除记录字段中的键（例如 enabledPlugins、extraKnownMarketplaces），将其设置为 `undefined`——不要使用 `delete`。mergeWith 仅在键存在且显式值为 `undefined` 时才检测删除。
+ * 要删除记录字段中的键，将其设置为 `undefined`，不要使用 `delete`。mergeWith 仅在键存在且显式值为 `undefined` 时才检测删除。
  */
 export function updateSettingsForSource(
   source: EditableSettingSource,

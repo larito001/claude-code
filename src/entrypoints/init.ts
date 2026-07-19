@@ -125,7 +125,6 @@ export const init = memoize(async (): Promise<void> => {
     profileCheckpoint('init_function_end')
   } catch (error) {
     if (error instanceof ConfigParseError) {
-      // 当我们无法安全渲染时，跳过交互式 Ink 对话框。该对话框会破坏 JSON 消费者（例如，桌面市场插件管理器在 VM 沙箱中运行 `plugin marketplace list --json`）。
       if (getIsNonInteractiveSession()) {
         process.stderr.write(
           `Configuration error in ${error.filePath}: ${error.message}\n`,

@@ -219,7 +219,7 @@ Then tell the user that you'll be introducing a few more suggestions for optimiz
 When building the list, work through these checks and include only what applies:
 - If you found gaps in Phase 7 (missing GitHub CLI, missing linting) and the user said no: list them here with a one-line reason why each helps.
 - If tests are missing or sparse: suggest setting up a test framework so Claude can verify its own changes.
-- Use \`/plugin\` to manage marketplaces you have configured. Plugins can bundle skills, agents, hooks, and MCP servers, and you can create private marketplaces for your own extensions.`
+- Use \`--plugin-dir <path>\` to load a trusted local extension. Local plugins can bundle skills, agents, hooks, MCP servers, and LSP servers.`
 
 const command = {
   type: 'prompt',

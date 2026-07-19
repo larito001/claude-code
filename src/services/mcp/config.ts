@@ -22,7 +22,6 @@ import { getPluginMcpServers } from '../../utils/plugins/mcpPluginIntegration.js
 import { loadAllPluginsCacheOnly } from '../../utils/plugins/pluginLoader.js'
 import { isSettingSourceEnabled } from '../../utils/settings/constants.js'
 import { getManagedFilePath } from '../../utils/settings/managedPath.js'
-import { isRestrictedToPluginOnly } from '../../utils/settings/pluginOnlyPolicy.js'
 import {
   getInitialSettings,
   getSettingsForSource,
@@ -440,7 +439,7 @@ function isMcpServerAllowedByPolicy(
  * network connection for them; tool calls route back to the SDK via
  * mcp_tool_call. URL/command-based allowlist entries are meaningless for them
  * (no url, no command), and gating by name would silently drop them during
- * installPluginsAndApplyMcpInBackground's sdkMcpConfigs carry-forward.
+ * the SDK MCP configuration carry-forward path.
  *
  * The generic has no type constraint because the two callsites use different
  * config type families: main.tsx uses ScopedMcpServerConfig (service type,
@@ -933,12 +932,6 @@ export function getMcpConfigsByScope(
 export function getMcpConfigByName(name: string): ScopedMcpServerConfig | null {
   const { servers: enterpriseServers } = getMcpConfigsByScope('enterprise')
 
-  // When MCP is locked to plugin-only, only enterprise servers are reachable
-  // by name. User/project/local servers are blocked — same as getClaudeCodeMcpConfigs().
-  if (isRestrictedToPluginOnly('mcp')) {
-    return enterpriseServers[name] ?? null
-  }
-
   const { servers: userServers } = getMcpConfigsByScope('user')
   const { servers: projectServers } = getMcpConfigsByScope('project')
   const { servers: localServers } = getMcpConfigsByScope('local')
@@ -988,21 +981,9 @@ export async function getClaudeCodeMcpConfigs(
     return { servers: filtered, errors: [] }
   }
 
-  // Load other scopes — unless the managed policy locks MCP to plugin-only.
-  // Unlike the enterprise-exclusive block above, this keeps plugin servers.
-  const mcpLocked = isRestrictedToPluginOnly('mcp')
-  const noServers: { servers: Record<string, ScopedMcpServerConfig> } = {
-    servers: {},
-  }
-  const { servers: userServers } = mcpLocked
-    ? noServers
-    : getMcpConfigsByScope('user')
-  const { servers: projectServers } = mcpLocked
-    ? noServers
-    : getMcpConfigsByScope('project')
-  const { servers: localServers } = mcpLocked
-    ? noServers
-    : getMcpConfigsByScope('local')
+  const { servers: userServers } = getMcpConfigsByScope('user')
+  const { servers: projectServers } = getMcpConfigsByScope('project')
+  const { servers: localServers } = getMcpConfigsByScope('local')
 
   // Load plugin MCP servers
   const pluginMcpServers: Record<string, ScopedMcpServerConfig> = {}
@@ -1018,16 +999,12 @@ export async function getClaudeCodeMcpConfigs(
       // Only log as MCP error if it's actually MCP-related
       // Otherwise just log as debug since the plugin might not have MCP servers
       if (
-        error.type === 'mcp-config-invalid' ||
-        error.type === 'mcpb-download-failed' ||
-        error.type === 'mcpb-extract-failed' ||
-        error.type === 'mcpb-invalid-manifest'
+        error.type === 'mcp-config-invalid'
       ) {
         const errorMessage = `Plugin MCP loading error - ${error.type}: ${getPluginErrorMessage(error)}`
         logError(new Error(errorMessage))
       } else {
-        // Plugin doesn't exist or isn't available - this is common and not necessarily an error
-        // The plugin system will handle installing it if possible
+        // A local plugin can be unavailable without preventing other servers from loading.
         const errorType = error.type
         logForDebugging(
           `Plugin not available for MCP: ${error.source} - error type: ${errorType}`,
@@ -1087,7 +1064,7 @@ export async function getClaudeCodeMcpConfigs(
   // first-plugin-wins race against an enabled duplicate — same invariant as
   // above. They're merged back after dedup so they still appear in /mcp
   // (policy filtering at the end of this function drops blocked ones).
-  const enabledPluginServers: Record<string, ScopedMcpServerConfig> = {}
+  const activeLocalPluginServers: Record<string, ScopedMcpServerConfig> = {}
   const disabledPluginServers: Record<string, ScopedMcpServerConfig> = {}
   for (const [name, config] of Object.entries(pluginMcpServers)) {
     if (
@@ -1096,18 +1073,17 @@ export async function getClaudeCodeMcpConfigs(
     ) {
       disabledPluginServers[name] = config
     } else {
-      enabledPluginServers[name] = config
+      activeLocalPluginServers[name] = config
     }
   }
   const { servers: dedupedPluginServers, suppressed } = dedupPluginMcpServers(
-    enabledPluginServers,
+    activeLocalPluginServers,
     enabledManualServers,
   )
   Object.assign(dedupedPluginServers, disabledPluginServers)
-  // Surface suppressions in /plugin UI. Pushed AFTER the logError loop above
-  // so these don't go to the error log — they're informational, not errors.
+  // Duplicate diagnostics remain informational and are exposed through /doctor.
   for (const { name, duplicateOf } of suppressed) {
-    // name is "plugin:${pluginName}:${serverName}" from addPluginScopeToServers
+    // Local plugin MCP names use plugin:${pluginName}:${serverName}.
     const parts = name.split(':')
     if (parts[0] !== 'plugin' || parts.length < 3) continue
     mcpErrors.push({

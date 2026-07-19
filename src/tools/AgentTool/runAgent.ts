@@ -63,10 +63,6 @@ import {
   writeAgentMetadata,
 } from '../../utils/sessionStorage.js'
 import {
-  isRestrictedToPluginOnly,
-  isSourceAdminTrusted,
-} from '../../utils/settings/pluginOnlyPolicy.js'
-import {
   asSystemPrompt,
   type SystemPrompt,
 } from '../../utils/systemPromptType.js'
@@ -108,19 +104,6 @@ async function initializeAgentMcpServers(
   }
 
   // 当MCP锁定为仅插件模式时，仅对USER-CONTROLLED代理跳过前置元数据MCP服务器。插件、内置和policySettings代理是管理员信任的——它们的前置元数据MCP属于管理员批准的表面。阻止它们（就像初次实现那样）会破坏合法需要MCP的插件代理，与“插件提供的始终加载”相矛盾。
-  const agentIsAdminTrusted = isSourceAdminTrusted(agentDefinition.source)
-  if (isRestrictedToPluginOnly('mcp') && !agentIsAdminTrusted) {
-    logForDebugging(
-      `[Agent: ${agentDefinition.agentType}] Skipping MCP servers: strictPluginOnlyCustomization locks MCP to plugin-only (agent source: ${agentDefinition.source})`,
-    )
-    return {
-      clients: parentClients,
-      tools: [],
-      /** 规范化 cleanup 对应的数据或状态。 */
-      cleanup: async () => {},
-    }
-  }
-
   const agentClients: MCPServerConnection[] = []
   // 跟踪哪些客户端是新建的（内联定义）vs. 从父级共享的
   // 只有当代理结束时才应清理新建的客户端
@@ -521,10 +504,7 @@ export async function* runAgent({
   }
 
   // 注册代理的前置钩子（作用域于代理生命周期）。传递 isAgent=true 以将 Stop 钩子转换为 SubagentStop（因为子代理触发 SubagentStop）。前置钩子的管理信任门相同：仅在 ["hooks"] 下（技能/代理未锁定），用户代理仍然加载——在此处已知来源处阻止它们的前置钩子注册，而不是在执行时全面阻止所有会话钩子（这也会杀死插件代理的钩子）。
-  const hooksAllowedForThisAgent =
-    !isRestrictedToPluginOnly('hooks') ||
-    isSourceAdminTrusted(agentDefinition.source)
-  if (agentDefinition.hooks && hooksAllowedForThisAgent) {
+  if (agentDefinition.hooks) {
     registerFrontmatterHooks(
       rootSetAppState,
       agentId,

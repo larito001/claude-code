@@ -19,7 +19,7 @@ Choose the appropriate file based on scope:
 | File | Scope | Git | Use For |
 |------|-------|-----|---------|
 | \`~/.claude/settings.json\` | Global | N/A | Personal preferences for all projects |
-| \`.claude/settings.json\` | Project | Commit | Team-wide hooks, permissions, plugins |
+| \`.claude/settings.json\` | Project | Commit | Team-wide hooks and permissions |
 | \`.claude/settings.local.json\` | Project | Gitignore | Personal overrides for this project |
 
 Settings load in order: user → project → local (later overrides earlier).
@@ -83,15 +83,9 @@ Set \`commit\` or \`pr\` to empty string \`""\` to hide that attribution.
 }
 \`\`\`
 
-### Plugins
-\`\`\`json
-{
-  "enabledPlugins": {
-    "formatter@company-marketplace": true
-  }
-}
-\`\`\`
-Plugin syntax: \`plugin-name@marketplace-name\`; bundled plugins use \`plugin-name@builtin\`.
+### Local Plugins
+Local plugins are loaded explicitly with \`--plugin-dir <path>\`. They are not
+installed or enabled through settings files.
 
 ### Other Settings
 - \`language\`: Preferred response language (e.g., "japanese")

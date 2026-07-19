@@ -97,7 +97,7 @@ export function DevChannelsDialog(t0) {
   return t8;
 }
 function _temp2(c) {
-  return c.kind === "plugin" ? `plugin:${c.name}@${c.marketplace}` : `server:${c.name}`;
+  return `server:${c.name}`;
 }
 function _temp() {
   gracefulShutdownSync(0);

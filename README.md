@@ -14,10 +14,10 @@
 - 自动压缩、上下文提醒和文件记忆
 - 权限规则、沙箱与工作目录隔离
 - React/Ink 交互式终端 UI
-- API Key Provider 与公开 Agent SDK 门面
+- API Key 兼容端点与公开 Agent SDK 门面
 - Windows、macOS、Linux 路径和 Shell 适配
 
-已删除的主要内容包括网页登录/订阅认证、Claude.ai 远程会话与远程配置、Desktop/Chrome 产品引流、反馈调查、内部 Daemon/Runner、缺失实现的 Workflow/Monitor/WebBrowser 实验入口。通用 MCP OAuth 不属于 Claude 账号登录，因此仍保留。
+已删除的主要内容包括网页登录/订阅认证、Bedrock/Vertex/Foundry 多云 Provider、远程插件市场及其安装更新链路、Claude.ai 远程会话与远程配置、Desktop/Chrome 产品引流、反馈调查、内部 Daemon/Runner、缺失实现的 Workflow/Monitor/WebBrowser 实验入口。通用 MCP OAuth 和显式加载的本地插件属于核心扩展能力，因此仍保留。
 
 ## 环境要求
 
@@ -72,7 +72,7 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash
 CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash
 ```
 
-其他兼容 Provider 可替换 `ANTHROPIC_BASE_URL`、模型名和 API Key。真实 `.env` 已被 Git 忽略，不要把密钥提交到仓库。
+其他兼容 Anthropic API 协议的服务可替换 `ANTHROPIC_BASE_URL`、模型名和 API Key。真实 `.env` 已被 Git 忽略，不要把密钥提交到仓库。
 
 ## IDE 中运行
 
@@ -88,8 +88,8 @@ CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash
 ## 构建与检查
 
 ```bash
-# CLI + SDK 构建、公共扩展面类型检查、离线冒烟测试
-bun run check
+# 类型检查、CLI + SDK 构建及完整离线冒烟门禁
+bun run smoke:offline
 
 # 只构建
 bun run build
@@ -125,7 +125,7 @@ Feature 配置只会更新 `.env` 中的 `CLAUDE_CODE_FEATURES` 和 `CLAUDE_CODE
 | Project Agent | `.claude/agents/<name>.md` | Prompt、工具、模型和权限 |
 | Project Hook | `.claude/settings.json` | 生命周期事件与命令/Prompt Hook |
 | MCP Server | `.mcp.json` | stdio/http/sse/ws 配置 |
-| Plugin | settings/marketplace | Command、Skill、Agent、Hook、MCP 组合扩展 |
+| Local Plugin | `--plugin-dir <path>` | Command、Skill、Agent、Hook、MCP、LSP 和输出样式组合扩展 |
 | SDK | `src/entrypoints/agentSdkTypes.ts` | 公开 Agent SDK API 和本地协议常量 |
 
 核心 feature 默认开启；已适配但默认关闭的本地能力可通过环境变量启用：
@@ -147,7 +147,7 @@ src/
 ├── Tool.ts                工具契约
 ├── tools.ts               工具注册表
 ├── commands.ts            命令与 Skill 注册表
-├── services/api/          Provider API、重试与流式事件
+├── services/api/          兼容 API、重试与流式事件
 ├── services/mcp/          MCP 配置和连接管理
 ├── tools/AgentTool/       内置/自定义 Agent 与子任务
 ├── skills/                Skill 加载和执行

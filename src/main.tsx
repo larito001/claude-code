@@ -83,7 +83,6 @@ import { SHOW_CURSOR } from './ink/termio/dec.js';
 import { exitWithError, exitWithMessage, getRenderContext, renderAndRun, showSetupScreens } from './interactiveHelpers.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { getMcpToolsCommandsAndResources, prefetchAllMcpResources } from './services/mcp/client.js';
-import { VALID_INSTALLABLE_SCOPES, VALID_UPDATE_SCOPES } from './services/plugins/pluginCliCommands.js';
 import { initBundledSkills } from './skills/bundled/index.js';
 import type { AgentColorName } from './tools/AgentTool/agentColorManager.js';
 import { getActiveAgentsFromList, getAgentDefinitionsWithOverrides, isBuiltInAgent, isCustomAgent, parseAgentsFromJson } from './tools/AgentTool/loadAgentsDir.js';
@@ -103,9 +102,6 @@ import { getDefaultMainLoopModel, getUserSpecifiedModelSetting, normalizeModelSt
 import { ensureModelStringsInitialized } from './utils/model/modelStrings.js';
 import { PERMISSION_MODES } from './utils/permissions/PermissionMode.js';
 import { checkAndDisableBypassPermissions, getAutoModeEnabledStateIfCached, initializeToolPermissionContext, initialPermissionModeFromCLI, isDefaultPermissionModeAuto, parseToolListFromCLI, stripDangerousPermissionsForAutoMode, verifyAutoModeGateAccess } from './utils/permissions/permissionSetup.js';
-import { cleanupOrphanedPluginVersionsInBackground } from './utils/plugins/cacheUtils.js';
-import { initializeVersionedPlugins } from './utils/plugins/installedPluginsManager.js';
-import { getGlobExclusionsForPluginCache } from './utils/plugins/orphanedPluginFilter.js';
 import { processSessionStartHooks, processSetupHooks } from './utils/sessionStart.js';
 import { cacheSessionTitle, getSessionIdFromLog, loadTranscriptFromFile, saveAgentSetting, saveMode, searchSessionsByCustomTitle, sessionIdExists } from './utils/sessionStorage.js';
 import { ensureMdmSettingsLoaded } from './utils/settings/mdm/settings.js';
@@ -516,7 +512,7 @@ async function run(): Promise<CommanderCommand> {
     initSinks();
     profileCheckpoint('preAction_after_sinks');
 
-    // gh-33508: --plugin-dir是一个顶级程序选项。默认动作从其自身选项解构中读取它，但子命令（plugin list、plugin install、mcp *）有自己的动作，从未看到它。在此处连接，使得getInlinePlugins()在所有地方工作。thisCommand.opts()在此处被类型化为{}，因为此钩子是在链中的.option('--plugin-dir', ...)之前附加的——extra-typings在添加选项时构建类型。使用运行时守卫收窄类型；collect累加器+[]默认值在实践中保证string[]。
+    // Propagate the top-level --plugin-dir option to every command path.
     const pluginDir = thisCommand.getOptionValue('pluginDir');
     if (Array.isArray(pluginDir) && pluginDir.length > 0 && pluginDir.every(p => typeof p === 'string')) {
       setInlinePlugins(pluginDir);
@@ -911,25 +907,12 @@ async function run(): Promise<CommanderCommand> {
     // 来自--channels标志的频道服务器允许列表——其入站推送通知应注册此会话的服务器。该选项在feature()块内添加，因此TS在选项类型上不知道它——与main.tsx:1824处的--assistant相同的模式。devChannels被延迟：showSetupScreens显示确认对话框，仅在接受时追加到allowedChannels。
     let devChannels: ChannelEntry[] | undefined;
     if (feature('MCP_CHANNELS')) {
-      // 将 plugin:name@marketplace / server:Y 标签解析为类型化条目。标签决定下游信任模型：plugin-kind 命中市场验证 + 本地特性配置允许列表，server-kind 始终无法通过允许列表（模式仅为插件专用），除非设置了 dev 标志。无标签或缺少市场的插件条目是硬错误——在网关中静默不匹配会看起来像是通道已“开启”但从未触发。
       /** 解析 parse Channel Entries 对应的数据或状态。 */
       const parseChannelEntries = (raw: string[], flag: string): ChannelEntry[] => {
         const entries: ChannelEntry[] = [];
         const bad: string[] = [];
         for (const c of raw) {
-          if (c.startsWith('plugin:')) {
-            const rest = c.slice(7);
-            const at = rest.indexOf('@');
-            if (at <= 0 || at === rest.length - 1) {
-              bad.push(c);
-            } else {
-              entries.push({
-                kind: 'plugin',
-                name: rest.slice(0, at),
-                marketplace: rest.slice(at + 1)
-              });
-            }
-          } else if (c.startsWith('server:') && c.length > 7) {
+          if (c.startsWith('server:') && c.length > 7) {
             entries.push({
               kind: 'server',
               name: c.slice(7)
@@ -939,7 +922,7 @@ async function run(): Promise<CommanderCommand> {
           }
         }
         if (bad.length > 0) {
-          process.stderr.write(chalk.red(`${flag} entries must be tagged: ${bad.join(', ')}\n` + `  plugin:<name>@<marketplace>  — plugin-provided channel (allowlist enforced)\n` + `  server:<name>                — manually configured MCP server\n`));
+          process.stderr.write(chalk.red(`${flag} entries must use server:<name>: ${bad.join(', ')}\n`));
           process.exit(1);
         }
         return entries;
@@ -1433,20 +1416,6 @@ async function run(): Promise<CommanderCommand> {
     // 可能孤立当前会话的活动插件版本之前完成。
     // --bare / SIMPLE：跳过插件版本同步 + 孤儿清理。这些
     // 是安装/升级记账操作，脚本调用不需要——
-    // 下一个交互式会话会进行协调。这里的 await 在 marketplace 往返上阻塞了 -p。
-    if (!isBareMode() && isNonInteractiveSession) {
-      // 在无头模式下，在 CLI 退出前等待以确保插件同步完成
-      await initializeVersionedPlugins();
-      profileCheckpoint('action_after_plugins_init');
-      void cleanupOrphanedPluginVersionsInBackground().then(() => getGlobExclusionsForPluginCache());
-    } else if (!isBareMode()) {
-      // 在交互模式下，即发即忘——这纯粹是记账操作，不影响当前会话的运行时行为
-      void initializeVersionedPlugins().then(async () => {
-        profileCheckpoint('action_after_plugins_init');
-        await cleanupOrphanedPluginVersionsInBackground();
-        void getGlobExclusionsForPluginCache();
-      });
-    }
     const setupTrigger = initOnly || init ? 'init' : maintenance ? 'maintenance' : null;
     if (initOnly) {
       applyConfigEnvironmentVariables();
@@ -1686,11 +1655,6 @@ async function run(): Promise<CommanderCommand> {
         disabled: [],
         commands: [],
         errors: [],
-        installationStatus: {
-          marketplaces: [],
-          plugins: []
-        },
-        needsRefresh: false
       },
       statusLineText: undefined,
 
@@ -2094,126 +2058,15 @@ async function run(): Promise<CommanderCommand> {
     await mcpResetChoicesHandler();
   });
 
-  // 所有插件/市场子命令上的隐藏标志以定位 cowork_plugins。
-  const coworkOption = () => new Option('--cowork', 'Use cowork_plugins directory').hideHelp();
-
   // 插件验证命令
-  const pluginCmd = program.command('plugin').alias('plugins').description('Manage Claude Code plugins').configureHelp(createSortedHelpConfig());
-  pluginCmd.command('validate <path>').description('Validate a plugin or marketplace manifest').addOption(coworkOption()).action(async (manifestPath: string, options: {
-    cowork?: boolean;
-  }) => {
+  const pluginCmd = program.command('plugin').alias('plugins').description('Validate local plugins').configureHelp(createSortedHelpConfig());
+  pluginCmd.command('validate <path>').description('Validate a local plugin directory or plugin.json').action(async (manifestPath: string) => {
     const {
       pluginValidateHandler
     } = await import('./cli/handlers/plugins.js');
-    await pluginValidateHandler(manifestPath, options);
+    await pluginValidateHandler(manifestPath);
   });
 
-  // 插件列表命令
-  pluginCmd.command('list').description('List installed plugins').option('--json', 'Output as JSON').option('--available', 'Include available plugins from marketplaces (requires --json)').addOption(coworkOption()).action(async (options: {
-    json?: boolean;
-    available?: boolean;
-    cowork?: boolean;
-  }) => {
-    const {
-      pluginListHandler
-    } = await import('./cli/handlers/plugins.js');
-    await pluginListHandler(options);
-  });
-
-  // 市场子命令
-  const marketplaceCmd = pluginCmd.command('marketplace').description('Manage Claude Code marketplaces').configureHelp(createSortedHelpConfig());
-  marketplaceCmd.command('add <source>').description('Add a marketplace from a URL, path, or GitHub repo').addOption(coworkOption()).option('--sparse <paths...>', 'Limit checkout to specific directories via git sparse-checkout (for monorepos). Example: --sparse .claude-plugin plugins').option('--scope <scope>', 'Where to declare the marketplace: user (default), project, or local').action(async (source: string, options: {
-    cowork?: boolean;
-    sparse?: string[];
-    scope?: string;
-  }) => {
-    const {
-      marketplaceAddHandler
-    } = await import('./cli/handlers/plugins.js');
-    await marketplaceAddHandler(source, options);
-  });
-  marketplaceCmd.command('list').description('List all configured marketplaces').option('--json', 'Output as JSON').addOption(coworkOption()).action(async (options: {
-    json?: boolean;
-    cowork?: boolean;
-  }) => {
-    const {
-      marketplaceListHandler
-    } = await import('./cli/handlers/plugins.js');
-    await marketplaceListHandler(options);
-  });
-  marketplaceCmd.command('remove <name>').alias('rm').description('Remove a configured marketplace').addOption(coworkOption()).action(async (name: string, options: {
-    cowork?: boolean;
-  }) => {
-    const {
-      marketplaceRemoveHandler
-    } = await import('./cli/handlers/plugins.js');
-    await marketplaceRemoveHandler(name, options);
-  });
-  marketplaceCmd.command('update [name]').description('Update marketplace(s) from their source - updates all if no name specified').addOption(coworkOption()).action(async (name: string | undefined, options: {
-    cowork?: boolean;
-  }) => {
-    const {
-      marketplaceUpdateHandler
-    } = await import('./cli/handlers/plugins.js');
-    await marketplaceUpdateHandler(name, options);
-  });
-
-  // 插件安装命令
-  pluginCmd.command('install <plugin>').alias('i').description('Install a plugin from available marketplaces (use plugin@marketplace for specific marketplace)').option('-s, --scope <scope>', 'Installation scope: user, project, or local', 'user').addOption(coworkOption()).action(async (plugin: string, options: {
-    scope?: string;
-    cowork?: boolean;
-  }) => {
-    const {
-      pluginInstallHandler
-    } = await import('./cli/handlers/plugins.js');
-    await pluginInstallHandler(plugin, options);
-  });
-
-  // 插件卸载命令
-  pluginCmd.command('uninstall <plugin>').alias('remove').alias('rm').description('Uninstall an installed plugin').option('-s, --scope <scope>', 'Uninstall from scope: user, project, or local', 'user').option('--keep-data', "Preserve the plugin's persistent data directory (~/.claude/plugins/data/{id}/)").addOption(coworkOption()).action(async (plugin: string, options: {
-    scope?: string;
-    cowork?: boolean;
-    keepData?: boolean;
-  }) => {
-    const {
-      pluginUninstallHandler
-    } = await import('./cli/handlers/plugins.js');
-    await pluginUninstallHandler(plugin, options);
-  });
-
-  // 插件启用命令
-  pluginCmd.command('enable <plugin>').description('Enable a disabled plugin').option('-s, --scope <scope>', `Installation scope: ${VALID_INSTALLABLE_SCOPES.join(', ')} (default: auto-detect)`).addOption(coworkOption()).action(async (plugin: string, options: {
-    scope?: string;
-    cowork?: boolean;
-  }) => {
-    const {
-      pluginEnableHandler
-    } = await import('./cli/handlers/plugins.js');
-    await pluginEnableHandler(plugin, options);
-  });
-
-  // 插件禁用命令
-  pluginCmd.command('disable [plugin]').description('Disable an enabled plugin').option('-a, --all', 'Disable all enabled plugins').option('-s, --scope <scope>', `Installation scope: ${VALID_INSTALLABLE_SCOPES.join(', ')} (default: auto-detect)`).addOption(coworkOption()).action(async (plugin: string | undefined, options: {
-    scope?: string;
-    cowork?: boolean;
-    all?: boolean;
-  }) => {
-    const {
-      pluginDisableHandler
-    } = await import('./cli/handlers/plugins.js');
-    await pluginDisableHandler(plugin, options);
-  });
-
-  // 插件更新命令
-  pluginCmd.command('update <plugin>').description('Update a plugin to the latest version (restart required to apply)').option('-s, --scope <scope>', `Installation scope: ${VALID_UPDATE_SCOPES.join(', ')} (default: user)`).addOption(coworkOption()).action(async (plugin: string, options: {
-    scope?: string;
-    cowork?: boolean;
-  }) => {
-    const {
-      pluginUpdateHandler
-    } = await import('./cli/handlers/plugins.js');
-    await pluginUpdateHandler(plugin, options);
-  });
   // Agents命令 — 列出已配置的agents
   program.command('agents').description('List configured agents').option('--setting-sources <sources>', 'Comma-separated list of setting sources to load (user, project, local).').action(async () => {
     const {

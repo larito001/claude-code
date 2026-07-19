@@ -268,11 +268,6 @@ export type GlobalConfig = {
 
   // 自动完成排名的技能使用跟踪
   skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
-  // LSP插件推荐偏好
-  lspRecommendationDisabled?: boolean // 禁用所有 LSP 插件建议
-  lspRecommendationNeverPlugins?: string[] // 绝不建议的插件 ID
-  lspRecommendationIgnoredCount?: number // 跟踪被忽略的建议（5 后停止）
-
   // 权限解释器配置
   permissionExplainerEnabled?: boolean // 启用俳句生成的权限请求解释（默认值：true）
 
@@ -366,9 +361,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'terminalProgressBarEnabled',
   'showStatusInTerminalTab',
   'respectGitignore',
-  'lspRecommendationDisabled',
-  'lspRecommendationNeverPlugins',
-  'lspRecommendationIgnoredCount',
   'copyFullResponse',
   'copyOnSelect',
   'permissionExplainerEnabled',

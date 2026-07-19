@@ -26,9 +26,7 @@ import type { SessionId } from 'src/types/ids.js'
 // 请勿在此处添加更多状态——谨慎使用全局状态
 
 // 通过--dangerously-load-development-channels传入的条目上设置dev: true。允许列表门控按条目检查此项（而不是会话级别的hasDevChannels位），因此同时传递两个标志不会让开发对话框的接受泄露允许列表绕过到--channels条目。
-export type ChannelEntry =
-  | { kind: 'plugin'; name: string; marketplace: string; dev?: boolean }
-  | { kind: 'server'; name: string; dev?: boolean }
+export type ChannelEntry = { kind: 'server'; name: string; dev?: boolean }
 
 export type AttributedCounter = {
   /** 添加或注册 add 对应的数据或状态。 */
@@ -92,8 +90,6 @@ type State = {
   inMemoryErrorLog: Array<{ error: string; timestamp: string }>
   // 来自--plugin-dir标志的仅会话插件
   inlinePlugins: Array<string>
-  // 使用cowork_plugins目录而非plugins（--cowork标志或环境变量）
-  useCoworkPlugins: boolean
   // 仅会话的绕过权限模式标志（不持久化）
   sessionBypassPermissionsMode: boolean
   // 控制.claude/scheduled_tasks.json监视器的仅会话标志（useScheduledTasks）。当JSON有条目时由cronScheduler.start()设置，或由CronCreateTool设置。不持久化。
@@ -113,7 +109,6 @@ type State = {
   // 追踪是否需要显示自动模式退出附件（一次性通知）
   needsAutoModeExitAttachment: boolean
   // 追踪此会话中是否已显示LSP插件推荐（仅显示一次）
-  lspRecommendationShownThisSession: boolean
   // SDK初始化事件状态 - 用于结构化输出的jsonSchema
   initJsonSchema: Record<string, unknown> | null
   // 注册的钩子 - SDK回调与插件原生钩子
@@ -243,8 +238,6 @@ function getInitialState(): State {
     inMemoryErrorLog: [],
     // 来自--plugin-dir标志的仅会话插件
     inlinePlugins: [],
-    // 使用cowork_plugins目录而不是plugins
-    useCoworkPlugins: false,
     // 仅会话绕过权限模式标志（不持久化）
     sessionBypassPermissionsMode: false,
     // 计划任务被禁用，直到标志或对话框启用它们
@@ -262,7 +255,6 @@ function getInitialState(): State {
     // 跟踪是否需要显示自动模式退出附件
     needsAutoModeExitAttachment: false,
     // 跟踪是否已在此会话中显示LSP插件推荐
-    lspRecommendationShownThisSession: false,
     // SDK初始化事件状态
     initJsonSchema: null,
     registeredHooks: null,
@@ -984,16 +976,6 @@ export function getInlinePlugins(): Array<string> {
 }
 
 /** 设置并保存 set Use Cowork Plugins 对应的数据或状态。 */
-export function setUseCoworkPlugins(value: boolean): void {
-  STATE.useCoworkPlugins = value
-  resetSettingsCache()
-}
-
-/** 获取 get Use Cowork Plugins 对应的数据或状态。 */
-export function getUseCoworkPlugins(): boolean {
-  return STATE.useCoworkPlugins
-}
-
 /** 设置并保存 set Session Bypass Permissions Mode 对应的数据或状态。 */
 export function setSessionBypassPermissionsMode(enabled: boolean): void {
   STATE.sessionBypassPermissionsMode = enabled
@@ -1146,15 +1128,6 @@ export function handleAutoModeTransition(
 }
 
 // LSP插件推荐会话跟踪
-export function hasShownLspRecommendationThisSession(): boolean {
-  return STATE.lspRecommendationShownThisSession
-}
-
-/** 设置并保存 set Lsp Recommendation Shown This Session 对应的数据或状态。 */
-export function setLspRecommendationShownThisSession(value: boolean): void {
-  STATE.lspRecommendationShownThisSession = value
-}
-
 // SDK初始化事件状态
 export function setInitJsonSchema(schema: Record<string, unknown>): void {
   STATE.initJsonSchema = schema

@@ -36,14 +36,14 @@
     "smoke:release": "bun run build && bun --env-file=.env run scripts/smoke-release.ts",
     "smoke:session": "bun --env-file=.env run scripts/smoke-session.ts",
     "smoke:ui": "bun run scripts/smoke-ui.ts",
-    "smoke:all": "bun run check && bun run smoke:core && bun run smoke:cli && bun run smoke:hooks && bun run smoke:api-model && bun run smoke:credentials && bun run smoke:extensions && bun run smoke:ui && bun run smoke:api && bun run smoke:session && bun run smoke:release",
+    "smoke:offline": "bun run check && bun run smoke:core && bun run smoke:cli && bun run smoke:hooks && bun run smoke:api-model && bun run smoke:credentials && bun run smoke:extensions && bun run smoke:ui",
+    "smoke:all": "bun run smoke:offline && bun run smoke:api && bun run smoke:session && bun run smoke:release",
     "check": "bun run typecheck && bun run build && bun run smoke",
     "config": "bun run config-ui/server.ts"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
     "@anthropic-ai/claude-agent-sdk": "0.2.114",
-    "@anthropic-ai/mcpb": "^2.1.2",
     "@anthropic-ai/sandbox-runtime": "^0.0.44",
     "@anthropic-ai/sdk": "^0.80.0",
     "@commander-js/extra-typings": "^14.0.0",

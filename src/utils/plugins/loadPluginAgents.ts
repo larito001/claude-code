@@ -24,12 +24,7 @@ import {
   parseSlashCommandToolsFromFrontmatter,
 } from '../markdownConfigLoader.js'
 import { loadAllPluginsCacheOnly } from './pluginLoader.js'
-import {
-  loadPluginOptions,
-  substitutePluginVariables,
-  substituteUserConfigInContent,
-} from './pluginOptionsStorage.js'
-import type { PluginManifest } from './schemas.js'
+import { substituteLocalPluginVariables } from './localPluginEnvironment.js'
 import { walkPluginMarkdown } from './walkPluginMarkdown.js'
 
 const VALID_MEMORY_SCOPES: AgentMemoryScope[] = ['user', 'project', 'local']
@@ -39,7 +34,6 @@ async function loadAgentsFromDirectory(
   pluginName: string,
   sourceName: string,
   pluginPath: string,
-  pluginManifest: PluginManifest,
   loadedPaths: Set<string>,
 ): Promise<AgentDefinition[]> {
   const agents: AgentDefinition[] = []
@@ -52,7 +46,6 @@ async function loadAgentsFromDirectory(
         namespace,
         sourceName,
         pluginPath,
-        pluginManifest,
         loadedPaths,
       )
       if (agent) agents.push(agent)
@@ -68,7 +61,6 @@ async function loadAgentFromFile(
   namespace: string[],
   sourceName: string,
   pluginPath: string,
-  pluginManifest: PluginManifest,
   loadedPaths: Set<string>,
 ): Promise<AgentDefinition | null> {
   const fs = getFsImplementation()
@@ -108,20 +100,11 @@ async function loadAgentFromFile(
     const background =
       backgroundRaw === 'true' || backgroundRaw === true ? true : undefined
     // Substitute ${CLAUDE_PLUGIN_ROOT} so agents can reference bundled files,
-    // and ${user_config.X} (non-sensitive only) so they can embed configured
-    // usernames, endpoints, etc. Sensitive refs resolve to a placeholder.
-    let systemPrompt = substitutePluginVariables(markdownContent.trim(), {
+    // so local agents can reference bundled files without absolute paths.
+    const systemPrompt = substituteLocalPluginVariables(markdownContent.trim(), {
       path: pluginPath,
       source: sourceName,
     })
-    if (pluginManifest.userConfig) {
-      systemPrompt = substituteUserConfigInContent(
-        systemPrompt,
-        loadPluginOptions(sourceName),
-        pluginManifest.userConfig,
-      )
-    }
-
     // Parse memory scope
     const memoryRaw = frontmatter.memory as string | undefined
     let memory: AgentMemoryScope | undefined
@@ -151,9 +134,9 @@ async function loadAgentFromFile(
     }
 
     // permissionMode, hooks, and mcpServers are intentionally NOT parsed for
-    // plugin agents. Plugins are third-party marketplace code; these fields
-    // escalate what the agent can do beyond what the user approved at install
-    // time. For this level of control, define the agent in .claude/agents/
+    // local plugin agents. These fields escalate what an agent can do beyond
+    // the explicit plugin-directory trust boundary. For this level of control,
+    // define the agent in .claude/agents/
     // where the user explicitly wrote the frontmatter. (Note: plugins can
     // still ship hooks and MCP servers at the manifest level — that's the
     // install-time trust boundary. Per-agent declarations would let a single
@@ -254,7 +237,6 @@ export const loadPluginAgents = memoize(
               plugin.name,
               plugin.source,
               plugin.path,
-              plugin.manifest,
               loadedPaths,
             )
             pluginAgents.push(...agents)
@@ -290,7 +272,6 @@ export const loadPluginAgents = memoize(
                       plugin.name,
                       plugin.source,
                       plugin.path,
-                      plugin.manifest,
                       loadedPaths,
                     )
 
@@ -308,7 +289,6 @@ export const loadPluginAgents = memoize(
                       [],
                       plugin.source,
                       plugin.path,
-                      plugin.manifest,
                       loadedPaths,
                     )
                     if (agent) {

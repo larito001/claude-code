@@ -234,8 +234,8 @@ function getCommandId(cmd: Command): string {
   const commandName = getCommandName(cmd)
   if (cmd.type === 'prompt') {
     // For plugin commands, include the repository to disambiguate
-    if (cmd.source === 'plugin' && cmd.pluginInfo?.repository) {
-      return `${commandName}:${cmd.source}:${cmd.pluginInfo.repository}`
+    if (cmd.source === 'plugin' && cmd.pluginInfo?.source) {
+      return `${commandName}:${cmd.source}:${cmd.pluginInfo.source}`
     }
     return `${commandName}:${cmd.source}`
   }

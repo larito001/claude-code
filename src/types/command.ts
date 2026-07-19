@@ -32,7 +32,7 @@ export type PromptCommand = {
   source: SettingSource | 'builtin' | 'mcp' | 'plugin' | 'bundled'
   pluginInfo?: {
     pluginManifest: PluginManifest
-    repository: string
+    source: string
   }
   disableNonInteractive?: boolean
   // 调用此技能时注册的钩子

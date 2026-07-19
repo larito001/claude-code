@@ -1478,7 +1478,7 @@ export const SDKSystemMessageSchema = lazySchema(() =>
           .string()
           .optional()
           .describe(
-            '@internal Plugin source identifier in "name\\@marketplace" format. Sentinels: "name\\@inline" for --plugin-dir, "name\\@builtin" for built-in plugins.',
+            '@internal Local plugin source identifier in "local:name" format.',
           ),
       }),
     ),

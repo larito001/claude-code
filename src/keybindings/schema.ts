@@ -28,7 +28,6 @@ export const KEYBINDING_CONTEXTS = [
   'DiffDialog',
   'ModelPicker',
   'Select',
-  'Plugin',
 ] as const
 
 /**
@@ -55,7 +54,6 @@ export const KEYBINDING_CONTEXT_DESCRIPTIONS: Record<
   DiffDialog: 'When the diff dialog is open',
   ModelPicker: 'When the model picker is open',
   Select: 'When a select/list component is focused',
-  Plugin: 'When the plugin dialog is open',
 }
 
 /**
@@ -157,9 +155,6 @@ export const KEYBINDING_ACTIONS = [
   'select:previous',
   'select:accept',
   'select:cancel',
-  // Plugin dialog actions
-  'plugin:toggle',
-  'plugin:install',
   // Permission dialog actions
   'permission:toggleDebug',
   // Settings config panel actions

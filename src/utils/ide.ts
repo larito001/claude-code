@@ -894,7 +894,7 @@ async function installIDEExtension(ideType: IdeType): Promise<string | null> {
     }
   }
   // No automatic installation for JetBrains IDEs as it is not supported in native
-  // builds. We show a prominent notice for them to download from the marketplace
+  // builds. We show a prominent notice linking to the IDE vendor's plugin page
   // instead.
   return null
 }

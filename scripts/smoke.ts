@@ -27,10 +27,7 @@ import {
   permissionModeFromString,
   toExternalPermissionMode,
 } from '../src/utils/permissions/PermissionMode.js'
-import {
-  buildPluginId,
-  parsePluginIdentifier,
-} from '../src/utils/plugins/pluginIdentifier.js'
+import { PluginManifestSchema } from '../src/utils/plugins/schemas.js'
 import { getSystemDirectories } from '../src/utils/systemDirectories.js'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -76,7 +73,6 @@ for (const commandName of [
   'hooks',
   'mcp',
   'permissions',
-  'plugin',
   'resume',
 ]) {
   assert(commandNames.has(commandName), `Core command is missing: /${commandName}`)
@@ -107,15 +103,19 @@ assert(
 clearAllAsyncHooks()
 assert(getPendingAsyncHooks().length === 0, 'Async hook registry did not reset')
 
-const parsedPlugin = parsePluginIdentifier('example@marketplace')
 assert(
-  parsedPlugin.name === 'example' && parsedPlugin.marketplace === 'marketplace',
-  'Plugin identifier parsing is broken',
+  PluginManifestSchema().safeParse({
+    name: 'local-extension',
+    dependencies: ['shared-tools'],
+  }).success,
+  'Local plugin manifest rejected a name-only dependency',
 )
 assert(
-  buildPluginId(parsedPlugin.name, parsedPlugin.marketplace) ===
-    'example@marketplace',
-  'Plugin identifier formatting is broken',
+  !PluginManifestSchema().safeParse({
+    name: 'local-extension',
+    dependencies: ['shared-tools@remote-store'],
+  }).success,
+  'Local plugin manifest accepted a remote dependency identifier',
 )
 
 const compactPrompt = getCompactPrompt('Preserve architecture decisions')

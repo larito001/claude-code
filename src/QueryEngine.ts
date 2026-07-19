@@ -557,10 +557,8 @@ export class QueryEngine {
 
     headlessProfilerCheckpoint('before_skills_plugins')
     // 仅缓存：headless/SDK 启动不得在网络上阻塞。
-    // CLAUDE_CODE_SYNC_PLUGIN_INSTALL 可在此之前填充缓存，
-    // (headlessPluginInstall) 或 CLAUDE_CODE_PLUGIN_SEED_DIR 在此运行之前；
     // 需要新源的 SDK 调用者可以调用 /reload-plugins。
-    const [skills, { enabled: enabledPlugins }] = await Promise.all([
+    const [skills, { enabled: loadedPlugins }] = await Promise.all([
       getSlashCommandToolSkills(getCwd()),
       loadAllPluginsCacheOnly(),
     ])
@@ -576,7 +574,7 @@ export class QueryEngine {
       commands,
       agents,
       skills,
-      plugins: enabledPlugins,
+      plugins: loadedPlugins,
       fastMode: initialAppState.fastMode,
     })
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { StructuredIO } from '../src/cli/structuredIO.js'
@@ -209,8 +209,45 @@ try {
   const pluginHelp = await runCli(['plugin', '--help'], temporaryConfig)
   assert(pluginHelp.exitCode === 0, `插件帮助命令失败：${pluginHelp.stderr}`)
   assert(
-    pluginHelp.stdout.includes('marketplace'),
-    '用于自建扩展源的通用 Marketplace 命令缺失',
+    pluginHelp.stdout.includes('validate') &&
+      !pluginHelp.stdout.includes('install') &&
+      !pluginHelp.stdout.includes('update'),
+    '本地插件命令范围不正确',
+  )
+
+  const validPlugin = join(temporaryConfig, 'valid-plugin')
+  await mkdir(join(validPlugin, '.claude-plugin'), { recursive: true })
+  await writeFile(
+    join(validPlugin, '.claude-plugin', 'plugin.json'),
+    JSON.stringify({ name: 'valid-local-plugin', commands: './commands' }),
+  )
+  await mkdir(join(validPlugin, 'commands'))
+  const validResult = await runCli(
+    ['plugin', 'validate', validPlugin],
+    temporaryConfig,
+  )
+  assert(
+    validResult.exitCode === 0 &&
+      validResult.stdout.includes('Validation passed'),
+    `本地插件校验失败：${validResult.stderr}`,
+  )
+
+  const invalidPlugin = join(temporaryConfig, 'invalid-plugin')
+  await mkdir(join(invalidPlugin, '.claude-plugin'), { recursive: true })
+  await writeFile(
+    join(invalidPlugin, '.claude-plugin', 'plugin.json'),
+    JSON.stringify({
+      name: 'invalid-local-plugin',
+      commands: './../outside-plugin-root',
+    }),
+  )
+  const invalidResult = await runCli(
+    ['plugin', 'validate', invalidPlugin],
+    temporaryConfig,
+  )
+  assert(
+    invalidResult.exitCode === 1,
+    '本地插件校验接受了越界组件路径',
   )
 } finally {
   await rm(temporaryConfig, { recursive: true, force: true })

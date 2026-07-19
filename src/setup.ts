@@ -257,20 +257,14 @@ export async function setup(
   profileCheckpoint('setup_before_prefetch')
   // 预取 Promise——仅渲染前需要的项
   logForDiagnosticsNoPII('info', 'setup_prefetch_starting')
-  // 当设置了 CLAUDE_CODE_SYNC_PLUGIN_INSTALL，跳过所有插件预取。
-  // print.ts 中的同步安装路径在安装后调用 refreshPluginState()，这会重新加载命令、钩子和代理。此处的预取与安装竞争（同一目录上的并发 copyPluginToVersionedCache / cachePlugin），当 policySettings 到达时，热重载处理程序会在安装过程中触发 clearPluginCache()。
-  const skipPluginPrefetch =
-    (getIsNonInteractiveSession() &&
-      isEnvTruthy(process.env.CLAUDE_CODE_SYNC_PLUGIN_INSTALL)) ||
-    // --bare：loadPluginHooks → loadAllPlugins 是文件系统操作，当 executeHooks 在 --bare 下提前返回时这些操作是浪费的。
-    isBareMode()
+  // Prefetch explicitly configured local plugins unless bare mode disables them.
+  const skipPluginPrefetch = isBareMode()
   if (!skipPluginPrefetch) {
     void getCommands(getProjectRoot())
   }
   void import('./utils/plugins/loadPluginHooks.js').then(m => {
     if (!skipPluginPrefetch) {
       void m.loadPluginHooks() // 预加载插件钩子（在渲染前由 processSessionStartHooks 消费）
-      m.setupPluginHookHotReload() // 设置设置更改时插件钩子的热重新加载
     }
   })
   initSinks()

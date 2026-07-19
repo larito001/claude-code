@@ -26,11 +26,7 @@ import {
 import { parseUserSpecifiedModel } from '../model/model.js'
 import { executeShellCommandsInPrompt } from '../promptShellExecution.js'
 import { loadAllPluginsCacheOnly } from './pluginLoader.js'
-import {
-  loadPluginOptions,
-  substitutePluginVariables,
-  substituteUserConfigInContent,
-} from './pluginOptionsStorage.js'
+import { substituteLocalPluginVariables } from './localPluginEnvironment.js'
 import type { CommandMetadata, PluginManifest } from './schemas.js'
 import { walkPluginMarkdown } from './walkPluginMarkdown.js'
 
@@ -242,14 +238,14 @@ function createPluginCommand(
     const rawAllowedTools = frontmatter['allowed-tools']
     const substitutedAllowedTools =
       typeof rawAllowedTools === 'string'
-        ? substitutePluginVariables(rawAllowedTools, {
+        ? substituteLocalPluginVariables(rawAllowedTools, {
             path: pluginPath,
             source: sourceName,
           })
         : Array.isArray(rawAllowedTools)
           ? rawAllowedTools.map(tool =>
               typeof tool === 'string'
-                ? substitutePluginVariables(tool, {
+                ? substituteLocalPluginVariables(tool, {
                     path: pluginPath,
                     source: sourceName,
                   })
@@ -316,7 +312,7 @@ function createPluginCommand(
       loadedFrom: isSkill || config.isSkillMode ? 'plugin' : undefined,
       pluginInfo: {
         pluginManifest,
-        repository: sourceName,
+        source: sourceName,
       },
       isHidden: !userInvocable,
       progressMessage: isSkill || config.isSkillMode ? 'loading' : 'running',
@@ -337,22 +333,13 @@ function createPluginCommand(
         )
 
         // Replace ${CLAUDE_PLUGIN_ROOT} and ${CLAUDE_PLUGIN_DATA} with their paths
-        finalContent = substitutePluginVariables(finalContent, {
+        finalContent = substituteLocalPluginVariables(finalContent, {
           path: pluginPath,
           source: sourceName,
         })
 
-        // Replace ${user_config.X} with saved option values. Sensitive keys
         // resolve to a descriptive placeholder instead — skill content goes to
         // the model prompt and we don't put secrets there.
-        if (pluginManifest.userConfig) {
-          finalContent = substituteUserConfigInContent(
-            finalContent,
-            loadPluginOptions(sourceName),
-            pluginManifest.userConfig,
-          )
-        }
-
         // Replace ${CLAUDE_SKILL_DIR} with this specific skill's directory.
         // Distinct from ${CLAUDE_PLUGIN_ROOT}: a plugin can contain multiple
         // skills, so CLAUDE_PLUGIN_ROOT points to the plugin root while
@@ -412,7 +399,7 @@ function createPluginCommand(
 }
 
 export const getPluginCommands = memoize(async (): Promise<Command[]> => {
-  // --bare: skip marketplace plugin auto-load. Explicit --plugin-dir still
+  // --bare skips local plugin loading unless --plugin-dir was explicit.
   // works — getInlinePlugins() is set by main.tsx from --plugin-dir.
   // loadAllPluginsCacheOnly already short-circuits to inline-only when
   // inlinePlugins.length > 0.
@@ -839,7 +826,7 @@ async function loadSkillsFromDirectory(
 
 export const getPluginSkills = memoize(async (): Promise<Command[]> => {
   // --bare: same gate as getPluginCommands above — honor explicit
-  // --plugin-dir, skip marketplace auto-load.
+  // --plugin-dir remains available in bare mode when explicitly supplied.
   if (isBareMode() && getInlinePlugins().length === 0) {
     return []
   }

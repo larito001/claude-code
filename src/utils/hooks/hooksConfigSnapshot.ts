@@ -1,5 +1,4 @@
 import { resetSdkInitState } from '../../bootstrap/state.js'
-import { isRestrictedToPluginOnly } from '../settings/pluginOnlyPolicy.js'
 // 作为模块对象导入，以便 spyOn 在测试中工作（直接导入会绕过 spy）
 import * as settingsModule from '../settings/settings.js'
 import { resetSettingsCache } from '../settings/settingsCache.js'
@@ -26,17 +25,6 @@ function getHooksFromAllowedSources(): HooksSettings {
   // 如果在受管理设置中设置了 allowManagedHooksOnly，则仅使用受管理的 hooks
   if (policySettings?.allowManagedHooksOnly === true) {
     return policySettings.hooks ?? {}
-  }
-
-  // strictPluginOnlyCustomization: 阻止用户/项目/本地设置的 hooks。
-  // 插件 hooks（注册的频道，hooks.ts:1391）不受影响——
-  // 它们被单独组装，且那里的 managedOnly 跳过基于 shouldAllowManagedHooksOnly() 键控，而不是此策略。Agent frontmatter
-  // hooks 在注册时（runAgent.ts:~535）通过 agent 来源被门控——
-  // 插件/内置/policySettings agent 正常注册，用户来源的
-  // agent 在 ["hooks"] 下跳过注册。此处的全面执行时
-  // 阻塞会过度杀死插件 agent 的 hooks。
-  if (isRestrictedToPluginOnly('hooks')) {
-    return policySettings?.hooks ?? {}
   }
 
   const mergedSettings = settingsModule.getSettings_DEPRECATED()

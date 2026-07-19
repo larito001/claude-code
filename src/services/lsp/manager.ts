@@ -212,12 +212,9 @@ export function initializeLspServerManager(): void {
  * successful init. Called from refreshActivePlugins() after plugin caches
  * are cleared, so newly-loaded plugin LSP servers are picked up.
  *
- * Fixes https://github.com/anthropics/claude-code/issues/15521:
- * loadAllPlugins() is memoized and can be called very early in startup
- * (via getCommands prefetch in setup.ts) before marketplaces are reconciled,
- * caching an empty plugin list. initializeLspServerManager() then reads that
- * stale memoized result and initializes with 0 servers. Unlike commands/agents/
- * hooks/MCP, LSP was never re-initialized on plugin refresh.
+ * Local plugin loading is memoized and can run before the session finishes
+ * configuring explicit plugin directories. Reinitialization ensures LSP sees
+ * the same refreshed local plugin set as commands, agents, hooks, and MCP.
  *
  * Safe to call when no LSP plugins changed: initialize() is just config
  * parsing (servers are lazy-started on first use). Also safe during pending

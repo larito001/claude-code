@@ -17,11 +17,7 @@ import { findGitBashPath, windowsPathToPosixPath } from './windowsPaths.js'
 import { getCachedPowerShellPath } from './shell/powershellDetection.js'
 import { DEFAULT_HOOK_SHELL } from './shell/shellProvider.js'
 import { buildPowerShellArgs } from './shell/powershellProvider.js'
-import {
-  loadPluginOptions,
-  substituteUserConfigVariables,
-} from './plugins/pluginOptionsStorage.js'
-import { getPluginDataDir } from './plugins/pluginDirectories.js'
+import { getLocalPluginDataDir } from './plugins/localPluginEnvironment.js'
 import {
   getSessionId,
   getProjectRoot,
@@ -768,28 +764,21 @@ async function execCommandHook(
   // 将 CLAUDE_PROJECT_DIR 设置为稳定的项目根目录（而不是工作树路径）。getProjectRoot() 在进入工作树时从不更新，因此引用 $CLAUDE_PROJECT_DIR 的钩子始终相对于真正的仓库根目录解析。
   const projectDir = getProjectRoot()
 
-  // 在命令字符串中替换 ${CLAUDE_PLUGIN_ROOT} 和 ${user_config.X}。顺序与 MCP/LSP 匹配（插件变量优先，然后是用户配置），因此包含字面文本 ${CLAUDE_PLUGIN_ROOT} 的用户输入值被视为不透明——不会重新解释为模板。
   let command = hook.command
-  let pluginOpts: ReturnType<typeof loadPluginOptions> | undefined
   if (pluginRoot) {
     // 插件目录已消失（孤立的垃圾回收竞争，并发会话删除了它）：抛出异常，以便调用者产生非阻塞错误。运行将失败——且 `python3 <missing>.py` 退出码 2，即钩子协议的“阻止”代码，这会阻塞 UserPromptSubmit/Stop 直到重启。该预检查是必要的，因为因脚本缺失导致的退出码 2 与生成后的有意阻止无法区分。
     if (!(await pathExists(pluginRoot))) {
       throw new Error(
         `Plugin directory does not exist: ${pluginRoot}` +
-          (pluginId ? ` (${pluginId} — run /plugin to reinstall)` : ''),
+          (pluginId ? ` (${pluginId} — restart with a valid --plugin-dir path)` : ''),
       )
     }
     // 内联 ROOT 和 DATA 替换，而不是调用 substitutePluginVariables()。该辅助函数无条件地在 Windows 上规范化 \ → / ——对于 bash 是正确的（toHookPath 已经产生 /c/... 因此是空操作），但对于 PS 是错误的，因为 toHookPath 是恒等函数，我们想要原生的 C:\... 反斜杠。内联还允许我们使用函数形式的 .replace()，从而包含 $ 的路径不会被 $-模式解释破坏（罕见但可能：\\server\c$\plugin）。
     const rootPath = toHookPath(pluginRoot)
     command = command.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, () => rootPath)
     if (pluginId) {
-      const dataPath = toHookPath(getPluginDataDir(pluginId))
+      const dataPath = toHookPath(getLocalPluginDataDir(pluginId))
       command = command.replace(/\$\{CLAUDE_PLUGIN_DATA\}/g, () => dataPath)
-    }
-    if (pluginId) {
-      pluginOpts = loadPluginOptions(pluginId)
-      // 如果引用的键缺失则抛出——这意味着钩子使用了 manifest.userConfig 中未声明或尚未配置的键。像其他钩子执行失败一样在上游捕获。
-      command = substituteUserConfigVariables(command, pluginOpts)
     }
   }
 
@@ -820,15 +809,9 @@ async function execCommandHook(
   if (pluginRoot) {
     envVars.CLAUDE_PLUGIN_ROOT = toHookPath(pluginRoot)
     if (pluginId) {
-      envVars.CLAUDE_PLUGIN_DATA = toHookPath(getPluginDataDir(pluginId))
-    }
-  }
-  // 也将插件选项作为环境变量暴露，以便钩子无需在命令字符串中使用 ${user_config.X} 即可读取它们。包括敏感值——钩子运行用户自己的代码，与直接读取密钥链相同的信任边界。
-  if (pluginOpts) {
-    for (const [key, value] of Object.entries(pluginOpts)) {
-      // 清理非标识符字符（bash 无法引用 $FOO-BAR）。schemas.ts:611 处的模式现在将键限制为 /^[A-Za-z_]\w*$/，因此这是双重保险，但如果有人绕过模式，这是一份廉价保险。
-      const envKey = key.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()
-      envVars[`CLAUDE_PLUGIN_OPTION_${envKey}`] = String(value)
+      envVars.CLAUDE_PLUGIN_DATA = toHookPath(
+        getLocalPluginDataDir(pluginId),
+      )
     }
   }
   if (skillRoot) {
@@ -1400,7 +1383,6 @@ function getHooksConfig(
   // 以防止一个代理的钩子泄漏到另一个代理（例如，验证代理泄漏到主代理）
   // 当设置了 allowManagedHooksOnly 时完全跳过会话钩子——
   // 这可以防止来自代理/技能的前置钩子绕过策略。
-  // strictPluginOnlyCustomization 在此处不阻塞——它在注册站点（runAgent.ts:526 用于代理前置钩子）处进行门控，在那里 agentDefinition.source 是已知的。在此处的全面阻塞也会杀死插件提供的代理的前置钩子，这过于宽泛。
   // 如果未提供 appState，也跳过（为了向后兼容）
   if (!managedOnly && appState !== undefined) {
     const sessionHooks = getSessionHooks(appState, sessionId, hookEvent).get(
