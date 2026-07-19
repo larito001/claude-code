@@ -248,7 +248,7 @@ try {
     const info = await requestJson(baseUrl, '/api/info')
     assert(info.response.ok, 'Config UI info endpoint failed')
     assert(info.data.cwd === tempProject, 'Config UI ignored its working directory')
-    assert(info.data.claudeDir === tempConfig, 'Config UI ignored config isolation')
+    assert(info.data.frameworkDir === tempConfig, 'Config UI ignored config isolation')
     assert(info.data.envPath === tempEnv, 'Config UI ignored env-path override')
 
     const settingsBody = {
@@ -332,14 +332,14 @@ try {
     const claudeMdWrite = await requestJson(baseUrl, '/api/claudemd', {
       method: 'POST',
       body: JSON.stringify({
-        target: 'projectDotClaude',
+        target: 'projectFramework',
         content: 'CLAUDE_MD_CONFIG_OK',
       }),
     })
     assert(claudeMdWrite.response.ok, 'Config UI could not write CLAUDE.md')
     const claudeMdRead = await requestJson(baseUrl, '/api/claudemd')
     assert(
-      claudeMdRead.data.files.projectDotClaude.content ===
+      claudeMdRead.data.files.projectFramework.content ===
         'CLAUDE_MD_CONFIG_OK',
       'Config UI CLAUDE.md round-trip failed',
     )

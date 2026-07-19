@@ -242,7 +242,7 @@ const T = {
     hookTitle:'Hooks',hookD:'Event-driven automation triggers.',hookConfig:'Configuration (JSON)',
     cmdTitle:'CLAUDE.md',cmdD:'Project instructions Claude always follows.',editor:'Editor',
     memTitle:'Memory',memD:'Persistent knowledge across sessions.',noMem:'No memories yet',noMemH:'Extracted automatically from conversations',
-    rawTitle:'Raw Settings',rawD:'Direct JSON editing. Be careful with syntax.',userSettings:'User Settings',projSettings:'Project Settings',localSettings:'Local Settings',scope:'Scope',userScope:'User',projectScope:'Project',userClaude:'User CLAUDE.md',projectClaude:'Project CLAUDE.md',dotClaude:'Project .claude/CLAUDE.md',localClaude:'Local CLAUDE.local.md',
+    rawTitle:'Raw Settings',rawD:'Direct JSON editing. Be careful with syntax.',userSettings:'User Settings',projSettings:'Project Settings',localSettings:'Local Settings',scope:'Scope',userScope:'User',projectScope:'Project',userClaude:'User CLAUDE.md',projectClaude:'Project CLAUDE.md',frameworkClaude:'Project .claude-code-core-framework/CLAUDE.md',localClaude:'Local CLAUDE.local.md',
     saved:'Saved',created:'Created',deleted:'Deleted',removed:'Removed',added:'Added',invalidJson:'Invalid JSON',enterName:'Enter a name',
     create:'Create',add:'Add',
   },
@@ -260,7 +260,7 @@ const T = {
     hookTitle:'自动化钩子',hookD:'事件驱动的自动化操作。',hookConfig:'配置（JSON 格式）',
     cmdTitle:'CLAUDE.md',cmdD:'Claude 每次对话都会遵循的项目级指令。',editor:'编辑器',
     memTitle:'自动记忆',memD:'跨会话的持久化知识存储。',noMem:'暂无记忆',noMemH:'会自动从对话中提取',
-    rawTitle:'原始设置',rawD:'直接编辑 JSON 文件，注意语法正确性。',userSettings:'用户设置',projSettings:'项目设置',localSettings:'本地设置',scope:'作用域',userScope:'用户',projectScope:'项目',userClaude:'用户 CLAUDE.md',projectClaude:'项目 CLAUDE.md',dotClaude:'项目 .claude/CLAUDE.md',localClaude:'本地 CLAUDE.local.md',
+    rawTitle:'原始设置',rawD:'直接编辑 JSON 文件，注意语法正确性。',userSettings:'用户设置',projSettings:'项目设置',localSettings:'本地设置',scope:'作用域',userScope:'用户',projectScope:'项目',userClaude:'用户 CLAUDE.md',projectClaude:'项目 CLAUDE.md',frameworkClaude:'项目 .claude-code-core-framework/CLAUDE.md',localClaude:'本地 CLAUDE.local.md',
     saved:'已保存',created:'已创建',deleted:'已删除',removed:'已移除',added:'已添加',invalidJson:'JSON 格式错误',enterName:'请输入名称',
     create:'创建',add:'添加',
   }
@@ -397,7 +397,7 @@ function render() {
 <!-- CLAUDE.md -->
 <div class="panel" id="p-claudemd">
   <div class="pg-h"><h1>${t('cmdTitle')}</h1><p>${t('cmdD')}</p></div>
-  <div class="card"><div class="card-t">${t('editor')}</div><div class="field" style="margin-top:14px"><select class="inp" id="f-cmt" onchange="switchCm()"><option value="user">${t('userClaude')}</option><option value="project">${t('projectClaude')}</option><option value="projectDotClaude">${t('dotClaude')}</option><option value="local">${t('localClaude')}</option></select></div><div class="card-desc" id="cm-path"></div><textarea class="inp" id="f-cm" style="margin-top:12px;min-height:340px" placeholder="# Project Instructions"></textarea></div>
+  <div class="card"><div class="card-t">${t('editor')}</div><div class="field" style="margin-top:14px"><select class="inp" id="f-cmt" onchange="switchCm()"><option value="project">${t('projectClaude')}</option><option value="projectFramework">${t('frameworkClaude')}</option><option value="user">${t('userClaude')}</option><option value="local">${t('localClaude')}</option></select></div><div class="card-desc" id="cm-path"></div><textarea class="inp" id="f-cm" style="margin-top:12px;min-height:340px" placeholder="# Project Instructions"></textarea></div>
   <div class="acts"><button class="btn btn-p" onclick="saveCm()">${t('save')}</button></div>
 </div>
 
@@ -443,7 +443,7 @@ async function mkMcp(){const n=$('f-mn')?.value.trim(),tp=$('f-mt')?.value;if(!n
 async function dlMcp(n){if(!confirm(t('remove')+'?'))return;n=decodeURIComponent(n);const c={...MC};delete c.mcpServers[n];await api('mcp','POST',c);toast(t('removed'));loadMc()}
 
 function switchCm(){const x=CM.files?.[$('f-cmt')?.value];if(x){$('f-cm').value=x.content;$('cm-path').textContent=x.path}}
-async function loadCm(){CM=await api('claudemd');if(!$('f-cmt'))return;const selected=Object.entries(CM.files||{}).find(([,x])=>x.path===CM.path)?.[0]||'project';$('f-cmt').value=selected;switchCm()}
+async function loadCm(){const selected=$('f-cmt')?.value||'project';CM=await api('claudemd');if(!$('f-cmt'))return;$('f-cmt').value=CM.files?.[selected]?selected:'project';switchCm()}
 async function saveCm(){const target=$('f-cmt').value;await api('claudemd','POST',{target,content:$('f-cm').value});toast(t('saved'));await loadCm()}
 
 async function loadMem(){const m=await api('memory');if($('s-m'))$('s-m').textContent=m.length;const el=$('mem-g');if(!el)return;if(!m.length){el.innerHTML=`<div class="empty" style="grid-column:1/-1"><p>${t('noMem')}</p><small>${t('noMemH')}</small></div>`;return}el.innerHTML=m.map(x=>`<div class="mem-c"><h4>${esc(x.name)}</h4><pre>${esc(x.content)}</pre></div>`).join('')}

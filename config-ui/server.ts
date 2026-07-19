@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 /**
- * Claude Code Config UI Server
- * A lightweight web dashboard for managing all Claude Code settings.
+ * Core framework Config UI Server
+ * A lightweight web dashboard for managing framework settings.
  * Run: bun run config
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, rmdirSync } from 'fs'
 import { join, dirname, resolve, relative, isAbsolute } from 'path'
-import { getClaudeConfigHomeDir } from '../src/utils/envUtils.js'
+import { getFrameworkConfigHomeDir } from '../src/utils/envUtils.js'
 import { getSettingsFilePathForSource } from '../src/utils/settings/settings.js'
 import { getAutoMemPath } from '../src/memdir/paths.js'
 import { getOriginalCwd } from '../src/bootstrap/state.js'
@@ -15,7 +15,8 @@ import { getDefaultFeatures, getOptionalFeatures } from '../src/utils/features.j
 
 const CWD = getOriginalCwd()
 const APP_ROOT = resolve(import.meta.dir, '..')
-const CLAUDE_DIR = getClaudeConfigHomeDir()
+const FRAMEWORK_DIR = getFrameworkConfigHomeDir()
+const PROJECT_FRAMEWORK_DIR = join(CWD, '.claude-code-core-framework')
 const CONFIGURED_PORT = process.env.CONFIG_PORT
 const PORT = CONFIGURED_PORT === undefined ? 3456 : Number(CONFIGURED_PORT)
 
@@ -24,7 +25,7 @@ if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) {
 }
 
 type ConfigScope = 'user' | 'project'
-type ClaudeMdTarget = 'user' | 'project' | 'projectDotClaude' | 'local'
+type ClaudeMdTarget = 'user' | 'project' | 'projectFramework' | 'local'
 
 // --- Path Helpers ---
 
@@ -45,11 +46,11 @@ function getMcpConfigPath() {
 }
 
 function getAgentsDir(scope: ConfigScope = 'project') {
-  return join(scope === 'user' ? CLAUDE_DIR : join(CWD, '.claude'), 'agents')
+  return join(scope === 'user' ? FRAMEWORK_DIR : PROJECT_FRAMEWORK_DIR, 'agents')
 }
 
 function getSkillsDir(scope: ConfigScope = 'project') {
-  return join(scope === 'user' ? CLAUDE_DIR : join(CWD, '.claude'), 'skills')
+  return join(scope === 'user' ? FRAMEWORK_DIR : PROJECT_FRAMEWORK_DIR, 'skills')
 }
 
 function getMemoryDir() {
@@ -63,21 +64,15 @@ function getEnvPath() {
 
 function getClaudeMdPaths(): Record<ClaudeMdTarget, string> {
   return {
-    user: join(CLAUDE_DIR, 'CLAUDE.md'),
+    user: join(FRAMEWORK_DIR, 'CLAUDE.md'),
     project: join(CWD, 'CLAUDE.md'),
-    projectDotClaude: join(CWD, '.claude', 'CLAUDE.md'),
+    projectFramework: join(PROJECT_FRAMEWORK_DIR, 'CLAUDE.md'),
     local: join(CWD, 'CLAUDE.local.md'),
   }
 }
 
-function getLegacyClaudeMdPath() {
-  const paths = getClaudeMdPaths()
-  if (existsSync(paths.projectDotClaude)) return paths.projectDotClaude
-  return paths.project
-}
-
 function getRulesDir(scope: ConfigScope = 'project') {
-  return join(scope === 'user' ? CLAUDE_DIR : join(CWD, '.claude'), 'rules')
+  return join(scope === 'user' ? FRAMEWORK_DIR : PROJECT_FRAMEWORK_DIR, 'rules')
 }
 
 function parseScope(value: unknown): ConfigScope | null {
@@ -363,18 +358,17 @@ async function handleAPI(req: Request): Promise<Response> {
       target,
       { path: filePath, content: readTextSafe(filePath) },
     ]))
-    const legacyPath = getLegacyClaudeMdPath()
     const rules = (['user', 'project'] as const).flatMap(scope =>
       listMdFiles(getRulesDir(scope)).map(rule => ({ ...rule, scope })),
     )
-    return Response.json({ claudeMd: readTextSafe(legacyPath), path: legacyPath, files, rules })
+    return Response.json({ files, rules })
   }
 
   if (path === '/api/claudemd' && req.method === 'POST') {
     const body = await req.json() as { content?: unknown; target?: unknown }
     if (typeof body.content !== 'string') return badRequest('Invalid content')
     const paths = getClaudeMdPaths()
-    const target = body.target === undefined ? getLegacyClaudeMdPath() : paths[body.target as ClaudeMdTarget]
+    const target = paths[body.target as ClaudeMdTarget]
     if (!target) return badRequest('Invalid CLAUDE.md target')
     writeTextSafe(target, body.content)
     return Response.json({ ok: true })
@@ -384,7 +378,7 @@ async function handleAPI(req: Request): Promise<Response> {
   if (path === '/api/info' && req.method === 'GET') {
     return Response.json({
       cwd: CWD,
-      claudeDir: CLAUDE_DIR,
+      frameworkDir: FRAMEWORK_DIR,
       settingsPaths: {
         user: getUserSettingsPath(),
         project: getProjectSettingsPath(),
@@ -433,7 +427,7 @@ const server = Bun.serve({
 })
 
 console.log(`
-  Claude Code Config UI
+  Core Framework Config UI
   http://localhost:${server.port}
 
   Working directory: ${CWD}
