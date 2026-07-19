@@ -19,9 +19,8 @@ import {
 } from './settings/constants.js'
 import { getManagedFilePath } from './settings/managedPath.js'
 
-// Claude configuration directory names
+// Framework configuration directory names
 export const FRAMEWORK_CONFIG_DIRECTORIES = [
-  'commands',
   'agents',
   'output-styles',
   'skills',
@@ -216,11 +215,11 @@ function resolveStopBoundary(cwd: string): string | null {
  * Traverses from the current directory up to the git root (or home directory if not in a git repo),
  * collecting all .claude-code-core-framework directories along the way.
  *
- * Stopping at git root prevents commands/skills from parent directories outside the repository
- * from leaking into projects. For example, if ~/projects/.claude-code-core-framework/commands/ exists, it won't
+ * Stopping at git root prevents skills and agents from parent directories outside the repository
+ * from leaking into projects. For example, a parent skills directory won't
  * appear in ~/projects/my-repo/ if my-repo is a git repository.
  *
- * @param subdir Subdirectory (eg. "commands", "agents")
+ * @param subdir Subdirectory (eg. "skills", "agents")
  * @param cwd Current working directory to start from
  * @returns Array of directory paths containing .claude-code-core-framework/subdir, from most specific (cwd) to least specific
  */
@@ -257,7 +256,7 @@ export function getProjectDirsUpToHome(
       if (!isFsInaccessible(e)) throw e
     }
 
-    // Stop after processing the git root directory - this prevents commands from parent
+    // Stop after processing the git root directory - this prevents configuration from parent
     // directories outside the repository from appearing in the project
     if (
       gitRoot &&
@@ -283,7 +282,7 @@ export function getProjectDirsUpToHome(
 
 /**
  * Loads markdown files from managed, user, and project directories
- * @param subdir Subdirectory (eg. "agents" or "commands")
+ * @param subdir Subdirectory (eg. "agents" or "skills")
  * @param cwd Current working directory for project directory traversal
  * @returns Array of parsed markdown files with metadata
  */
@@ -522,7 +521,7 @@ async function findMarkdownFilesNative(
 
 /**
  * Generic function to load markdown files from specified directories
- * @param dir Directory (eg. "~/.claude-code-core-framework/commands")
+ * @param dir Directory (eg. "~/.claude-code-core-framework/skills")
  * @returns Array of parsed markdown files with metadata
  */
 async function loadMarkdownFiles(dir: string): Promise<

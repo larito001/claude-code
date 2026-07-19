@@ -138,36 +138,9 @@ export function isTranscriptMessage(entry: Entry): entry is TranscriptMessage {
   )
 }
 
-/**
- * 参与parentUuid链的条目。用于写入路径
- * (insertMessageChain, useLogMessages) 分配时跳过进度
- * 父Uuid。处理已在链中取得进展的旧成绩单
- * 通过loadTranscriptFile中的progressBridge重写。
- */
+/** 参与 parentUuid 链的消息；实时进度消息只写入日志，不作为父节点。 */
 export function isChainParticipant(m: Pick<Message, 'type'>): boolean {
   return m.type !== 'progress'
-}
-
-type LegacyProgressEntry = {
-  type: 'progress'
-  uuid: UUID
-  parentUuid: UUID | null
-}
-
-/**
- * PR #24099 之前编写的成绩单中的进度条目。他们不是
- * 不再存在于 Entry 类型联合中，但仍以 uuid 存在于磁盘上并且
- * ParentUuid 字段。 loadTranscriptFile 在它们之间架起了桥梁。
- */
-function isLegacyProgressEntry(entry: unknown): entry is LegacyProgressEntry {
-  return (
-    typeof entry === 'object' &&
-    entry !== null &&
-    'type' in entry &&
-    entry.type === 'progress' &&
-    'uuid' in entry &&
-    typeof entry.uuid === 'string'
-  )
 }
 
 /**
@@ -2974,36 +2947,8 @@ export async function loadTranscriptFile(
 
     const entries = parseJSONL<Entry>(buf)
 
-    // 旧进度条目的桥接图：progress_uuid→progress_parent_uuid。
-    // PR #24099 删除了 isTranscriptMessage 的进度，因此旧的成绩单带有
-    // ParentUuid 链中的进度将在 buildConversationChain 处截断
-    // 当 messages.get(progressUuid) 返回未定义时。由于成绩单是
-    // 仅附加（父母在孩子之前），我们记录每个进度→父链接
-    // 正如我们所看到的，通过连续的进度条目进行链式解析，然后
-    // 重写其parentUuid 到达网桥的任何后续消息。
-    const progressBridge = new Map<UUID, UUID | null>()
-
     for (const entry of entries) {
-      // 传统进度检查在 Entry 类型的 else-if 链之前运行 -
-      // 进度不在 Entry 联合中，因此在 TypeScript 之后检查它
-      // 已将“entry”相交范围缩小为“never”。
-      if (isLegacyProgressEntry(entry)) {
-        // 通过连续的进度条目进行链式解析，稍后再进行
-        // 指向进度运行尾部的消息桥接到
-        // 一次查找中最近的非进度祖先。
-        const parent = entry.parentUuid
-        progressBridge.set(
-          entry.uuid,
-          parent && progressBridge.has(parent)
-            ? (progressBridge.get(parent) ?? null)
-            : parent,
-        )
-        continue
-      }
       if (isTranscriptMessage(entry)) {
-        if (entry.parentUuid && progressBridge.has(entry.parentUuid)) {
-          entry.parentUuid = progressBridge.get(entry.parentUuid) ?? null
-        }
         messages.set(entry.uuid, entry)
       } else if (entry.type === 'summary' && entry.leafUuid) {
         summaries.set(entry.leafUuid, entry.summary)

@@ -2056,7 +2056,6 @@ function runHeadlessStreaming(
                   // 取消分配由此队友拥有的任务
                   await unassignTeammateTasks(
                     teamName,
-                    teammateId,
                     teammateToRemove,
                     'shutdown',
                   )

@@ -166,7 +166,6 @@ export type CommandBase = {
   disableModelInvocation?: boolean // 是否禁止模型调用此命令
   userInvocable?: boolean // 用户是否可以通过输入 /skill-name 调用此技能
   loadedFrom?:
-    | 'commands_DEPRECATED'
     | 'skills'
     | 'plugin'
     | 'managed'

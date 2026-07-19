@@ -2,7 +2,6 @@ import { mkdir, readdir, readFile, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { z } from 'zod/v4'
 import { getIsNonInteractiveSession, getSessionId } from '../bootstrap/state.js'
-import { uniq } from './array.js'
 import { logForDebugging } from './debug.js'
 import { getFrameworkConfigHomeDir, getTeamsDir, isEnvTruthy } from './envUtils.js'
 import { errorMessage, getErrnoCode } from './errors.js'
@@ -779,10 +778,7 @@ export async function getAgentStatuses(
 
   // Build status for each agent (leader is already in members)
   return teamData.members.map(member => {
-    // Check both name (new) and agentId (legacy) for backwards compatibility
-    const tasksByName = unresolvedTasksByOwner.get(member.name) || []
-    const tasksById = unresolvedTasksByOwner.get(member.agentId) || []
-    const currentTasks = uniq([...tasksByName, ...tasksById])
+    const currentTasks = unresolvedTasksByOwner.get(member.name) || []
     return {
       agentId: member.agentId,
       name: member.name,
@@ -806,22 +802,18 @@ export type UnassignTasksResult = {
  * Used when a teammate is killed or gracefully shuts down.
  *
  * @param teamName - The team/task list name
- * @param teammateId - The teammate's agent ID
  * @param teammateName - The teammate's display name
  * @param reason - How the teammate exited ('terminated' | 'shutdown')
  * @returns The unassigned tasks and a formatted notification message
  */
 export async function unassignTeammateTasks(
   teamName: string,
-  teammateId: string,
   teammateName: string,
   reason: 'terminated' | 'shutdown',
 ): Promise<UnassignTasksResult> {
   const tasks = await listTasks(teamName)
   const unresolvedAssignedTasks = tasks.filter(
-    t =>
-      t.status !== 'completed' &&
-      (t.owner === teammateId || t.owner === teammateName),
+    t => t.status !== 'completed' && t.owner === teammateName,
   )
 
   // Unassign each task and reset status to open

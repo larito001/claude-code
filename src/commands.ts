@@ -273,7 +273,7 @@ export function getMcpSkillCommands(
   )
 }
 
-// SkillTool 显示模型可以调用的所有基于 prompt 的命令，包括技能（来自 /skills/）和命令（来自 /commands/）。
+// SkillTool 显示模型可以调用的所有基于 prompt 的技能。
 /** 获取 get Skill Tool Commands 对应的数据或状态。 */
 export const getSkillToolCommands = memoize(
   async (cwd: string): Promise<Command[]> => {
@@ -283,10 +283,9 @@ export const getSkillToolCommands = memoize(
         cmd.type === 'prompt' &&
         !cmd.disableModelInvocation &&
         cmd.source !== 'builtin' &&
-        // 始终包含来自 /skills/ 目录的技能、捆绑技能以及旧 /commands/ 条目（如果缺少 frontmatter，它们都会从第一行自动派生描述）。插件/MCP 命令仍需显式描述才能在列表中显示。
+        // 始终包含 Skills 目录和捆绑技能。插件/MCP 命令仍需显式描述才能在列表中显示。
         (cmd.loadedFrom === 'bundled' ||
           cmd.loadedFrom === 'skills' ||
-          cmd.loadedFrom === 'commands_DEPRECATED' ||
           cmd.hasUserSpecifiedDescription ||
           cmd.whenToUse),
     )

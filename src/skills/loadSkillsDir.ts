@@ -2,7 +2,6 @@ import { realpath } from 'fs/promises'
 import ignore from 'ignore'
 import memoize from 'lodash-es/memoize.js'
 import {
-  basename,
   dirname,
   isAbsolute,
   join,
@@ -46,8 +45,6 @@ import { logError } from '../utils/log.js'
 import {
   extractDescriptionFromMarkdown,
   getProjectDirsUpToHome,
-  loadMarkdownFilesForSubdir,
-  type MarkdownFile,
   parseSlashCommandToolsFromFrontmatter,
 } from '../utils/markdownConfigLoader.js'
 import { parseUserSpecifiedModel } from '../utils/model/model.js'
@@ -60,7 +57,6 @@ import { createSignal } from '../utils/signal.js'
 import { registerMCPSkillBuilders } from './mcpSkillBuilders.js'
 
 export type LoadedFrom =
-  | 'commands_DEPRECATED'
   | 'skills'
   | 'plugin'
   | 'managed'
@@ -68,19 +64,16 @@ export type LoadedFrom =
   | 'mcp'
 
 /**
- * Returns a claude config directory path for a given source.
+ * Returns the Skills directory path for a given source.
  */
-export function getSkillsPath(
-  source: SettingSource | 'plugin',
-  dir: 'skills' | 'commands',
-): string {
+export function getSkillsPath(source: SettingSource | 'plugin'): string {
   switch (source) {
     case 'policySettings':
-      return join(getManagedFilePath(), '.claude-code-core-framework', dir)
+      return join(getManagedFilePath(), '.claude-code-core-framework', 'skills')
     case 'userSettings':
-      return join(getFrameworkConfigHomeDir(), dir)
+      return join(getFrameworkConfigHomeDir(), 'skills')
     case 'projectSettings':
-      return `.claude-code-core-framework/${dir}`
+      return '.claude-code-core-framework/skills'
     case 'plugin':
       return 'plugin'
     default:
@@ -474,162 +467,7 @@ async function loadSkillsFromSkillsDir(
   return results.filter((r): r is SkillWithPath => r !== null)
 }
 
-// --- Legacy /commands/ loader ---
-
-function isSkillFile(filePath: string): boolean {
-  return /^skill\.md$/i.test(basename(filePath))
-}
-
-/**
- * Transforms markdown files to handle "skill" commands in legacy /commands/ folder.
- * When a SKILL.md file exists in a directory, only that file is loaded
- * and it takes the name of its parent directory.
- */
-function transformSkillFiles(files: MarkdownFile[]): MarkdownFile[] {
-  const filesByDir = new Map<string, MarkdownFile[]>()
-
-  for (const file of files) {
-    const dir = dirname(file.filePath)
-    const dirFiles = filesByDir.get(dir) ?? []
-    dirFiles.push(file)
-    filesByDir.set(dir, dirFiles)
-  }
-
-  const result: MarkdownFile[] = []
-
-  for (const [dir, dirFiles] of filesByDir) {
-    const skillFiles = dirFiles.filter(f => isSkillFile(f.filePath))
-    if (skillFiles.length > 0) {
-      const skillFile = skillFiles[0]!
-      if (skillFiles.length > 1) {
-        logForDebugging(
-          `Multiple skill files found in ${dir}, using ${basename(skillFile.filePath)}`,
-        )
-      }
-      result.push(skillFile)
-    } else {
-      result.push(...dirFiles)
-    }
-  }
-
-  return result
-}
-
-function buildNamespace(targetDir: string, baseDir: string): string {
-  const normalizedBaseDir = baseDir.endsWith(pathSep)
-    ? baseDir.slice(0, -1)
-    : baseDir
-
-  if (targetDir === normalizedBaseDir) {
-    return ''
-  }
-
-  const relativePath = targetDir.slice(normalizedBaseDir.length + 1)
-  return relativePath ? relativePath.split(pathSep).join(':') : ''
-}
-
-function getSkillCommandName(filePath: string, baseDir: string): string {
-  const skillDirectory = dirname(filePath)
-  const parentOfSkillDir = dirname(skillDirectory)
-  const commandBaseName = basename(skillDirectory)
-
-  const namespace = buildNamespace(parentOfSkillDir, baseDir)
-  return namespace ? `${namespace}:${commandBaseName}` : commandBaseName
-}
-
-function getRegularCommandName(filePath: string, baseDir: string): string {
-  const fileName = basename(filePath)
-  const fileDirectory = dirname(filePath)
-  const commandBaseName = fileName.replace(/\.md$/, '')
-
-  const namespace = buildNamespace(fileDirectory, baseDir)
-  return namespace ? `${namespace}:${commandBaseName}` : commandBaseName
-}
-
-function getCommandName(file: MarkdownFile): string {
-  const isSkill = isSkillFile(file.filePath)
-  return isSkill
-    ? getSkillCommandName(file.filePath, file.baseDir)
-    : getRegularCommandName(file.filePath, file.baseDir)
-}
-
-/**
- * Loads skills from legacy /commands/ directories.
- * Supports both directory format (SKILL.md) and single .md file format.
- * Commands from /commands/ default to user-invocable: true
- */
-async function loadSkillsFromCommandsDir(
-  cwd: string,
-): Promise<SkillWithPath[]> {
-  try {
-    const markdownFiles = await loadMarkdownFilesForSubdir('commands', cwd)
-    const processedFiles = transformSkillFiles(markdownFiles)
-
-    const skills: SkillWithPath[] = []
-
-    for (const {
-      baseDir,
-      filePath,
-      frontmatter,
-      content,
-      source,
-    } of processedFiles) {
-      try {
-        const isSkillFormat = isSkillFile(filePath)
-        const skillDirectory = isSkillFormat ? dirname(filePath) : undefined
-        const cmdName = getCommandName({
-          baseDir,
-          filePath,
-          frontmatter,
-          content,
-          source,
-        })
-
-        const parsed = parseSkillFrontmatterFields(
-          frontmatter,
-          content,
-          cmdName,
-          'Custom command',
-        )
-
-        skills.push({
-          skill: createSkillCommand({
-            ...parsed,
-            skillName: cmdName,
-            displayName: undefined,
-            markdownContent: content,
-            source,
-            baseDir: skillDirectory,
-            loadedFrom: 'commands_DEPRECATED',
-            paths: undefined,
-          }),
-          filePath,
-        })
-      } catch (error) {
-        logError(error)
-      }
-    }
-
-    return skills
-  } catch (error) {
-    logError(error)
-    return []
-  }
-}
-
-/**
- * Loads all skills from both /skills/ and legacy /commands/ directories.
- *
- * Skills from /skills/ directories:
- * - Only support directory format: skill-name/SKILL.md
- * - Default to user-invocable: true (can opt-out with user-invocable: false)
- *
- * Skills from legacy /commands/ directories:
- * - Support both directory format (SKILL.md) and single .md file format
- * - Default to user-invocable: true (user can type /cmd)
- *
- * @param cwd Current working directory for project directory traversal
- */
+/** 加载 Skills 目录中的所有技能。 */
 export const getSkillDirCommands = memoize(
   async (cwd: string): Promise<Command[]> => {
     const userSkillsDir = join(getFrameworkConfigHomeDir(), 'skills')
@@ -644,8 +482,7 @@ export const getSkillDirCommands = memoize(
     const additionalDirs = getAdditionalDirectoriesForClaudeMd()
     const projectSettingsEnabled = isSettingSourceEnabled('projectSettings')
 
-    // --bare: skip auto-discovery (managed/user/project dir walks + legacy
-    // commands-dir). Load ONLY explicit --add-dir paths. Bundled skills
+    // --bare: skip auto-discovery (managed/user/project dir walks). Load ONLY explicit --add-dir paths. Bundled skills
     // register separately. skillsLocked still applies — --bare is not a
     // policy bypass.
     if (isBareMode()) {
@@ -667,14 +504,13 @@ export const getSkillDirCommands = memoize(
       return additionalSkillsNested.flat().map(s => s.skill)
     }
 
-    // Load from /skills/ directories, additional dirs, and legacy /commands/ in parallel
+    // Load from /skills/ directories and additional dirs in parallel
     // (all independent — different directories, no shared state)
     const [
       managedSkills,
       userSkills,
       projectSkillsNested,
       additionalSkillsNested,
-      legacyCommands,
     ] = await Promise.all([
       isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_POLICY_SKILLS)
         ? Promise.resolve([])
@@ -699,11 +535,6 @@ export const getSkillDirCommands = memoize(
             ),
           )
         : Promise.resolve([]),
-      // Legacy commands-as-skills goes through markdownConfigLoader with
-      // subdir='commands', which our agents-only guard there skips. Block
-      // here when skills are locked — these ARE skills, regardless of the
-      // directory they load from.
-      loadSkillsFromCommandsDir(cwd),
     ])
 
     // Flatten and combine all skills
@@ -712,7 +543,6 @@ export const getSkillDirCommands = memoize(
       ...userSkills,
       ...projectSkillsNested.flat(),
       ...additionalSkillsNested.flat(),
-      ...legacyCommands,
     ]
 
     // Deduplicate by resolved path (handles symlinks and duplicate parent directories)
@@ -789,7 +619,7 @@ export const getSkillDirCommands = memoize(
     }
 
     logForDebugging(
-      `Loaded ${deduplicatedSkills.length} unique skills (${unconditionalSkills.length} unconditional, ${newConditionalSkills.length} conditional, managed: ${managedSkills.length}, user: ${userSkills.length}, project: ${projectSkillsNested.flat().length}, additional: ${additionalSkillsNested.flat().length}, legacy commands: ${legacyCommands.length})`,
+      `Loaded ${deduplicatedSkills.length} unique skills (${unconditionalSkills.length} unconditional, ${newConditionalSkills.length} conditional, managed: ${managedSkills.length}, user: ${userSkills.length}, project: ${projectSkillsNested.flat().length}, additional: ${additionalSkillsNested.flat().length})`,
     )
 
     return unconditionalSkills
@@ -798,15 +628,9 @@ export const getSkillDirCommands = memoize(
 
 export function clearSkillCaches() {
   getSkillDirCommands.cache?.clear?.()
-  loadMarkdownFilesForSubdir.cache?.clear?.()
   conditionalSkills.clear()
   activatedConditionalSkillNames.clear()
 }
-
-// Backwards-compatible aliases for tests
-export { getSkillDirCommands as getCommandDirCommands }
-export { clearSkillCaches as clearCommandCaches }
-export { transformSkillFiles }
 
 // --- Dynamic skill discovery ---
 

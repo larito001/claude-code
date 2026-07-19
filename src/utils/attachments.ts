@@ -2737,7 +2737,7 @@ export async function* getAttachmentMessages(
  * @param filename The absolute path to the file to read
  * @param toolUseContext The tool use context for calling FileReadTool
  * @param options Optional configuration for file reading
- * @returns A new_file attachment or null if the file couldn't be read
+ * @returns A file attachment or null if the file couldn't be read
  */
 /**
  * Check if a PDF file should be represented as a lightweight reference
@@ -3440,7 +3440,6 @@ async function getTeammateMailboxAttachments(
           // Unassign tasks owned by this teammate
           await unassignTeammateTasks(
             teamName,
-            teammateId,
             teammateToRemove,
             'shutdown',
           )

@@ -1,13 +1,10 @@
 import type { UUID } from 'crypto'
-import { relative } from 'path'
-import { getCwd } from 'src/utils/cwd.js'
 import { addInvokedSkill } from '../bootstrap/state.js'
 import { asSessionId } from '../types/ids.js'
 import type {
   AttributionSnapshotMessage,
   LogOption,
   PersistedWorktreeSession,
-  SerializedMessage,
 } from '../types/logs.js'
 import type {
   Message,
@@ -45,66 +42,6 @@ import {
 } from './sessionStorage.js'
 import type { ContentReplacementRecord } from './toolResultStorage.js'
 
-/**
- * Transforms legacy attachment types to current types for backward compatibility
- */
-function migrateLegacyAttachmentTypes(message: Message): Message {
-  if (message.type !== 'attachment') {
-    return message
-  }
-
-  const attachment = message.attachment as {
-    type: string
-    [key: string]: unknown
-  } // Handle legacy types not in current type system
-
-  // Transform legacy attachment types
-  if (attachment.type === 'new_file') {
-    return {
-      ...message,
-      attachment: {
-        ...attachment,
-        type: 'file',
-        displayPath: relative(getCwd(), attachment.filename as string),
-      },
-    } as SerializedMessage // Cast entire message since we know the structure is correct
-  }
-
-  if (attachment.type === 'new_directory') {
-    return {
-      ...message,
-      attachment: {
-        ...attachment,
-        type: 'directory',
-        displayPath: relative(getCwd(), attachment.path as string),
-      },
-    } as SerializedMessage // Cast entire message since we know the structure is correct
-  }
-
-  // Backfill displayPath for attachments from old sessions
-  if (!('displayPath' in attachment)) {
-    const path =
-      'filename' in attachment
-        ? (attachment.filename as string)
-        : 'path' in attachment
-          ? (attachment.path as string)
-          : 'skillDir' in attachment
-            ? (attachment.skillDir as string)
-            : undefined
-    if (path) {
-      return {
-        ...message,
-        attachment: {
-          ...attachment,
-          displayPath: relative(getCwd(), path),
-        },
-      } as Message
-    }
-  }
-
-  return message
-}
-
 export type TurnInterruptionState =
   | { kind: 'none' }
   | { kind: 'interrupted_prompt'; message: NormalizedUserMessage }
@@ -134,15 +71,10 @@ export function deserializeMessagesWithInterruptDetection(
   serializedMessages: Message[],
 ): DeserializeResult {
   try {
-    // Transform legacy attachment types before processing
-    const migratedMessages = serializedMessages.map(
-      migrateLegacyAttachmentTypes,
-    )
-
     // Strip invalid permissionMode values from deserialized user messages.
     // The field is unvalidated JSON from disk and may contain modes from a different build.
     const validModes = new Set<string>(PERMISSION_MODES)
-    for (const msg of migratedMessages) {
+    for (const msg of serializedMessages) {
       if (
         msg.type === 'user' &&
         msg.permissionMode !== undefined &&
@@ -154,7 +86,7 @@ export function deserializeMessagesWithInterruptDetection(
 
     // Filter out unresolved tool uses and any synthetic messages that follow them
     const filteredToolUses = filterUnresolvedToolUses(
-      migratedMessages,
+      serializedMessages,
     ) as NormalizedMessage[]
 
     // Filter out orphaned thinking-only assistant messages that can cause API errors

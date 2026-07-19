@@ -578,7 +578,7 @@ async function killTeammate(paneId: string, backendType: PaneBackendType | undef
   // Unassign tasks and build notification message
   const {
     notificationMessage
-  } = await unassignTeammateTasks(teamName, teammateId, teammateName, 'terminated');
+  } = await unassignTeammateTasks(teamName, teammateName, 'terminated');
 
   // Update AppState to keep status line in sync and notify the lead
   setAppState(prev => {

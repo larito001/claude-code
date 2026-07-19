@@ -228,15 +228,13 @@ function isClaudeConfigFilePath(filePath: string): boolean {
     return true
   }
 
-  // Check if file is within .claude-code-core-framework/commands or .claude-code-core-framework/agents directories
+  // Check if file is within the project agents or skills directories.
   // using proper path segment validation (not string matching with includes())
   // pathInWorkingPath now handles case-insensitive comparison to prevent bypasses
-  const commandsDir = join(getOriginalCwd(), '.claude-code-core-framework', 'commands')
   const agentsDir = join(getOriginalCwd(), '.claude-code-core-framework', 'agents')
   const skillsDir = join(getOriginalCwd(), '.claude-code-core-framework', 'skills')
 
   return (
-    pathInWorkingPath(filePath, commandsDir) ||
     pathInWorkingPath(filePath, agentsDir) ||
     pathInWorkingPath(filePath, skillsDir)
   )
@@ -608,7 +606,7 @@ function hasSuspiciousWindowsPathPattern(path: string): boolean {
  *
  * This function performs comprehensive safety checks including:
  * - Suspicious Windows path patterns (NTFS streams, 8.3 names, long path prefixes, etc.)
- * - Claude config files (.claude-code-core-framework/settings.json, .claude-code-core-framework/commands/, .claude-code-core-framework/agents/)
+ * - Framework config files (.claude-code-core-framework/settings.json, .claude-code-core-framework/skills/, .claude-code-core-framework/agents/)
  * - MCP CLI state files (managed internally by Claude Code)
  * - Dangerous files (.bashrc, .gitconfig, .git/, .vscode/, .idea/, etc.)
  *

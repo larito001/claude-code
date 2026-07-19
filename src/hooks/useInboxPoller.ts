@@ -734,7 +734,6 @@ export function useInboxPoller({
             const { notificationMessage } = teamName
               ? await unassignTeammateTasks(
                   teamName,
-                  teammateId,
                   teammateToRemove,
                   'shutdown',
                 )

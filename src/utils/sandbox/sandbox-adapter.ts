@@ -245,8 +245,8 @@ export function convertToSandboxRuntimeConfig(
   }
 
   // Block writes to .claude-code-core-framework/skills in both original and current working directories.
-  // The sandbox-runtime's getDangerousDirectories() protects .claude-code-core-framework/commands and
-  // .claude-code-core-framework/agents but not .claude-code-core-framework/skills. Skills have the same privilege level
+  // The sandbox-runtime's getDangerousDirectories() protects .claude-code-core-framework/agents
+  // but not .claude-code-core-framework/skills. Skills have the same privilege level
   // (auto-discovered, auto-loaded, full Claude capabilities) so they need the
   // same OS-level sandbox protection.
   denyWrite.push(resolve(originalCwd, '.claude-code-core-framework', 'skills'))
