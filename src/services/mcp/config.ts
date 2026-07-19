@@ -3,7 +3,7 @@ import { chmod, open, rename, stat, unlink } from 'fs/promises'
 import mapValues from 'lodash-es/mapValues.js'
 import memoize from 'lodash-es/memoize.js'
 import { dirname, join, parse } from 'path'
-import { getPlatform } from 'src/utils/platform.js'
+import { getPlatform, type Platform } from 'src/utils/platform.js'
 import type { PluginError } from '../../types/plugin.js'
 import { getPluginErrorMessage } from '../../types/plugin.js'
 import {
@@ -1153,6 +1153,35 @@ export async function getAllMcpConfigs(): Promise<{
 }
 
 /**
+ * Normalize platform-specific stdio launchers without changing the persisted
+ * MCP configuration. Windows cannot execute the npx shim directly through the
+ * process transport, so route it through cmd.exe at the runtime boundary.
+ */
+export function normalizeMcpServerForPlatform(
+  config: McpServerConfig,
+  platform: Platform = getPlatform(),
+): McpServerConfig {
+  if (
+    platform !== 'windows' ||
+    (config.type !== undefined && config.type !== 'stdio')
+  ) {
+    return config
+  }
+
+  const stdioConfig = config as McpStdioServerConfig
+  const command = stdioConfig.command
+  const isNpxCommand =
+    command === 'npx' || command.endsWith('\\npx') || command.endsWith('/npx')
+  if (!isNpxCommand) return config
+
+  return {
+    ...stdioConfig,
+    command: process.env.ComSpec?.trim() || 'cmd',
+    args: ['/d', '/s', '/c', command, ...(stdioConfig.args ?? [])],
+  }
+}
+
+/**
  * Parse and validate an MCP configuration object
  * @param params Parsing parameters
  * @returns Validated configuration with any errors
@@ -1210,28 +1239,7 @@ export function parseMcpConfig(params: {
       configToCheck = expanded
     }
 
-    // Check for Windows-specific npx usage without cmd wrapper
-    if (
-      getPlatform() === 'windows' &&
-      (!configToCheck.type || configToCheck.type === 'stdio') &&
-      (configToCheck.command === 'npx' ||
-        configToCheck.command.endsWith('\\npx') ||
-        configToCheck.command.endsWith('/npx'))
-    ) {
-      errors.push({
-        ...(filePath && { file: filePath }),
-        path: `mcpServers.${name}`,
-        message: `Windows requires 'cmd /c' wrapper to execute npx`,
-        suggestion: `Change command to "cmd" with args ["/c", "npx", ...]. See: https://code.claude.com/docs/en/mcp#configure-mcp-servers`,
-        mcpErrorMetadata: {
-          scope,
-          serverName: name,
-          severity: 'warning',
-        },
-      })
-    }
-
-    validatedServers[name] = configToCheck
+    validatedServers[name] = normalizeMcpServerForPlatform(configToCheck)
   }
   return {
     config: { mcpServers: validatedServers },

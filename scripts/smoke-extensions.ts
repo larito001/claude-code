@@ -129,6 +129,7 @@ try {
     { clearCommandsCache, getCommands },
     { SkillTool },
     { enableConfigs },
+    { normalizeMcpServerForPlatform },
   ] = await Promise.all([
     import('../src/bootstrap/state.js'),
     import('../src/state/AppStateStore.js'),
@@ -141,6 +142,7 @@ try {
     import('../src/commands.js'),
     import('../src/tools/SkillTool/SkillTool.js'),
     import('../src/utils/config.js'),
+    import('../src/services/mcp/config.js'),
   ])
 
   enableConfigs()
@@ -154,6 +156,30 @@ try {
   clearPluginSkillsCache()
   clearPluginAgentCache()
   clearCommandsCache()
+
+  const windowsNpx = normalizeMcpServerForPlatform(
+    {
+      type: 'stdio',
+      command: 'npx',
+      args: ['-y', '@example/mcp-server'],
+    },
+    'windows',
+  )
+  assert(
+    'command' in windowsNpx &&
+      /(?:^|[\\/])cmd(?:\.exe)?$/i.test(windowsNpx.command) &&
+      windowsNpx.args?.slice(-3).join('\0') ===
+        ['npx', '-y', '@example/mcp-server'].join('\0'),
+    'Windows npx MCP command was not normalized through cmd.exe',
+  )
+  const linuxNpx = normalizeMcpServerForPlatform(
+    { type: 'stdio', command: 'npx', args: ['server'] },
+    'linux',
+  )
+  assert(
+    'command' in linuxNpx && linuxNpx.command === 'npx',
+    'Non-Windows MCP command was changed unexpectedly',
+  )
 
   const mcpConfig = {
     type: 'stdio' as const,
