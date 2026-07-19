@@ -199,7 +199,6 @@ import { useLspInitializationNotification } from 'src/hooks/notifs/useLspInitial
 import { UserTextMessage } from 'src/components/messages/UserTextMessage.js';
 import { useDeprecationWarningNotification } from 'src/hooks/notifs/useDeprecationWarningNotification.js';
 import { useIDEStatusIndicator } from 'src/hooks/notifs/useIDEStatusIndicator.js';
-import { useModelMigrationNotifications } from 'src/hooks/notifs/useModelMigrationNotifications.js';
 import { useTeammateLifecycleNotification } from 'src/hooks/notifs/useTeammateShutdownNotification.js';
 import { useFastModeNotification } from 'src/hooks/notifs/useFastModeNotification.js';
 import type { HookProgress } from '../types/hooks.js';
@@ -623,7 +622,6 @@ export function REPL({
   const [ideInstallationStatus, setIDEInstallationStatus] = useState<IDEExtensionInstallationStatus | null>(null);
   const [showIdeOnboarding, setShowIdeOnboarding] = useState(false);
   // notifications
-  useModelMigrationNotifications();
   useIDEStatusIndicator({
     ideSelection,
     mcpClients,

@@ -193,9 +193,6 @@ export type GlobalConfig = {
   // 内存使用情况跟踪
   memoryUsageCount: number // 用户添加到内存的次数
 
-  // 当前模型提示的显示状态
-  opus1mMergeNoticeSeenCount?: number
-
   // 队列使用情况跟踪
   promptQueueUseCount: number // use 使用提示队列的次数
 
@@ -225,9 +222,6 @@ export type GlobalConfig = {
 
   // 空闲返回对话框跟踪
   idleReturnDismissed?: boolean // 选择“不要再问”
-
-  // 当前模型提示的最近更新时间
-  legacyOpusMigrationTimestamp?: number
 
   // 本地功能配置覆盖。环境变量 FRAMEWORK_FEATURE_OVERRIDES 优先。
   featureOverrides?: { [featureName: string]: unknown }

@@ -18,7 +18,6 @@ import { CondensedLogo } from './CondensedLogo.js';
 import { OffscreenFreeze } from '../OffscreenFreeze.js';
 import { isEnvTruthy } from 'src/utils/envUtils.js';
 import { EmergencyTip } from './EmergencyTip.js';
-import { Opus1mMergeNotice } from './Opus1mMergeNotice.js';
 
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
 import { useAppState } from '../../state/AppState.js';
@@ -108,32 +107,20 @@ export function LogoV2() {
   const modelDisplayName = t10;
   if (!showOnboarding && !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO)) {
     let t11;
-    let t12;
-    let t13;
-    let t14;
     let t15;
     let t16;
     let t17;
     if ($[15] === Symbol.for("react.memo_cache_sentinel")) {
       t11 = <CondensedLogo />;
-      t12 = null;
-      t13 = <Opus1mMergeNotice />;
-      t14 = null;
       t15 = isDebugMode() && <Box paddingLeft={2} flexDirection="column"><Text color="warning">Debug mode enabled</Text><Text dimColor={true}>Logging to: {isDebugToStdErr() ? "stderr" : getDebugLogPath()}</Text></Box>;
       t16 = <EmergencyTip />;
       t17 = process.env.CLAUDE_CODE_TMUX_SESSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>tmux session: {process.env.CLAUDE_CODE_TMUX_SESSION}</Text><Text dimColor={true}>{process.env.CLAUDE_CODE_TMUX_PREFIX_CONFLICTS ? `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} ${process.env.CLAUDE_CODE_TMUX_PREFIX} d (press prefix twice - Claude uses ${process.env.CLAUDE_CODE_TMUX_PREFIX})` : `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} d`}</Text></Box>;
       $[15] = t11;
-      $[16] = t12;
-      $[17] = t13;
-      $[18] = t14;
       $[19] = t15;
       $[20] = t16;
       $[21] = t17;
     } else {
       t11 = $[15];
-      t12 = $[16];
-      t13 = $[17];
-      t14 = $[18];
       t15 = $[19];
       t16 = $[20];
       t17 = $[21];
@@ -149,7 +136,7 @@ export function LogoV2() {
     }
     let t23;
     if ($[29] !== t18) {
-      t23 = <>{t11}{t12}{t13}{t14}{t15}{t16}{t17}{t18}</>;
+      t23 = <>{t11}{t15}{t16}{t17}{t18}</>;
       $[29] = t18;
       $[30] = t23;
     } else {
@@ -203,21 +190,6 @@ export function LogoV2() {
     } else {
       t13 = $[36];
     }
-    let t14;
-    let t15;
-    let t16;
-    if ($[37] === Symbol.for("react.memo_cache_sentinel")) {
-      t14 = null;
-      t15 = <Opus1mMergeNotice />;
-      t16 = null;
-      $[37] = t14;
-      $[38] = t15;
-      $[39] = t16;
-    } else {
-      t14 = $[37];
-      t15 = $[38];
-      t16 = $[39];
-    }
     let t17;
     if ($[40] !== showSandboxStatus) {
       t17 = showSandboxStatus && <Box marginTop={1} flexDirection="column"><Text color="warning">Your bash commands will be sandboxed. Disable with /sandbox.</Text></Box>;
@@ -226,7 +198,7 @@ export function LogoV2() {
     } else {
       t17 = $[41];
     }
-    return <><OffscreenFreeze><Box flexDirection="column" borderStyle="round" borderColor="claude" borderText={t11} paddingX={1} paddingY={1} alignItems="center" width={columns}><Text bold={true}>{welcomeMessage}</Text>{t12}{t13}<Text dimColor={true}>{billingType}</Text><Text dimColor={true}>{agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}</Text></Box></OffscreenFreeze>{t14}{t15}{t16}{t17}</>;
+    return <><OffscreenFreeze><Box flexDirection="column" borderStyle="round" borderColor="claude" borderText={t11} paddingX={1} paddingY={1} alignItems="center" width={columns}><Text bold={true}>{welcomeMessage}</Text>{t12}{t13}<Text dimColor={true}>{billingType}</Text><Text dimColor={true}>{agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}</Text></Box></OffscreenFreeze>{t17}</>;
   }
   const welcomeMessage_0 = formatWelcomeMessage(username);
   const modelLine = `${modelDisplayName} · ${billingType}`;
@@ -350,29 +322,17 @@ export function LogoV2() {
   } else {
     t28 = $[74];
   }
-  let t29;
-  let t30;
-  let t31;
   let t32;
   let t33;
   let t34;
   if ($[75] === Symbol.for("react.memo_cache_sentinel")) {
-    t29 = null;
-    t30 = <Opus1mMergeNotice />;
-    t31 = null;
     t32 = isDebugMode() && <Box paddingLeft={2} flexDirection="column"><Text color="warning">Debug mode enabled</Text><Text dimColor={true}>Logging to: {isDebugToStdErr() ? "stderr" : getDebugLogPath()}</Text></Box>;
     t33 = <EmergencyTip />;
     t34 = process.env.CLAUDE_CODE_TMUX_SESSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>tmux session: {process.env.CLAUDE_CODE_TMUX_SESSION}</Text><Text dimColor={true}>{process.env.CLAUDE_CODE_TMUX_PREFIX_CONFLICTS ? `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} ${process.env.CLAUDE_CODE_TMUX_PREFIX} d (press prefix twice - Claude uses ${process.env.CLAUDE_CODE_TMUX_PREFIX})` : `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} d`}</Text></Box>;
-    $[75] = t29;
-    $[76] = t30;
-    $[77] = t31;
     $[78] = t32;
     $[79] = t33;
     $[80] = t34;
   } else {
-    t29 = $[75];
-    t30 = $[76];
-    t31 = $[77];
     t32 = $[78];
     t33 = $[79];
     t34 = $[80];
@@ -396,7 +356,7 @@ export function LogoV2() {
   }
   let t41;
   if ($[90] !== t28 || $[91] !== t35 || $[92] !== t36) {
-    t41 = <>{t28}{t29}{t30}{t31}{t32}{t33}{t34}{t35}{t36}</>;
+    t41 = <>{t28}{t32}{t33}{t34}{t35}{t36}</>;
     $[90] = t28;
     $[91] = t35;
     $[92] = t36;

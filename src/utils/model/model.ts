@@ -368,14 +368,6 @@ export function parseUserSpecifiedModel(
     }
   }
 
-  // Opus 4/4.1 在第一方API上不再可用（与旧别名相同）——静默重新映射到当前的Opus默认值。'opus'别名已解析为4.6，因此只有那些在4.5发布前将这些显式字符串固定在设置/env/--model/SDK中的用户才会受影响。第三方提供商可能尚未具备4.6能力，因此保持不变。
-  if (
-    isLegacyOpusFirstParty(modelString) &&
-    isLegacyModelRemapEnabled()
-  ) {
-    return getDefaultOpusModel() + (has1mTag ? '[1m]' : '')
-  }
-
   // 保留自定义模型名称的原始大小写（例如Azure Foundry部署ID）
   // 仅剥离存在的[1m]后缀，保持基础模型的大小写
   if (has1mTag) {
@@ -403,23 +395,6 @@ export function resolveSkillModelOverride(
     return skillModel + '[1m]'
   }
   return skillModel
-}
-
-const LEGACY_OPUS_FIRSTPARTY = [
-  'claude-opus-4-20250514',
-  'claude-opus-4-1-20250805',
-  'claude-opus-4-0',
-  'claude-opus-4-1',
-]
-
-/** 判断是否满足 is Legacy Opus First Party 对应的数据或状态。 */
-function isLegacyOpusFirstParty(model: string): boolean {
-  return LEGACY_OPUS_FIRSTPARTY.includes(model)
-}
-
-/** 选择退出旧版 Opus 4.0/4.1 → 当前 Opus 的重新映射。 */
-export function isLegacyModelRemapEnabled(): boolean {
-  return !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP)
 }
 
 /** 执行 model Display String 对应的业务处理。 */
