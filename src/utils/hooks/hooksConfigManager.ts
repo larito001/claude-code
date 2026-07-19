@@ -19,10 +19,7 @@ export type HookEventMetadata = {
   matcherMetadata?: MatcherMetadata
 }
 
-// Hook event metadata configuration.
-// Resolver uses sorted-joined string key so that callers passing a fresh
-// toolNames array each render (e.g. HooksConfigMenu) hit the cache instead
-// of leaking a new entry per call.
+// 钩子事件元数据配置。解析器使用排序后的连接字符串键，使得每次渲染时传递全新 toolNames 数组的调用者（例如 HooksConfigMenu）能够命中缓存，而不是每次调用泄露一个新条目。
 export const getHookEventMetadata = memoize(
   function (toolNames: string[]): Record<HookEvent, HookEventMetadata> {
     return {
@@ -266,7 +263,7 @@ export const getHookEventMetadata = memoize(
   toolNames => toolNames.slice().sort().join(','),
 )
 
-// Group hooks by event and matcher
+// 按事件和匹配器对钩子进行分组
 export function groupHooksByEventAndMatcher(
   appState: AppState,
   toolNames: string[],
@@ -303,11 +300,11 @@ export function groupHooksByEventAndMatcher(
 
   const metadata = getHookEventMetadata(toolNames)
 
-  // Include hooks from settings files
+  // 包含来自设置文件的钩子
   getAllHooks(appState).forEach(hook => {
     const eventGroup = grouped[hook.event]
     if (eventGroup) {
-      // For events without matchers, use empty string as key
+      // 对于没有匹配器的事件，使用空字符串作为键
       const matcherKey =
         metadata[hook.event].matcherMetadata !== undefined
           ? hook.matcher || ''
@@ -319,7 +316,7 @@ export function groupHooksByEventAndMatcher(
     }
   })
 
-  // Include registered hooks (e.g., plugin hooks)
+  // 包含已注册的钩子（例如，插件钩子）
   const registeredHooks = getRegisteredHooks()
   if (registeredHooks) {
     for (const [event, matchers] of Object.entries(registeredHooks)) {
@@ -330,8 +327,7 @@ export function groupHooksByEventAndMatcher(
       for (const matcher of matchers) {
         const matcherKey = matcher.matcher || ''
 
-        // Only PluginHookMatcher has pluginRoot; HookCallbackMatcher (internal
-        // callbacks like attributionHooks, sessionFileAccessHooks) does not.
+        // 只有 PluginHookMatcher 有 pluginRoot；HookCallbackMatcher（内部回调，如 attributionHooks、sessionFileAccessHooks）没有。
         if ('pluginRoot' in matcher) {
           eventGroup[matcherKey] ??= []
           for (const hook of matcher.hooks) {
@@ -364,7 +360,7 @@ export function groupHooksByEventAndMatcher(
   return grouped
 }
 
-// Get sorted matchers for a specific event
+// 获取特定事件的排序后匹配器
 export function getSortedMatchersForEvent(
   hooksByEventAndMatcher: Record<
     HookEvent,
@@ -376,7 +372,7 @@ export function getSortedMatchersForEvent(
   return sortMatchersByPriority(matchers, hooksByEventAndMatcher, event)
 }
 
-// Get hooks for a specific event and matcher
+// 获取特定事件和匹配器的钩子
 export function getHooksForMatcher(
   hooksByEventAndMatcher: Record<
     HookEvent,
@@ -385,13 +381,12 @@ export function getHooksForMatcher(
   event: HookEvent,
   matcher: string | null,
 ): IndividualHookConfig[] {
-  // For events without matchers, hooks are stored with empty string as key
-  // because the record keys must be strings.
+  // 对于没有匹配器的事件，钩子以空字符串为键存储，因为记录键必须是字符串。
   const matcherKey = matcher ?? ''
   return hooksByEventAndMatcher[event]?.[matcherKey] ?? []
 }
 
-// Get metadata for a specific event's matcher
+// 获取特定事件匹配器的元数据
 export function getMatcherMetadata(
   event: HookEvent,
   toolNames: string[],

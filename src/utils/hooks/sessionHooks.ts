@@ -12,19 +12,16 @@ type OnHookSuccess = (
   result: AggregatedHookResult,
 ) => void
 
-/** Function hook callback - returns true if check passes, false to block */
+/** 函数钩子回调 - 如果检查通过则返回 true，否则返回 false 以阻止 */
 export type FunctionHookCallback = (
   messages: Message[],
   signal?: AbortSignal,
 ) => boolean | Promise<boolean>
 
-/**
- * Function hook type with callback embedded.
- * Session-scoped only, cannot be persisted to settings.json.
- */
+/** 嵌入回调的函数钩子类型。仅会话作用域，无法持久化到 settings.json。 */
 export type FunctionHook = {
   type: 'function'
-  id?: string // Optional unique ID for removal
+  id?: string // 用于移除的可选唯一 ID
   timeout?: number
   callback: FunctionHookCallback
   errorMessage: string
@@ -47,25 +44,11 @@ export type SessionStore = {
 }
 
 /**
- * Map (not Record) so .set/.delete don't change the container's identity.
- * Mutator functions mutate the Map and return prev unchanged, letting
- * store.ts's Object.is(next, prev) check short-circuit and skip listener
- * notification. Session hooks are ephemeral per-agent runtime callbacks,
- * never reactively read (only getAppState() snapshots in the query loop).
- * Same pattern as agentControllers on LocalWorkflowTaskState.
- *
- * This matters under high-concurrency workflows: parallel() with N
- * schema-mode agents fires N addFunctionHook calls in one synchronous
- * tick. With a Record + spread, each call cost O(N) to copy the growing
- * map (O(N²) total) plus fired all ~30 store listeners. With Map: .set()
- * is O(1), return prev means zero listener fires.
+ * 使用 Map（而非 Record），因此 .set/.delete 不会改变容器的标识。变形函数会修改 Map 并返回未变的 prev，这样 store.ts 的 Object.is(next, prev) 检查就会短路，跳过监听器通知。会话钩子是每个代理运行时的临时回调，不会被反应式读取（只在查询循环中通过 getAppState() 快照获取）。与 LocalWorkflowTaskState 上的 agentControllers 模式相同。这在高并发工作流中很重要：parallel() 与 N 个 schema 模式代理会在一个同步 tick 中触发 N 次 addFunctionHook 调用。若使用 Record + spread，每次调用需要 O(N) 来复制不断增长的 map（总计 O(N²)），并触发所有约30个 store 监听器。而使用 Map：.set() 是 O(1)，返回 prev 意味着零监听器触发。
  */
 export type SessionHooksState = Map<string, SessionStore>
 
-/**
- * Add a command or prompt hook to the session.
- * Session hooks are temporary, in-memory only, and cleared when session ends.
- */
+/** 向会话添加命令或提示钩子。会话钩子是临时的、仅内存中，并在会话结束时清除。 */
 export function addSessionHook(
   setAppState: (updater: (prev: AppState) => AppState) => void,
   sessionId: string,
@@ -87,9 +70,8 @@ export function addSessionHook(
 }
 
 /**
- * Add a function hook to the session.
- * Function hooks execute TypeScript callbacks in-memory for validation.
- * @returns The hook ID (for removal)
+ * 向会话添加函数钩子。函数钩子执行内存中的 TypeScript 回调进行验证。
+ * @returns 钩子 ID（用于移除）
  */
 export function addFunctionHook(
   setAppState: (updater: (prev: AppState) => AppState) => void,
@@ -115,9 +97,7 @@ export function addFunctionHook(
   return id
 }
 
-/**
- * Remove a function hook by ID from the session.
- */
+/** 按 ID 从会话中移除函数钩子。 */
 export function removeFunctionHook(
   setAppState: (updater: (prev: AppState) => AppState) => void,
   sessionId: string,
@@ -132,9 +112,10 @@ export function removeFunctionHook(
 
     const eventMatchers = store.hooks[event] || []
 
-    // Remove the hook with matching ID from all matchers
+    // 从所有匹配器中移除具有匹配 ID 的钩子
     const updatedMatchers = eventMatchers
       .map(matcher => {
+        /** 更新 updated Hooks 对应的数据或状态。 */
         const updatedHooks = matcher.hooks.filter(h => {
           if (h.hook.type !== 'function') return true
           return h.hook.id !== hookId
@@ -162,9 +143,7 @@ export function removeFunctionHook(
   )
 }
 
-/**
- * Internal helper to add a hook to session state
- */
+/** 向会话状态添加钩子的内部帮助程序 */
 function addHookToSession(
   setAppState: (updater: (prev: AppState) => AppState) => void,
   sessionId: string,
@@ -178,14 +157,14 @@ function addHookToSession(
     const store = prev.sessionHooks.get(sessionId) ?? { hooks: {} }
     const eventMatchers = store.hooks[event] || []
 
-    // Find existing matcher or create new one
+    // 查找现有匹配器或创建新匹配器
     const existingMatcherIndex = eventMatchers.findIndex(
       m => m.matcher === matcher && m.skillRoot === skillRoot,
     )
 
     let updatedMatchers: SessionHookMatcher[]
     if (existingMatcherIndex >= 0) {
-      // Add to existing matcher
+      // 添加到现有匹配器
       updatedMatchers = [...eventMatchers]
       const existingMatcher = updatedMatchers[existingMatcherIndex]!
       updatedMatchers[existingMatcherIndex] = {
@@ -194,7 +173,7 @@ function addHookToSession(
         hooks: [...existingMatcher.hooks, { hook, onHookSuccess }],
       }
     } else {
-      // Create new matcher
+      // 创建新匹配器
       updatedMatchers = [
         ...eventMatchers,
         {
@@ -217,11 +196,11 @@ function addHookToSession(
 }
 
 /**
- * Remove a specific hook from the session
- * @param setAppState The function to update the app state
- * @param sessionId The session ID
- * @param event The hook event
- * @param hook The hook command to remove
+ * 从会话中移除特定钩子
+ * @param setAppState 更新应用状态的函数
+ * @param sessionId 会话 ID
+ * @param event 钩子事件
+ * @param hook 要移除的钩子命令
  */
 export function removeSessionHook(
   setAppState: (updater: (prev: AppState) => AppState) => void,
@@ -237,9 +216,10 @@ export function removeSessionHook(
 
     const eventMatchers = store.hooks[event] || []
 
-    // Remove the hook from all matchers
+    // 从所有匹配器中移除钩子
     const updatedMatchers = eventMatchers
       .map(matcher => {
+        /** 更新 updated Hooks 对应的数据或状态。 */
         const updatedHooks = matcher.hooks.filter(
           h => !isHookEqual(h.hook, hook),
         )
@@ -268,7 +248,7 @@ export function removeSessionHook(
   )
 }
 
-// Extended hook matcher that includes optional skillRoot for skill-scoped hooks
+// 扩展的钩子匹配器，包含可选的 skillRoot 用于技能作用域的钩子
 export type SessionDerivedHookMatcher = {
   matcher: string
   hooks: HookCommand[]
@@ -276,9 +256,9 @@ export type SessionDerivedHookMatcher = {
 }
 
 /**
- * Convert session hook matchers to regular hook matchers
- * @param sessionMatchers The session hook matchers to convert
- * @returns Regular hook matchers (with optional skillRoot preserved)
+ * 将会话钩子匹配器转换为常规钩子匹配器
+ * @param sessionMatchers 要转换的会话钩子匹配器
+ * @returns 常规钩子匹配器（保留可选的 skillRoot）
  */
 function convertToHookMatchers(
   sessionMatchers: SessionHookMatcher[],
@@ -286,7 +266,7 @@ function convertToHookMatchers(
   return sessionMatchers.map(sm => ({
     matcher: sm.matcher,
     skillRoot: sm.skillRoot,
-    // Filter out function hooks - they can't be persisted to HookMatcher format
+    // 过滤掉函数钩子 - 它们无法持久化为 HookMatcher 格式
     hooks: sm.hooks
       .map(h => h.hook)
       .filter((h): h is HookCommand => h.type !== 'function'),
@@ -294,11 +274,11 @@ function convertToHookMatchers(
 }
 
 /**
- * Get all session hooks for a specific event (excluding function hooks)
- * @param appState The app state
- * @param sessionId The session ID
- * @param event Optional event to filter by
- * @returns Hook matchers for the event, or all hooks if no event specified
+ * 获取特定事件的所有会话钩子（排除函数钩子）
+ * @param appState 应用状态
+ * @param sessionId 会话 ID
+ * @param event 可选，按事件过滤
+ * @returns 该事件的钩子匹配器；如果未指定事件，则返回所有钩子
  */
 export function getSessionHooks(
   appState: AppState,
@@ -336,12 +316,12 @@ type FunctionHookMatcher = {
 }
 
 /**
- * Get all session function hooks for a specific event
- * Function hooks are kept separate because they can't be persisted to HookMatcher format.
- * @param appState The app state
- * @param sessionId The session ID
- * @param event Optional event to filter by
- * @returns Function hook matchers for the event
+ * 获取特定事件的所有会话函数钩子
+ * 函数钩子保持独立，因为它们无法持久化为 HookMatcher 格式。
+ * @param appState 应用状态
+ * @param sessionId 会话 ID
+ * @param event 可选，按事件过滤
+ * @returns 该事件的函数钩子匹配器
  */
 export function getSessionFunctionHooks(
   appState: AppState,
@@ -355,12 +335,14 @@ export function getSessionFunctionHooks(
 
   const result = new Map<HookEvent, FunctionHookMatcher[]>()
 
+  /** 执行 extract Function Hooks 对应的业务处理。 */
   const extractFunctionHooks = (
     sessionMatchers: SessionHookMatcher[],
   ): FunctionHookMatcher[] => {
     return sessionMatchers
       .map(sm => ({
         matcher: sm.matcher,
+        /** 执行 hooks 对应的业务处理。 */
         hooks: sm.hooks
           .map(h => h.hook)
           .filter((h): h is FunctionHook => h.type === 'function'),
@@ -392,9 +374,7 @@ export function getSessionFunctionHooks(
   return result
 }
 
-/**
- * Get the full hook entry (including callbacks) for a specific session hook
- */
+/** 获取特定会话钩子的完整钩子条目（包括回调） */
 export function getSessionHookCallback(
   appState: AppState,
   sessionId: string,
@@ -417,9 +397,10 @@ export function getSessionHookCallback(
     return undefined
   }
 
-  // Find the hook in the matchers
+  // 在匹配器中查找钩子
   for (const matcherEntry of eventMatchers) {
     if (matcherEntry.matcher === matcher || matcher === '') {
+      /** 执行 hook Entry 对应的业务处理。 */
       const hookEntry = matcherEntry.hooks.find(h => isHookEqual(h.hook, hook))
       if (hookEntry) {
         return hookEntry
@@ -431,9 +412,9 @@ export function getSessionHookCallback(
 }
 
 /**
- * Clear all session hooks for a specific session
- * @param setAppState The function to update the app state
- * @param sessionId The session ID
+ * 清除特定会话的所有会话钩子
+ * @param setAppState 更新应用状态的函数
+ * @param sessionId 会话 ID
  */
 export function clearSessionHooks(
   setAppState: (updater: (prev: AppState) => AppState) => void,

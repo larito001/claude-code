@@ -28,9 +28,7 @@ import {
 } from './hookHelpers.js'
 import { clearSessionHooks } from './sessionHooks.js'
 
-/**
- * Execute an agent-based hook using a multi-turn LLM query
- */
+/** 使用多轮LLM查询执行基于代理的钩子 */
 export async function execAgentHook(
   hook: AgentHook,
   hookName: string,
@@ -39,27 +37,26 @@ export async function execAgentHook(
   signal: AbortSignal,
   toolUseContext: ToolUseContext,
   toolUseID: string | undefined,
-  // Kept for signature stability with the other exec*Hook functions.
-  // Was used by hook.prompt(messages) before agent hooks became declarative.
+  // 为与其他exec*Hook函数的签名稳定性而保留。
+  // 在代理钩子变为声明式之前，曾被 hook.prompt(messages) 使用。
   _messages: Message[],
   agentName?: string,
 ): Promise<HookResult> {
   const effectiveToolUseID = toolUseID || `hook-${randomUUID()}`
 
-  // Get transcript path from context
+  // 从上下文中获取转录路径
   const transcriptPath = toolUseContext.agentId
     ? getAgentTranscriptPath(toolUseContext.agentId)
     : getTranscriptPath()
   const hookStartTime = Date.now()
   try {
-    // Replace $ARGUMENTS with the JSON input
+    // 用JSON输入替换 $ARGUMENTS
     const processedPrompt = addArgumentsToPrompt(hook.prompt, jsonInput)
     logForDebugging(
       `Hooks: Processing agent hook with prompt: ${processedPrompt}`,
     )
 
-    // Create user message directly - no need for processUserInput which would
-    // trigger UserPromptSubmit hooks and cause infinite recursion
+    // 直接创建用户消息 - 无需使用 processUserInput，因为这会触发 UserPromptSubmit 钩子并导致无限递归
     const userMessage = createUserMessage({ content: processedPrompt })
     const agentMessages = [userMessage]
 
@@ -67,32 +64,37 @@ export async function execAgentHook(
       `Hooks: Starting agent query with ${agentMessages.length} messages`,
     )
 
-    // Setup timeout and combine with parent signal
+    // 设置超时并与父信号合并
     const hookTimeoutMs = hook.timeout ? hook.timeout * 1000 : 60000
     const hookAbortController = createAbortController()
 
-    // Combine parent signal with timeout, and have it abort our controller
+    // 将父信号与超时合并，并让其中止我们的控制器
     const { signal: parentTimeoutSignal, cleanup: cleanupCombinedSignal } =
       createCombinedAbortSignal(signal, { timeoutMs: hookTimeoutMs })
+    /** 处理 on Parent Timeout 对应的数据或状态。 */
     const onParentTimeout = () => hookAbortController.abort()
     parentTimeoutSignal.addEventListener('abort', onParentTimeout)
+    if (parentTimeoutSignal.aborted) {
+      hookAbortController.abort()
+    }
 
-    // Combined signal is just our controller's signal now
+    // 合并后的信号现在只是我们控制器的信号
     const combinedSignal = hookAbortController.signal
+    const hookAgentId = asAgentId(`hook-agent-${randomUUID()}`)
+    let structuredOutputHookRegistered = false
 
     try {
-      // Create StructuredOutput tool with our schema
+      // 使用我们的模式创建 StructuredOutput 工具
       const structuredOutputTool = createStructuredOutputTool()
 
-      // Filter out any existing StructuredOutput tool to avoid duplicates with different schemas
-      // (e.g., when parent context has a StructuredOutput tool from --json-schema flag)
+      // 过滤掉任何现有的 StructuredOutput 工具，以避免不同模式的重复
+      // （例如，当父上下文有来自 --json-schema 标志的 StructuredOutput 工具时）
       const filteredTools = toolUseContext.options.tools.filter(
         tool => !toolMatchesName(tool, SYNTHETIC_OUTPUT_TOOL_NAME),
       )
 
-      // Use all available tools plus our structured output tool
-      // Filter out disallowed agent tools to prevent stop hook agents from spawning subagents
-      // or entering plan mode, and filter out duplicate StructuredOutput tools
+      // 使用所有可用的工具加上我们的结构化输出工具
+      // 过滤掉不允许的代理工具，以防止停止钩子代理产生子代理或进入计划模式，并过滤掉重复的 StructuredOutput 工具
       const tools: Tool[] = [
         ...filteredTools.filter(
           tool => !ALL_AGENT_DISALLOWED_TOOLS.has(tool.name),
@@ -114,10 +116,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
       const model = hook.model ?? getSmallFastModel()
       const MAX_AGENT_TURNS = 50
 
-      // Create unique agentId for this hook agent
-      const hookAgentId = asAgentId(`hook-agent-${randomUUID()}`)
-
-      // Create a modified toolUseContext for the agent
+      // 为代理创建一个修改后的 toolUseContext
       const agentToolUseContext: ToolUseContext = {
         ...toolUseContext,
         agentId: hookAgentId,
@@ -129,10 +128,12 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
           isNonInteractiveSession: true,
           thinkingConfig: { type: 'disabled' as const },
         },
+        /** 设置并保存 set In Progress Tool Use I Ds 对应的数据或状态。 */
         setInProgressToolUseIDs: () => {},
+        /** 获取 get App State 对应的数据或状态。 */
         getAppState() {
           const appState = toolUseContext.getAppState()
-          // Add session rule to allow reading transcript file
+          // 添加会话规则以允许读取转录文件
           const existingSessionRules =
             appState.toolPermissionContext.alwaysAllowRules.session ?? []
           return {
@@ -149,17 +150,18 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
         },
       }
 
-      // Register a session-level stop hook to enforce structured output
+      // 注册一个会话级别的停止钩子以强制执行结构化输出
       registerStructuredOutputEnforcement(
         toolUseContext.setAppState,
         hookAgentId,
       )
+      structuredOutputHookRegistered = true
 
       let structuredOutputResult: { ok: boolean; reason?: string } | null = null
       let turnCount = 0
       let hitMaxTurns = false
 
-      // Use query() for multi-turn execution
+      // 对多轮执行使用 query()
       for await (const message of query({
         messages: agentMessages,
         systemPrompt,
@@ -169,7 +171,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
         toolUseContext: agentToolUseContext,
         querySource: 'hook_agent',
       })) {
-        // Process stream events to update response length in the spinner
+        // 处理流事件以更新旋转器中的响应长度
         handleMessageFromStream(
           message,
           () => {}, // onMessage - we handle messages below
@@ -181,7 +183,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
           () => {}, // onStreamingToolUses - not needed for hooks
         )
 
-        // Skip streaming events for further processing
+        // 跳过流事件以进行进一步处理
         if (
           message.type === 'stream_event' ||
           message.type === 'stream_request_start'
@@ -189,11 +191,11 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
           continue
         }
 
-        // Count assistant turns
+        // 计算助手轮次
         if (message.type === 'assistant') {
           turnCount++
 
-          // Check if we've hit the turn limit
+          // 检查是否已达到轮次限制
           if (turnCount >= MAX_AGENT_TURNS) {
             hitMaxTurns = true
             logForDebugging(
@@ -204,7 +206,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
           }
         }
 
-        // Check for structured output in attachments
+        // 检查附件中是否有结构化输出
         if (
           message.type === 'attachment' &&
           message.attachment.type === 'structured_output'
@@ -215,22 +217,16 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
             logForDebugging(
               `Hooks: Got structured output: ${jsonStringify(structuredOutputResult)}`,
             )
-            // Got structured output, abort and exit
+            // 获得结构化输出，中止并退出
             hookAbortController.abort()
             break
           }
         }
       }
 
-      parentTimeoutSignal.removeEventListener('abort', onParentTimeout)
-      cleanupCombinedSignal()
-
-      // Clean up the session hook we registered for this agent
-      clearSessionHooks(toolUseContext.setAppState, hookAgentId)
-
-      // Check if we got a result
+      // 检查是否得到了结果
       if (!structuredOutputResult) {
-        // If we hit max turns, just log and return cancelled (no UI message)
+        // 如果达到最大轮次，仅记录并返回已取消（无UI消息）
         if (hitMaxTurns) {
           logForDebugging(
             `Hooks: Agent hook did not complete within ${MAX_AGENT_TURNS} turns`,
@@ -241,8 +237,8 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
           }
         }
 
-        // For other cases (e.g., agent finished without calling structured output tool),
-        // just log and return cancelled (don't show error to user)
+        // 对于其他情况（例如，代理完成而未调用结构化输出工具），
+        // 仅记录并返回已取消（不向用户显示错误）
         logForDebugging(`Hooks: Agent hook did not return structured output`)
         return {
           hook,
@@ -250,7 +246,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
         }
       }
 
-      // Return result based on structured output
+      // 根据结构化输出返回结果
       if (!structuredOutputResult.ok) {
         logForDebugging(
           `Hooks: Agent hook condition was not met: ${structuredOutputResult.reason}`,
@@ -265,7 +261,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
         }
       }
 
-      // Condition was met
+      // 条件已满足
       logForDebugging(`Hooks: Agent hook condition was met`)
       return {
         hook,
@@ -279,9 +275,6 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
         }),
       }
     } catch (error) {
-      parentTimeoutSignal.removeEventListener('abort', onParentTimeout)
-      cleanupCombinedSignal()
-
       if (combinedSignal.aborted) {
         return {
           hook,
@@ -289,6 +282,12 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
         }
       }
       throw error
+    } finally {
+      parentTimeoutSignal.removeEventListener('abort', onParentTimeout)
+      cleanupCombinedSignal()
+      if (structuredOutputHookRegistered) {
+        clearSessionHooks(toolUseContext.setAppState, hookAgentId)
+      }
     }
   } catch (error) {
     const errorMsg = errorMessage(error)

@@ -10,9 +10,7 @@ import type { SetAppState } from '../messageQueueManager.js'
 import { hasSuccessfulToolCall } from '../messages.js'
 import { addFunctionHook } from './sessionHooks.js'
 
-/**
- * Schema for hook responses (shared by prompt and agent hooks)
- */
+/** 钩子响应的模式（由 prompt 和 agent 钩子共享） */
 export const hookResponseSchema = lazySchema(() =>
   z.object({
     ok: z.boolean().describe('Whether the condition was met'),
@@ -24,8 +22,8 @@ export const hookResponseSchema = lazySchema(() =>
 )
 
 /**
- * Add hook input JSON to prompt, either replacing $ARGUMENTS placeholder or appending.
- * Also supports indexed arguments like $ARGUMENTS[0], $ARGUMENTS[1], or shorthand $0, $1, etc.
+ * 将钩子输入 JSON 添加到 prompt，要么替换 $ARGUMENTS 占位符，要么追加。
+ * 也支持索引参数，如 $ARGUMENTS[0]、$ARGUMENTS[1] 或简写 $0、$1 等。
  */
 export function addArgumentsToPrompt(
   prompt: string,
@@ -35,8 +33,8 @@ export function addArgumentsToPrompt(
 }
 
 /**
- * Create a StructuredOutput tool configured for hook responses.
- * Reusable by agent hooks and background verification.
+ * 创建一个为钩子响应配置的 StructuredOutput 工具。
+ * 可被 agent 钩子和后台验证重用。
  */
 export function createStructuredOutputTool(): Tool {
   return {
@@ -57,6 +55,7 @@ export function createStructuredOutputTool(): Tool {
       required: ['ok'],
       additionalProperties: false,
     },
+    /** 执行 prompt 对应的业务处理。 */
     async prompt(): Promise<string> {
       return `Use this tool to return your verification result. You MUST call this tool exactly once at the end of your response.`
     },
@@ -64,8 +63,8 @@ export function createStructuredOutputTool(): Tool {
 }
 
 /**
- * Register a function hook that enforces structured output via SyntheticOutputTool.
- * Used by ask.tsx, execAgentHook.ts, and background verification.
+ * 注册一个通过 SyntheticOutputTool 强制执行结构化输出的函数钩子。
+ * 被 ask.tsx、execAgentHook.ts 和后台验证使用。
  */
 export function registerStructuredOutputEnforcement(
   setAppState: SetAppState,

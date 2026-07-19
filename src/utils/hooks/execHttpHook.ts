@@ -4,19 +4,17 @@ import { createCombinedAbortSignal } from '../combinedAbortSignal.js'
 import { logForDebugging } from '../debug.js'
 import { errorMessage } from '../errors.js'
 import { getProxyUrl, shouldBypassProxy } from '../proxy.js'
-// Import as namespace so spyOn works in tests (direct imports bypass spies)
+// 作为命名空间导入，以便 spyOn 在测试中工作（直接导入会绕过 spy）
 import * as settingsModule from '../settings/settings.js'
 import type { HttpHook } from '../settings/types.js'
 import { ssrfGuardedLookup } from './ssrfGuard.js'
 
-const DEFAULT_HTTP_HOOK_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes (matches TOOL_HOOK_EXECUTION_TIMEOUT_MS)
+const DEFAULT_HTTP_HOOK_TIMEOUT_MS = 10 * 60 * 1000 // 10 分钟（与 TOOL_HOOK_EXECUTION_TIMEOUT_MS 匹配）
 
 /**
- * Get the sandbox proxy config for routing HTTP hook requests through the
- * sandbox network proxy when sandboxing is enabled.
+ * 获取沙箱代理配置，用于在启用沙箱时通过沙箱网络代理路由 HTTP 钩子请求。
  *
- * Uses dynamic import to avoid a static import cycle
- * (sandbox-adapter -> settings -> ... -> hooks -> execHttpHook).
+ * 使用动态导入以避免静态导入循环（sandbox-adapter -> settings -> ... -> hooks -> execHttpHook）。
  */
 async function getSandboxProxyConfig(): Promise<
   { host: string; port: number; protocol: string } | undefined
@@ -27,9 +25,7 @@ async function getSandboxProxyConfig(): Promise<
     return undefined
   }
 
-  // Wait for the sandbox network proxy to finish initializing. In REPL mode,
-  // SandboxManager.initialize() is fire-and-forget so the proxy may not be
-  // ready yet when the first hook fires.
+  // 等待沙箱网络代理完成初始化。在 REPL 模式下，SandboxManager.initialize() 是即发即忘的，因此当第一个钩子触发时，代理可能尚未就绪。
   await SandboxManager.waitForNetworkInitialization()
 
   const proxyPort = SandboxManager.getProxyPort()
@@ -41,10 +37,8 @@ async function getSandboxProxyConfig(): Promise<
 }
 
 /**
- * Read HTTP hook allowlist restrictions from merged settings (all sources).
- * Follows the allowedMcpServers precedent: arrays concatenate across sources.
- * When allowManagedHooksOnly is set in managed settings, only admin-defined
- * hooks run anyway, so no separate lock-down boolean is needed here.
+ * 从合并的设置（所有来源）中读取 HTTP 钩子允许列表限制。遵循 allowedMcpServers 的先例：数组在来源之间拼接。
+ * 当托管设置中设置了 allowManagedHooksOnly 时，无论如何只有管理员定义的钩子运行，因此这里不需要单独的安全布尔值。
  */
 function getHttpHookPolicy(): {
   allowedUrls: string[] | undefined
@@ -58,8 +52,8 @@ function getHttpHookPolicy(): {
 }
 
 /**
- * Match a URL against a pattern with * as a wildcard (any characters).
- * Same semantics as the MCP server allowlist patterns.
+ * 将 URL 与带有 * 作为通配符（任意字符）的模式进行匹配。
+ * 语义与 MCP 服务器允许列表模式相同。
  */
 function urlMatchesPattern(url: string, pattern: string): boolean {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&')
@@ -68,10 +62,8 @@ function urlMatchesPattern(url: string, pattern: string): boolean {
 }
 
 /**
- * Strip CR, LF, and NUL bytes from a header value to prevent HTTP header
- * injection (CRLF injection) via env var values or hook-configured header
- * templates. A malicious env var like "token\r\nX-Evil: 1" would otherwise
- * inject a second header into the request.
+ * 从标头值中去除 CR、LF 和 NUL 字节，以防止通过环境变量值或钩子配置的标头模板进行 HTTP 标头注入（CRLF 注入）。
+ * 恶意的环境变量（如 "token\r\nX-Evil: 1"）会向请求中注入第二个标头。
  */
 function sanitizeHeaderValue(value: string): string {
   // eslint-disable-next-line no-control-regex
@@ -79,17 +71,16 @@ function sanitizeHeaderValue(value: string): string {
 }
 
 /**
- * Interpolate $VAR_NAME and ${VAR_NAME} patterns in a string using process.env,
- * but only for variable names present in the allowlist. References to variables
- * not in the allowlist are replaced with empty strings to prevent exfiltration
- * of secrets via project-configured HTTP hooks.
+ * 使用 process.env 插值字符串中的 $VAR_NAME 和 ${VAR_NAME} 模式，但仅限于允许列表中存在的变量名。
+ * 对不在允许列表中的变量的引用将被替换为空字符串，以防止通过项目配置的 HTTP 钩子泄露机密。
  *
- * The result is sanitized to strip CR/LF/NUL bytes to prevent header injection.
+ * 结果经过清理，去除 CR/LF/NUL 字节，以防止标头注入。
  */
 function interpolateEnvVars(
   value: string,
   allowedEnvVars: ReadonlySet<string>,
 ): string {
+  /** 执行 interpolated 对应的业务处理。 */
   const interpolated = value.replace(
     /\$\{([A-Z_][A-Z0-9_]*)\}|\$([A-Z_][A-Z0-9_]*)/g,
     (_, braced, unbraced) => {
@@ -108,17 +99,13 @@ function interpolateEnvVars(
 }
 
 /**
- * Execute an HTTP hook by POSTing the hook input JSON to the configured URL.
- * Returns the raw response for the caller to interpret.
+ * 通过将钩子输入的 JSON POST 到配置的 URL 来执行 HTTP 钩子。
+ * 返回原始响应以供调用方解释。
  *
- * When sandboxing is enabled, requests are routed through the sandbox network
- * proxy which enforces the domain allowlist. The proxy returns HTTP 403 for
- * blocked domains.
+ * 当启用沙箱时，请求通过沙箱网络代理路由，该代理强制执行域名允许列表。对于被阻止的域名，代理返回 HTTP 403。
  *
- * Header values support $VAR_NAME and ${VAR_NAME} env var interpolation so that
- * secrets (e.g. "Authorization: Bearer $MY_TOKEN") are not stored in settings.json.
- * Only env vars explicitly listed in the hook's `allowedEnvVars` array are resolved;
- * all other references are replaced with empty strings.
+ * 标头值支持 $VAR_NAME 和 ${VAR_NAME} 环境变量插值，这样机密（例如 "Authorization: Bearer $MY_TOKEN"）就不会存储在 settings.json 中。
+ * 仅解析钩子的 `allowedEnvVars` 数组中显式列出的环境变量；所有其他引用都被替换为空字符串。
  */
 export async function execHttpHook(
   hook: HttpHook,
@@ -132,10 +119,11 @@ export async function execHttpHook(
   error?: string
   aborted?: boolean
 }> {
-  // Enforce URL allowlist before any I/O. Follows allowedMcpServers semantics:
-  // undefined → no restriction; [] → block all; non-empty → must match a pattern.
+  // 在任何 I/O 之前强制执行 URL 允许列表。遵循 allowedMcpServers 语义：
+  // undefined → 无限制；[] → 阻止所有；非空 → 必须匹配某个模式。
   const policy = getHttpHookPolicy()
   if (policy.allowedUrls !== undefined) {
+    /** 执行 matched 对应的业务处理。 */
     const matched = policy.allowedUrls.some(p => urlMatchesPattern(hook.url, p))
     if (!matched) {
       const msg = `HTTP hook blocked: ${hook.url} does not match any pattern in allowedHttpHookUrls`
@@ -154,12 +142,12 @@ export async function execHttpHook(
   )
 
   try {
-    // Build headers with env var interpolation in values
+    // 构建标头，值中包含环境变量插值
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
     if (hook.headers) {
-      // Intersect hook's allowedEnvVars with policy allowlist when policy is set
+      // 当策略设置时，将钩子的 allowedEnvVars 与策略允许列表取交集
       const hookVars = hook.allowedEnvVars ?? []
       const effectiveVars =
         policy.allowedEnvVars !== undefined
@@ -171,16 +159,12 @@ export async function execHttpHook(
       }
     }
 
-    // Route through sandbox network proxy when available. The proxy enforces
-    // the domain allowlist and returns 403 for blocked domains.
+    // 当可用时，通过沙箱网络代理路由。代理强制执行域名允许列表，并为被阻止的域名返回 403。
     const sandboxProxy = await getSandboxProxyConfig()
 
-    // Detect env var proxy (HTTP_PROXY / HTTPS_PROXY, respecting NO_PROXY).
-    // When set, configureGlobalAgents() has already installed a request
-    // interceptor that sets httpsAgent to an HttpsProxyAgent — the proxy
-    // handles DNS for the target. Skip the SSRF guard in that case, same
-    // as we do for the sandbox proxy, so that we don't accidentally block
-    // a corporate proxy sitting on a private IP (e.g. 10.0.0.1:3128).
+    // 检测环境变量代理（HTTP_PROXY / HTTPS_PROXY，尊重 NO_PROXY）。
+    // 当设置时，configureGlobalAgents() 已经安装了请求拦截器，该拦截器将 httpsAgent 设置为 HttpsProxyAgent——代理处理目标服务器的 DNS。
+    // 在这种情况下跳过 SSRF 防护，就像我们对沙箱代理所做的那样，以免意外阻止位于私有 IP（例如 10.0.0.1:3128）上的公司代理。
     const envProxyActive =
       !sandboxProxy &&
       getProxyUrl() !== undefined &&
@@ -202,17 +186,12 @@ export async function execHttpHook(
       headers,
       signal: combinedSignal,
       responseType: 'text',
+      /** 校验 validate Status 对应的数据或状态。 */
       validateStatus: () => true,
       maxRedirects: 0,
-      // Explicit false prevents axios's own env-var proxy detection; when an
-      // env-var proxy is configured, the global axios interceptor installed
-      // by configureGlobalAgents() handles it via httpsAgent instead.
+      // 显式 false 会阻止 axios 自身的环境变量代理检测；当配置了环境变量代理时，由 configureGlobalAgents() 安装的全局 axios 拦截器通过 httpsAgent 处理它。
       proxy: sandboxProxy ?? false,
-      // SSRF guard: validate resolved IPs, block private/link-local ranges
-      // (but allow loopback for local dev). Skipped when any proxy is in
-      // use — the proxy performs DNS for the target, and applying the
-      // guard would instead validate the proxy's own IP, breaking
-      // connections to corporate proxies on private networks.
+      // SSRF 防护：验证解析的 IP，阻止私有/链路本地范围（但允许用于本地开发的回环地址）。当使用任何代理时跳过——代理执行目标服务器的 DNS，而应用防护会转而验证代理自身的 IP，从而中断与私有网络上的公司代理的连接。
       lookup: sandboxProxy || envProxyActive ? undefined : ssrfGuardedLookup,
     })
 

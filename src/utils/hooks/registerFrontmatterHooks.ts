@@ -6,15 +6,14 @@ import type { HooksSettings } from '../settings/types.js'
 import { addSessionHook } from './sessionHooks.js'
 
 /**
- * Register hooks from frontmatter (agent or skill) into session-scoped hooks.
- * These hooks will be active for the duration of the session/agent and cleaned up
- * when the session/agent ends.
+ * 从frontmatter（代理或技能）注册钩子到会话范围的钩子。
+ * 这些钩子在会话/代理期间处于活动状态，并在会话/代理结束时清理。
  *
- * @param setAppState Function to update app state
- * @param sessionId Session ID to scope the hooks (agent ID for agents, session ID for skills)
- * @param hooks The hooks settings from frontmatter
- * @param sourceName Human-readable source name for logging (e.g., "agent 'my-agent'")
- * @param isAgent If true, converts Stop hooks to SubagentStop (since subagents trigger SubagentStop, not Stop)
+ * @param setAppState 用于更新应用状态的函数
+ * @param sessionId 用于限定钩子范围的会话ID（代理的代理ID，技能的会话ID）
+ * @param hooks 来自frontmatter的钩子设置
+ * @param sourceName 用于日志记录的人类可读源名称（例如，“agent 'my-agent'”）
+ * @param isAgent 如果为true，将Stop钩子转换为SubagentStop（因为子代理触发SubagentStop，而不是Stop）
  */
 export function registerFrontmatterHooks(
   setAppState: (updater: (prev: AppState) => AppState) => void,
@@ -35,8 +34,7 @@ export function registerFrontmatterHooks(
       continue
     }
 
-    // For agents, convert Stop hooks to SubagentStop since that's what fires when an agent completes
-    // (executeStopHooks uses SubagentStop when called with an agentId)
+    // 对于代理，将Stop钩子转换为SubagentStop，因为代理完成时触发的是SubagentStop（当使用agentId调用executeStopHooks时，它使用SubagentStop）
     let targetEvent: HookEvent = event
     if (isAgent && event === 'Stop') {
       targetEvent = 'SubagentStop'

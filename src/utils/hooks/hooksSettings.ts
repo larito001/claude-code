@@ -27,25 +27,23 @@ export interface IndividualHookConfig {
   pluginName?: string
 }
 
-/**
- * Check if two hooks are equal (comparing only command/prompt content, not timeout)
- */
+/** 检查两个钩子是否相等（只比较命令/提示内容，不比较超时） */
 export function isHookEqual(
   a: HookCommand | { type: 'function'; timeout?: number },
   b: HookCommand | { type: 'function'; timeout?: number },
 ): boolean {
   if (a.type !== b.type) return false
 
-  // Use switch for exhaustive type checking
-  // Note: We only compare command/prompt content, not timeout
-  // `if` is part of identity: same command with different `if` conditions
-  // are distinct hooks (e.g., setup.sh if=Bash(git *) vs if=Bash(npm *)).
+  // 使用 switch 进行穷举类型检查
+  // 注意：我们只比较命令/提示内容，不比较超时
+  // `if` 是标识的一部分：相同命令但不同 `if` 条件
+  // 是不同的钩子（例如，setup.sh if=Bash(git *) 与 if=Bash(npm *)）。
   const sameIf = (x: { if?: string }, y: { if?: string }) =>
     (x.if ?? '') === (y.if ?? '')
   switch (a.type) {
     case 'command':
-      // shell is part of identity: same command string with different
-      // shells are distinct hooks. Default 'bash' so undefined === 'bash'.
+      // shell 是标识的一部分：相同命令字符串但不同
+      // shell 是不同的钩子。默认 'bash' 所以 undefined === 'bash'。
       return (
         b.type === 'command' &&
         a.command === b.command &&
@@ -59,16 +57,16 @@ export function isHookEqual(
     case 'http':
       return b.type === 'http' && a.url === b.url && sameIf(a, b)
     case 'function':
-      // Function hooks can't be compared (no stable identifier)
+      // 函数钩子无法比较（没有稳定标识符）
       return false
   }
 }
 
-/** Get the display text for a hook */
+/** 获取钩子的显示文本 */
 export function getHookDisplayText(
   hook: HookCommand | { type: 'callback' | 'function'; statusMessage?: string },
 ): string {
-  // Return custom status message if provided
+  // 如果提供了自定义状态消息则返回
   if ('statusMessage' in hook && hook.statusMessage) {
     return hook.statusMessage
   }
@@ -89,26 +87,27 @@ export function getHookDisplayText(
   }
 }
 
+/** 获取 get All Hooks 对应的数据或状态。 */
 export function getAllHooks(appState: AppState): IndividualHookConfig[] {
   const hooks: IndividualHookConfig[] = []
 
-  // Check if restricted to managed hooks only
+  // 检查是否仅限于托管钩子
   const policySettings = getSettingsForSource('policySettings')
   const restrictedToManagedOnly = policySettings?.allowManagedHooksOnly === true
 
-  // If allowManagedHooksOnly is set, don't show any hooks in the UI
-  // (user/project/local are blocked, and managed hooks are intentionally hidden)
+  // 如果设置了 allowManagedHooksOnly，不要在 UI 中显示任何钩子
+  // （用户/项目/本地钩子被阻止，托管钩子被故意隐藏）
   if (!restrictedToManagedOnly) {
-    // Get hooks from all editable sources
+    // 从所有可编辑源获取钩子
     const sources = [
       'userSettings',
       'projectSettings',
       'localSettings',
     ] as EditableSettingSource[]
 
-    // Track which settings files we've already processed to avoid duplicates
-    // (e.g., when running from home directory, userSettings and projectSettings
-    // both resolve to ~/.claude/settings.json)
+    // 跟踪我们已经处理过的设置文件以避免重复
+    // （例如，从 home 目录运行时，userSettings 和 projectSettings
+    // 都解析为 ~/.claude/settings.json）
     const seenFiles = new Set<string>()
 
     for (const source of sources) {
@@ -141,7 +140,7 @@ export function getAllHooks(appState: AppState): IndividualHookConfig[] {
     }
   }
 
-  // Get session hooks
+  // 获取会话钩子
   const sessionId = getSessionId()
   const sessionHooks = getSessionHooks(appState, sessionId)
   for (const [event, matchers] of sessionHooks.entries()) {
@@ -160,6 +159,7 @@ export function getAllHooks(appState: AppState): IndividualHookConfig[] {
   return hooks
 }
 
+/** 获取 get Hooks For Event 对应的数据或状态。 */
 export function getHooksForEvent(
   appState: AppState,
   event: HookEvent,
@@ -167,6 +167,7 @@ export function getHooksForEvent(
   return getAllHooks(appState).filter(hook => hook.event === event)
 }
 
+/** 执行 hook Source Description Display String 对应的业务处理。 */
 export function hookSourceDescriptionDisplayString(source: HookSource): string {
   switch (source) {
     case 'userSettings':
@@ -176,9 +177,8 @@ export function hookSourceDescriptionDisplayString(source: HookSource): string {
     case 'localSettings':
       return 'Local settings (.claude/settings.local.json)'
     case 'pluginHook':
-      // TODO: Get the actual plugin hook file paths instead of using glob pattern
-      // We should capture the specific plugin paths during hook registration and display them here
-      // e.g., "Plugin hooks (~/.claude/plugins/repos/source/example-plugin/example-plugin/hooks/hooks.json)"
+      // 一个插件可合并多个 hooks 文件，当前运行时只保留合并后的配置与插件名，
+      // 不保留每条命令的文件来源；因此这里使用可迁移的路径模式，避免显示错误的单一路径。
       return 'Plugin hooks (~/.claude/plugins/*/hooks/hooks.json)'
     case 'sessionHook':
       return 'Session hooks (in-memory, temporary)'
@@ -189,6 +189,7 @@ export function hookSourceDescriptionDisplayString(source: HookSource): string {
   }
 }
 
+/** 执行 hook Source Header Display String 对应的业务处理。 */
 export function hookSourceHeaderDisplayString(source: HookSource): string {
   switch (source) {
     case 'userSettings':
@@ -208,6 +209,7 @@ export function hookSourceHeaderDisplayString(source: HookSource): string {
   }
 }
 
+/** 执行 hook Source Inline Display String 对应的业务处理。 */
 export function hookSourceInlineDisplayString(source: HookSource): string {
   switch (source) {
     case 'userSettings':
@@ -227,6 +229,7 @@ export function hookSourceInlineDisplayString(source: HookSource): string {
   }
 }
 
+/** 整理 sort Matchers By Priority 对应的数据或状态。 */
 export function sortMatchersByPriority(
   matchers: string[],
   hooksByEventAndMatcher: Record<
@@ -235,7 +238,7 @@ export function sortMatchersByPriority(
   >,
   selectedEvent: HookEvent,
 ): string[] {
-  // Create a priority map based on SOURCES order (lower index = higher priority)
+  // 基于 SOURCES 顺序创建优先级映射（索引越低优先级越高）
   const sourcePriority = SOURCES.reduce(
     (acc, source, index) => {
       acc[source] = index
@@ -251,8 +254,8 @@ export function sortMatchersByPriority(
     const aSources = Array.from(new Set(aHooks.map(h => h.source)))
     const bSources = Array.from(new Set(bHooks.map(h => h.source)))
 
-    // Sort by highest priority source first (lowest priority number)
-    // Plugin hooks get lowest priority (highest number)
+    // 按最高优先级源优先排序（优先级数字最低）
+    // 插件钩子获得最低优先级（最高数字）
     const getSourcePriority = (source: HookSource) =>
       source === 'pluginHook' || source === 'builtinHook'
         ? 999
@@ -265,7 +268,7 @@ export function sortMatchersByPriority(
       return aHighestPriority - bHighestPriority
     }
 
-    // If same priority, sort by matcher name
+    // 如果优先级相同，按匹配器名称排序
     return a.localeCompare(b)
   })
 }

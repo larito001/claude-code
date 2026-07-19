@@ -15,9 +15,7 @@ import type { PromptHook } from '../settings/types.js'
 import { asSystemPrompt } from '../systemPromptType.js'
 import { addArgumentsToPrompt, hookResponseSchema } from './hookHelpers.js'
 
-/**
- * Execute a prompt-based hook using an LLM
- */
+/** 使用LLM执行基于提示的钩子 */
 export async function execPromptHook(
   hook: PromptHook,
   hookName: string,
@@ -28,20 +26,19 @@ export async function execPromptHook(
   messages?: Message[],
   toolUseID?: string,
 ): Promise<HookResult> {
-  // Use provided toolUseID or generate a new one
+  // 使用提供的 toolUseID 或生成新的
   const effectiveToolUseID = toolUseID || `hook-${randomUUID()}`
   try {
-    // Replace $ARGUMENTS with the JSON input
+    // 用 JSON 输入替换 $ARGUMENTS
     const processedPrompt = addArgumentsToPrompt(hook.prompt, jsonInput)
     logForDebugging(
       `Hooks: Processing prompt hook with prompt: ${processedPrompt}`,
     )
 
-    // Create user message directly - no need for processUserInput which would
-    // trigger UserPromptSubmit hooks and cause infinite recursion
+    // 直接创建用户消息 —— 无需调用 processUserInput，否则会触发 UserPromptSubmit 钩子并导致无限递归
     const userMessage = createUserMessage({ content: processedPrompt })
 
-    // Prepend conversation history if provided
+    // 如果提供了对话历史记录，则将其前置
     const messagesToQuery =
       messages && messages.length > 0
         ? [...messages, userMessage]
@@ -51,10 +48,10 @@ export async function execPromptHook(
       `Hooks: Querying model with ${messagesToQuery.length} messages`,
     )
 
-    // Query the model with Haiku
+    // 使用 Haiku 查询模型
     const hookTimeoutMs = hook.timeout ? hook.timeout * 1000 : 30000
 
-    // Combined signal: aborts if either the hook signal or timeout triggers
+    // 组合信号：钩子信号或超时触发时中止
     const { signal: combinedSignal, cleanup: cleanupSignal } =
       createCombinedAbortSignal(signal, { timeoutMs: hookTimeoutMs })
 
@@ -72,6 +69,7 @@ Your response must be a JSON object matching one of the following schemas:
         tools: toolUseContext.options.tools,
         signal: combinedSignal,
         options: {
+          /** 获取 get Tool Permission Context 对应的数据或状态。 */
           async getToolPermissionContext() {
             const appState = toolUseContext.getAppState()
             return appState.toolPermissionContext
@@ -101,10 +99,10 @@ Your response must be a JSON object matching one of the following schemas:
 
       cleanupSignal()
 
-      // Extract text content from response
+      // 从响应中提取文本内容
       const content = extractTextContent(response.message.content)
 
-      // Update response length for spinner display
+      // 更新响应长度以便旋转显示
       toolUseContext.setResponseLength(length => length + content.length)
 
       const fullResponse = content.trim()
@@ -150,7 +148,7 @@ Your response must be a JSON object matching one of the following schemas:
         }
       }
 
-      // Failed to meet condition
+      // 未能满足条件
       if (!parsed.data.ok) {
         logForDebugging(
           `Hooks: Prompt hook condition was not met: ${parsed.data.reason}`,
@@ -167,7 +165,7 @@ Your response must be a JSON object matching one of the following schemas:
         }
       }
 
-      // Condition was met
+      // 条件已满足
       logForDebugging(`Hooks: Prompt hook condition was met`)
       return {
         hook,

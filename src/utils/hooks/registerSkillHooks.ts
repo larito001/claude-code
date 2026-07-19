@@ -5,17 +5,15 @@ import type { HooksSettings } from '../settings/types.js'
 import { addSessionHook, removeSessionHook } from './sessionHooks.js'
 
 /**
- * Registers hooks from a skill's frontmatter as session hooks.
+ * 从技能的 frontmatter 中注册钩子作为会话钩子。
  *
- * Hooks are registered as session-scoped hooks that persist for the duration
- * of the session. If a hook has `once: true`, it will be automatically removed
- * after its first successful execution.
+ * 钩子被注册为会话范围的钩子，持续整个会话期间。如果钩子具有 `once: true`，则在首次成功执行后会自动移除。
  *
- * @param setAppState - Function to update the app state
- * @param sessionId - The current session ID
- * @param hooks - The hooks settings from the skill's frontmatter
- * @param skillName - The name of the skill (for logging)
- * @param skillRoot - The base directory of the skill (for CLAUDE_PLUGIN_ROOT env var)
+ * @param setAppState - 更新应用状态的函数
+ * @param sessionId - 当前会话 ID
+ * @param hooks - 来自技能 frontmatter 的钩子设置
+ * @param skillName - 技能名称（用于日志记录）
+ * @param skillRoot - 技能的基础目录（用于 CLAUDE_PLUGIN_ROOT 环境变量）
  */
 export function registerSkillHooks(
   setAppState: (updater: (prev: AppState) => AppState) => void,
@@ -32,7 +30,7 @@ export function registerSkillHooks(
 
     for (const matcher of matchers) {
       for (const hook of matcher.hooks) {
-        // For once: true hooks, use onHookSuccess callback to remove after execution
+        // 对于 `once: true` 的钩子，使用 onHookSuccess 回调在执行后移除
         const onHookSuccess = hook.once
           ? () => {
               logForDebugging(
