@@ -2,7 +2,7 @@ import * as fs from 'fs/promises'
 import { join } from 'path'
 import { CACHE_PATHS } from './cachePaths.js'
 import { logForDebugging } from './debug.js'
-import { getClaudeConfigHomeDir } from './envUtils.js'
+import { getFrameworkConfigHomeDir } from './envUtils.js'
 import { type FsOperations, getFsImplementation } from './fsOperations.js'
 import { cleanupOldImageCaches } from './imageStore.js'
 import { logError } from './log.js'
@@ -294,7 +294,7 @@ async function cleanupSingleDirectory(
 }
 
 export function cleanupOldPlanFiles(): Promise<CleanupResult> {
-  const plansDir = join(getClaudeConfigHomeDir(), 'plans')
+  const plansDir = join(getFrameworkConfigHomeDir(), 'plans')
   return cleanupSingleDirectory(plansDir, '.md')
 }
 
@@ -304,7 +304,7 @@ export async function cleanupOldFileHistoryBackups(): Promise<CleanupResult> {
   const fsImpl = getFsImplementation()
 
   try {
-    const configDir = getClaudeConfigHomeDir()
+    const configDir = getFrameworkConfigHomeDir()
     const fileHistoryStorageDir = join(configDir, 'file-history')
 
     let dirents
@@ -349,7 +349,7 @@ export async function cleanupOldSessionEnvDirs(): Promise<CleanupResult> {
   const fsImpl = getFsImplementation()
 
   try {
-    const configDir = getClaudeConfigHomeDir()
+    const configDir = getFrameworkConfigHomeDir()
     const sessionEnvBaseDir = join(configDir, 'session-env')
 
     let dirents
@@ -384,7 +384,7 @@ export async function cleanupOldSessionEnvDirs(): Promise<CleanupResult> {
 }
 
 /**
- * Cleans up old debug log files from ~/.claude/debug/
+ * Cleans up old debug log files from ~/.claude-code-core-framework/debug/
  * Preserves the 'latest' symlink which points to the current session's log.
  * Debug logs can grow very large (especially with the infinite logging loop bug)
  * and accumulate indefinitely without this cleanup.
@@ -393,7 +393,7 @@ export async function cleanupOldDebugLogs(): Promise<CleanupResult> {
   const cutoffDate = getCutoffDate()
   const result: CleanupResult = { messages: 0, errors: 0 }
   const fsImpl = getFsImplementation()
-  const debugDir = join(getClaudeConfigHomeDir(), 'debug')
+  const debugDir = join(getFrameworkConfigHomeDir(), 'debug')
 
   let dirents
   try {

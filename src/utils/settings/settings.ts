@@ -10,7 +10,7 @@ import {
 import { uniq } from '../array.js'
 import { logForDebugging } from '../debug.js'
 import { logForDiagnosticsNoPII } from '../diagLogs.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from '../envUtils.js'
+import { getFrameworkConfigHomeDir, isEnvTruthy } from '../envUtils.js'
 import { getErrnoCode, isENOENT } from '../errors.js'
 import { writeFileSyncAndFlush_DEPRECATED } from '../file.js'
 import { readFileSync } from '../fileRead.js'
@@ -220,14 +220,14 @@ function parseSettingsFileUncached(path: string): {
 }
 
 /**
- * 获取给定设置源的关联文件根目录的绝对路径（例如，对于 $PROJ_DIR/.claude/settings.json，返回 $PROJ_DIR）
+ * 获取给定设置源的关联文件根目录的绝对路径（例如，对于 $PROJ_DIR/.claude-code-core-framework/settings.json，返回 $PROJ_DIR）
  * @param source 设置的来源
  * @returns 设置文件的根路径
  */
 export function getSettingsRootPathForSource(source: SettingSource): string {
   switch (source) {
     case 'userSettings':
-      return resolve(getClaudeConfigHomeDir())
+      return resolve(getFrameworkConfigHomeDir())
     case 'policySettings':
     case 'projectSettings':
     case 'localSettings': {
@@ -276,9 +276,9 @@ export function getRelativeSettingsFilePathForSource(
 ): string {
   switch (source) {
     case 'projectSettings':
-      return join('.claude', 'settings.json')
+      return join('.claude-code-core-framework', 'settings.json')
     case 'localSettings':
-      return join('.claude', 'settings.local.json')
+      return join('.claude-code-core-framework', 'settings.local.json')
   }
 }
 

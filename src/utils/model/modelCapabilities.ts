@@ -6,7 +6,7 @@ import { join } from 'path'
 import { z } from 'zod/v4'
 import { getAnthropicClient } from '../../services/api/client.js'
 import { logForDebugging } from '../debug.js'
-import { getClaudeConfigHomeDir } from '../envUtils.js'
+import { getFrameworkConfigHomeDir } from '../envUtils.js'
 import { safeParseJSON } from '../json.js'
 import { lazySchema } from '../lazySchema.js'
 import { isEssentialTrafficOnly } from '../privacyLevel.js'
@@ -36,7 +36,7 @@ export type ModelCapability = z.infer<ReturnType<typeof ModelCapabilitySchema>>
 
 /** 获取 get Cache Dir 对应的数据或状态。 */
 function getCacheDir(): string {
-  return join(getClaudeConfigHomeDir(), 'cache')
+  return join(getFrameworkConfigHomeDir(), 'cache')
 }
 
 /** 获取 get Cache Path 对应的数据或状态。 */
@@ -57,7 +57,7 @@ function sortForMatching(models: ModelCapability[]): ModelCapability[] {
   )
 }
 
-// 以缓存路径为键，以便设置 CLAUDE_CONFIG_DIR 的测试能够重新读取
+// 以缓存路径为键，以便设置 FRAMEWORK_CONFIG_DIR 的测试能够重新读取
 const loadCache = memoize(
   (path: string): ModelCapability[] | null => {
     try {

@@ -7,8 +7,8 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const tempConfig = await mkdtemp(join(tmpdir(), 'claude-ui-smoke-'))
-const previousConfigDir = process.env.CLAUDE_CONFIG_DIR
-process.env.CLAUDE_CONFIG_DIR = tempConfig
+const previousConfigDir = process.env.FRAMEWORK_CONFIG_DIR
+process.env.FRAMEWORK_CONFIG_DIR = tempConfig
 
 try {
   const { clearBundledSkills } = await import('../src/skills/bundledSkills.js')
@@ -65,8 +65,8 @@ try {
   ).render('dark', 24, false)
   assert(diff?.length === 2, 'Structured diff did not render')
 } finally {
-  if (previousConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR
-  else process.env.CLAUDE_CONFIG_DIR = previousConfigDir
+  if (previousConfigDir === undefined) delete process.env.FRAMEWORK_CONFIG_DIR
+  else process.env.FRAMEWORK_CONFIG_DIR = previousConfigDir
   await rm(tempConfig, { recursive: true, force: true })
 }
 

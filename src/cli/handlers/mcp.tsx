@@ -11,10 +11,11 @@ import { connectToServer, getMcpServerConnectionBatchSize } from '../../services
 import { addMcpConfig, getAllMcpConfigs, getMcpConfigByName, getMcpConfigsByScope, removeMcpConfig } from '../../services/mcp/config.js';
 import type { ConfigScope, ScopedMcpServerConfig } from '../../services/mcp/types.js';
 import { describeMcpConfigFilePath, ensureConfigScope, getScopeLabel } from '../../services/mcp/utils.js';
-import { getCurrentProjectConfig, getGlobalConfig, saveCurrentProjectConfig } from '../../utils/config.js';
+import { getCurrentProjectConfig, getGlobalConfig } from '../../utils/config.js';
 import { isFsInaccessible } from '../../utils/errors.js';
 import { gracefulShutdown } from '../../utils/gracefulShutdown.js';
 import { safeParseJSON } from '../../utils/json.js';
+import { updateSettingsForSource } from '../../utils/settings/settings.js';
 import { cliError, cliOk } from '../exit.js';
 /** 检查 check Mcp Server Health 对应的数据或状态。 */
 async function checkMcpServerHealth(name: string, server: ScopedMcpServerConfig): Promise<string> {
@@ -289,11 +290,10 @@ export async function mcpAddJsonHandler(name: string, json: string, options: {
 
 // mcp reset-project-choices（第 4935–4952 行）
 export async function mcpResetChoicesHandler(): Promise<void> {
-  saveCurrentProjectConfig(current => ({
-    ...current,
+  updateSettingsForSource('localSettings', {
     enabledMcpjsonServers: [],
     disabledMcpjsonServers: [],
     enableAllProjectMcpServers: false
-  }));
+  });
   cliOk('All project-scoped (.mcp.json) server approvals and rejections have been reset.\n' + 'You will be prompted for approval next time you start Claude Code.');
 }

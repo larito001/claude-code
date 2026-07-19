@@ -136,7 +136,7 @@ async function loadAgentFromFile(
     // permissionMode, hooks, and mcpServers are intentionally NOT parsed for
     // local plugin agents. These fields escalate what an agent can do beyond
     // the explicit plugin-directory trust boundary. For this level of control,
-    // define the agent in .claude/agents/
+    // define the agent in .claude-code-core-framework/agents/
     // where the user explicitly wrote the frontmatter. (Note: plugins can
     // still ship hooks and MCP servers at the manifest level — that's the
     // install-time trust boundary. Per-agent declarations would let a single
@@ -144,7 +144,7 @@ async function loadAgentFromFile(
     for (const field of ['permissionMode', 'hooks', 'mcpServers'] as const) {
       if (frontmatter[field] !== undefined) {
         logForDebugging(
-          `Plugin agent file ${filePath} sets ${field}, which is ignored for plugin agents. Use .claude/agents/ for this level of control.`,
+          `Plugin agent file ${filePath} sets ${field}, which is ignored for plugin agents. Use .claude-code-core-framework/agents/ for this level of control.`,
           { level: 'warn' },
         )
       }

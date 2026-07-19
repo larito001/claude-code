@@ -186,7 +186,7 @@ export const DeniedMcpServerEntrySchema = lazySchema(() =>
  *
  * ⚠️ 向后兼容性通知 ⚠️
  *
- * 此模式定义用户设置文件 (.claude/settings.json) 的结构。
+ * 此模式定义用户设置文件 (.claude-code-core-framework/settings.json) 的结构。
  * 我们支持向后兼容的更改！方法如下：
  *
  * ✅ 允许的更改：
@@ -594,7 +594,7 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Custom directory for plan files, relative to project root. ' +
-            'If not set, defaults to ~/.claude/plans/',
+            'If not set, defaults to ~/.claude-code-core-framework/plans/',
         ),
       classifierPermissionsEnabled: z
         .boolean()
@@ -651,7 +651,7 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe(
-          'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .claude/settings.json) for security. When unset, defaults to ~/.claude/projects/<sanitized-cwd>/memory/.',
+          'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .claude-code-core-framework/settings.json) for security. When unset, defaults to ~/.claude-code-core-framework/projects/<sanitized-cwd>/memory/.',
         ),
       autoDreamEnabled: z
         .boolean()
@@ -761,7 +761,7 @@ export const SettingsSchema = lazySchema(() =>
           'Glob patterns or absolute paths of CLAUDE.md files to exclude from loading. ' +
             'Patterns are matched against absolute file paths using picomatch. ' +
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
-            'Examples: "/home/user/monorepo/CLAUDE.md", "**/code/CLAUDE.md", "**/some-dir/.claude/rules/**"',
+            'Examples: "/home/user/monorepo/CLAUDE.md", "**/code/CLAUDE.md", "**/some-dir/.claude-code-core-framework/rules/**"',
         ),
     })
     .passthrough(),

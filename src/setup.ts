@@ -242,7 +242,7 @@ export async function setup(
     saveWorktreeState(worktreeSession)
     // 清除内存文件缓存，因为 originalCwd 已更改
     clearMemoryFileCaches()
-    // 设置缓存已在 init() 中（通过 applySafeConfigEnvironmentVariables）以及上面的 captureHooksConfigSnapshot() 中填充，两者都是从原始目录的 .claude/settings.json 读取。从工作树重新读取并重新捕获钩子。
+    // 设置缓存已在 init() 中（通过 applySafeConfigEnvironmentVariables）以及上面的 captureHooksConfigSnapshot() 中填充，两者都是从原始目录的 .claude-code-core-framework/settings.json 读取。从工作树重新读取并重新捕获钩子。
     updateHooksConfigSnapshot()
   }
 

@@ -10,8 +10,8 @@ import { getCwd } from '../utils/cwd.js'
 import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
-import { getGlobalClaudeFile } from './env.js'
-import { getClaudeConfigHomeDir } from './envUtils.js'
+import { getGlobalConfigFile } from './env.js'
+import { getFrameworkConfigHomeDir } from './envUtils.js'
 import { ConfigParseError, getErrnoCode } from './errors.js'
 import { writeFileSyncAndFlush_DEPRECATED } from './file.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -96,10 +96,6 @@ export type ProjectConfig = {
   projectOnboardingSeenCount: number
   hasClaudeMdExternalIncludesApproved?: boolean
   hasClaudeMdExternalIncludesWarningShown?: boolean
-  // MCP 服务器批准字段 - 迁移到设置但保留向后兼容性
-  enabledMcpjsonServers?: string[]
-  disabledMcpjsonServers?: string[]
-  enableAllProjectMcpServers?: boolean
   // 禁用的 MCP 服务器列表（所有范围）- 用于启用/禁用切换
   disabledMcpServers?: string[]
   // 工作树会话管理
@@ -116,8 +112,6 @@ export type ProjectConfig = {
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   allowedTools: [],
   mcpServers: {},
-  enabledMcpjsonServers: [],
-  disabledMcpjsonServers: [],
   hasTrustDialogAccepted: false,
   projectOnboardingSeenCount: 0,
   hasClaudeMdExternalIncludesApproved: false,
@@ -140,7 +134,10 @@ export type DiffTool = 'terminal' | 'auto'
 
 export type OutputStyle = string
 
+export const CONFIG_SCHEMA_VERSION = 1 as const
+
 export type GlobalConfig = {
+  schemaVersion: typeof CONFIG_SCHEMA_VERSION
   /**
    * @deprecated 请改用settings.apiKeyHelper。
    */
@@ -155,9 +152,7 @@ export type GlobalConfig = {
   preferredNotifChannel: NotificationChannel
   verbose: boolean
   hasAcknowledgedCostThreshold?: boolean
-  hasResetAutoModeOptInForDefaultOffer?: boolean // 自动模式提示的一次性迁移保护。
   editorMode?: EditorMode
-  bypassPermissionsModeAccepted?: boolean
   hasUsedBackslashReturn?: boolean
   autoCompactEnabled: boolean // 控制是否启用自动压缩
   showTurnDuration: boolean // 控制是否显示回合持续时间消息（例如“Cooked for 1m 6s”）
@@ -198,8 +193,8 @@ export type GlobalConfig = {
   // 内存使用情况跟踪
   memoryUsageCount: number // 用户添加到内存的次数
 
-  // Opus 1M 合并通知跟踪
-  opus1mMergeNoticeSeenCount?: number // opus-1m-merge 通知已显示的次数
+  // 当前模型提示的显示状态
+  opus1mMergeNoticeSeenCount?: number
 
   // 队列使用情况跟踪
   promptQueueUseCount: number // use 使用提示队列的次数
@@ -231,12 +226,7 @@ export type GlobalConfig = {
   // 空闲返回对话框跟踪
   idleReturnDismissed?: boolean // 选择“不要再问”
 
-  // Opus 4.5 Pro 迁移跟踪
-
-  // Sonnet 4.5 1m 迁移跟踪
-  sonnet1m45MigrationComplete?: boolean
-
-  // Opus 4.0/4.1 → 当前 Opus 迁移（显示一次性通知）
+  // 当前模型提示的最近更新时间
   legacyOpusMigrationTimestamp?: number
 
   // 本地功能配置覆盖。环境变量 FRAMEWORK_FEATURE_OVERRIDES 优先。
@@ -295,10 +285,6 @@ export type GlobalConfig = {
   speculationEnabled?: boolean // 是否启用推测（默认：true）
 
 
-  // 最后应用的迁移集的版本。当等于
-  // CURRENT_MIGRATION_VERSION，runMigrations() 跳过所有同步迁移
-  // （避免每次启动时 11× saveGlobalConfig 锁定+重新读取）。
-  migrationVersion?: number
 }
 
 /**
@@ -308,6 +294,7 @@ export type GlobalConfig = {
  */
 function createDefaultGlobalConfig(): GlobalConfig {
   return {
+    schemaVersion: CONFIG_SCHEMA_VERSION,
     numStartups: 0,
     theme: 'dark',
     preferredNotifChannel: 'auto',
@@ -508,7 +495,7 @@ export function saveGlobalConfig(
   try {
     /** 执行 did Write 对应的业务处理。 */
     const didWrite = saveConfigWithLock(
-      getGlobalClaudeFile(),
+      getGlobalConfigFile(),
       createDefaultGlobalConfig,
       current => {
         const config = updater(current)
@@ -516,10 +503,7 @@ export function saveGlobalConfig(
         if (config === current) {
           return current
         }
-        written = {
-          ...config,
-          projects: removeProjectHistory(current.projects),
-        }
+        written = config
         return written
       },
     )
@@ -533,7 +517,7 @@ export function saveGlobalConfig(
     })
     // 出错时回退到非锁定版本。此回退存在一个竞态窗口：如果另一个进程正在写入（或文件被截断），getConfig 返回默认值。拒绝将这些默认值写入好的缓存配置，以避免擦除已完成的引导状态。
     const currentConfig = getConfig(
-      getGlobalClaudeFile(),
+      getGlobalConfigFile(),
       createDefaultGlobalConfig,
     )
     if (wouldLoseOnboardingState(currentConfig)) {
@@ -548,11 +532,8 @@ export function saveGlobalConfig(
     if (config === currentConfig) {
       return
     }
-    written = {
-      ...config,
-      projects: removeProjectHistory(currentConfig.projects),
-    }
-    saveConfig(getGlobalClaudeFile(), written, DEFAULT_GLOBAL_CONFIG)
+    written = config
+    saveConfig(getGlobalConfigFile(), written, DEFAULT_GLOBAL_CONFIG)
     writeThroughGlobalConfigCache(written)
   }
 }
@@ -563,35 +544,6 @@ let globalConfigCache: { config: GlobalConfig | null; mtime: number } = {
   mtime: 0,
 }
 
-/**
- * 从项目中移除 history 字段（已迁移到 history.jsonl）
- * @internal
- */
-function removeProjectHistory(
-  projects: Record<string, ProjectConfig> | undefined,
-): Record<string, ProjectConfig> | undefined {
-  if (!projects) {
-    return projects
-  }
-
-  const cleanedProjects: Record<string, ProjectConfig> = {}
-  let needsCleaning = false
-
-  for (const [path, projectConfig] of Object.entries(projects)) {
-    // history 从类型中移除，但可能存在于旧配置中
-    const legacy = projectConfig as ProjectConfig & { history?: unknown }
-    if (legacy.history !== undefined) {
-      needsCleaning = true
-      const { history, ...cleanedConfig } = legacy
-      cleanedProjects[path] = cleanedConfig
-    } else {
-      cleanedProjects[path] = projectConfig
-    }
-  }
-
-  return needsCleaning ? cleanedProjects : projects
-}
-
 // fs.watchFile 轮询间隔，用于检测来自其他实例的写入（毫秒）
 const CONFIG_FRESHNESS_POLL_MS = 1000
 let freshnessWatcherStarted = false
@@ -600,7 +552,7 @@ let freshnessWatcherStarted = false
 function startGlobalConfigFreshnessWatcher(): void {
   if (freshnessWatcherStarted || process.env.NODE_ENV === 'test') return
   freshnessWatcherStarted = true
-  const file = getGlobalClaudeFile()
+  const file = getGlobalConfigFile()
   watchFile(
     file,
     { interval: CONFIG_FRESHNESS_POLL_MS, persistent: false },
@@ -613,7 +565,14 @@ function startGlobalConfigFreshnessWatcher(): void {
           // 我们读取时，一次 write-through 可能已推进了缓存；不要退化为 watchFile 统计的过时快照。
           if (curr.mtimeMs <= globalConfigCache.mtime) return
           const parsed = safeParseJSON(stripBOM(content))
-          if (parsed === null || typeof parsed !== 'object') return
+          if (
+            parsed === null ||
+            typeof parsed !== 'object' ||
+            (parsed as { schemaVersion?: unknown }).schemaVersion !==
+              CONFIG_SCHEMA_VERSION
+          ) {
+            return
+          }
           globalConfigCache = {
             config: {
               ...createDefaultGlobalConfig(),
@@ -651,11 +610,11 @@ export function getGlobalConfig(): GlobalConfig {
   try {
     let stats: { mtimeMs: number; size: number } | null = null
     try {
-      stats = getFsImplementation().statSync(getGlobalClaudeFile())
+      stats = getFsImplementation().statSync(getGlobalConfigFile())
     } catch {
       // 文件不存在
     }
-    const config = getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
+    const config = getConfig(getGlobalConfigFile(), createDefaultGlobalConfig)
     globalConfigCache = {
       config,
       mtime: stats?.mtimeMs ?? Date.now(),
@@ -664,7 +623,7 @@ export function getGlobalConfig(): GlobalConfig {
     return config
   } catch {
     // 如果出现任何错误，回退到未缓存的行为。
-    return getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
+    return getConfig(getGlobalConfigFile(), createDefaultGlobalConfig)
   }
 }
 
@@ -684,6 +643,7 @@ function saveConfig<A extends object>(
   const filteredConfig = pickBy(
     config,
     (value, key) =>
+      key === 'schemaVersion' ||
       jsonStringify(value) !== jsonStringify(defaultConfig[key as keyof A]),
   )
   // 使用安全权限写入配置文件 - mode 仅适用于新文件。
@@ -731,7 +691,7 @@ function saveConfigWithLock<A extends object>(
 
     // 重新读取当前配置以获取最新状态。如果文件暂时损坏（并发写入、写入时被杀死），此操作返回默认值——我们绝不能将这些默认值写回好的配置。
     const currentConfig = getConfig(file, createDefault)
-    if (file === getGlobalClaudeFile() && wouldLoseOnboardingState(currentConfig)) {
+    if (file === getGlobalConfigFile() && wouldLoseOnboardingState(currentConfig)) {
       logForDebugging(
         'saveConfigWithLock: re-read config lost completed onboarding state; refusing to write.',
         { level: 'error' },
@@ -751,11 +711,12 @@ function saveConfigWithLock<A extends object>(
     const filteredConfig = pickBy(
       mergedConfig,
       (value, key) =>
+        key === 'schemaVersion' ||
         jsonStringify(value) !== jsonStringify(defaultConfig[key as keyof A]),
     )
 
     // 在写入前为现有配置创建带时间戳的备份
-    // 保留多个备份以防止重置或损坏的配置覆盖良好备份。备份存储在 ~/.claude/backups/ 中以保持主目录整洁。
+    // 保留多个备份以防止重置或损坏的配置覆盖良好备份。备份存储在 ~/.claude-code-core-framework/backups/ 中以保持主目录整洁。
     try {
       const fileBase = basename(file)
       const backupDir = getConfigBackupDir()
@@ -853,7 +814,7 @@ export function enableConfigs(): void {
   configReadingAllowed = true
   // 我们仅检查全局配置，因为目前所有配置共享一个文件
   getConfig(
-    getGlobalClaudeFile(),
+    getGlobalConfigFile(),
     createDefaultGlobalConfig,
     true /* 无效时抛出错误 */,
   )
@@ -863,12 +824,12 @@ export function enableConfigs(): void {
   })
 }
 
-/** 返回存储配置备份文件的目录。使用 ~/.claude/backups/ 以保持主目录整洁。 */
+/** 返回存储配置备份文件的目录。使用 ~/.claude-code-core-framework/backups/ 以保持主目录整洁。 */
 function getConfigBackupDir(): string {
-  return join(getClaudeConfigHomeDir(), 'backups')
+  return join(getFrameworkConfigHomeDir(), 'backups')
 }
 
-/** 为给定配置文件找到最新的备份文件。先检查 ~/.claude/backups/，然后回退到旧位置（配置文件旁边）以保持向后兼容性。返回最新备份的完整路径，如果不存在则返回 null。 */
+/** 从正式备份目录中查找给定配置文件的最新备份。 */
 function findMostRecentBackup(file: string): string | null {
   const fs = getFsImplementation()
   const fileBase = basename(file)
@@ -887,32 +848,6 @@ function findMostRecentBackup(file: string): string | null {
     }
   } catch {
     // 备份目录尚不存在
-  }
-
-  // 回退到旧位置（配置文件旁边）
-  const fileDir = dirname(file)
-
-  try {
-    const backups = fs
-      .readdirStringSync(fileDir)
-      .filter(f => f.startsWith(`${fileBase}.backup.`))
-      .sort()
-
-    const mostRecent = backups.at(-1) // 时间戳按字典序排序
-    if (mostRecent) {
-      return join(fileDir, mostRecent)
-    }
-
-    // 检查旧版备份文件（无时间戳）
-    const legacyBackup = `${file}.backup`
-    try {
-      fs.statSync(legacyBackup)
-      return legacyBackup
-    } catch {
-      // 旧版备份不存在
-    }
-  } catch {
-    // 忽略读取目录时的错误
   }
 
   return null
@@ -938,6 +873,14 @@ function getConfig<A>(
     try {
       // 解析前去除 BOM——PowerShell 5.x 会向 UTF-8 文件添加 BOM
       const parsedConfig = jsonParse(stripBOM(fileContent))
+      if (
+        !parsedConfig ||
+        typeof parsedConfig !== 'object' ||
+        (parsedConfig as { schemaVersion?: unknown }).schemaVersion !==
+          CONFIG_SCHEMA_VERSION
+      ) {
+        return createDefault()
+      }
       return {
         ...createDefault(),
         ...parsedConfig,
@@ -1090,21 +1033,7 @@ export function getCurrentProjectConfig(): ProjectConfig {
     return DEFAULT_PROJECT_CONFIG
   }
 
-  const projectConfig = config.projects[absolutePath] ?? DEFAULT_PROJECT_CONFIG
-  // 兼容旧版本曾把 allowedTools 写成 JSON 字符串的配置；读取时规范化，
-  // 但不修改全局缓存对象，避免一次读取产生隐式持久状态变化。
-  const legacyAllowedTools = projectConfig.allowedTools as string[] | string
-  if (typeof legacyAllowedTools === 'string') {
-    const parsed = safeParseJSON(legacyAllowedTools)
-    return {
-      ...projectConfig,
-      allowedTools: Array.isArray(parsed)
-        ? parsed.filter((tool): tool is string => typeof tool === 'string')
-        : [],
-    }
-  }
-
-  return projectConfig
+  return config.projects[absolutePath] ?? DEFAULT_PROJECT_CONFIG
 }
 
 /** 设置并保存 save Current Project Config 对应的数据或状态。 */
@@ -1126,7 +1055,7 @@ export function saveCurrentProjectConfig(
   try {
     /** 执行 did Write 对应的业务处理。 */
     const didWrite = saveConfigWithLock(
-      getGlobalClaudeFile(),
+      getGlobalConfigFile(),
       createDefaultGlobalConfig,
       current => {
         const currentProjectConfig =
@@ -1155,7 +1084,7 @@ export function saveCurrentProjectConfig(
     })
 
     // 与 saveGlobalConfig 的后备机制相同的竞态窗口——拒绝将默认值覆盖好的缓存配置。参见 GH #3117。
-    const config = getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
+    const config = getConfig(getGlobalConfigFile(), createDefaultGlobalConfig)
     if (wouldLoseOnboardingState(config)) {
       logForDebugging(
         'saveCurrentProjectConfig fallback: re-read config lost completed onboarding state; refusing to write.',
@@ -1177,7 +1106,7 @@ export function saveCurrentProjectConfig(
         [absolutePath]: newProjectConfig,
       },
     }
-    saveConfig(getGlobalClaudeFile(), written, DEFAULT_GLOBAL_CONFIG)
+    saveConfig(getGlobalConfigFile(), written, DEFAULT_GLOBAL_CONFIG)
     writeThroughGlobalConfigCache(written)
   }
 }
@@ -1188,7 +1117,7 @@ export function getMemoryPath(memoryType: MemoryType): string {
 
   switch (memoryType) {
     case 'User':
-      return join(getClaudeConfigHomeDir(), 'CLAUDE.md')
+      return join(getFrameworkConfigHomeDir(), 'CLAUDE.md')
     case 'Local':
       return join(cwd, 'CLAUDE.local.md')
     case 'Project':
@@ -1207,12 +1136,12 @@ export function getMemoryPath(memoryType: MemoryType): string {
 
 /** 获取 get Managed Claude Rules Dir 对应的数据或状态。 */
 export function getManagedClaudeRulesDir(): string {
-  return join(getManagedFilePath(), '.claude', 'rules')
+  return join(getManagedFilePath(), '.claude-code-core-framework', 'rules')
 }
 
 /** 获取 get User Claude Rules Dir 对应的数据或状态。 */
 export function getUserClaudeRulesDir(): string {
-  return join(getClaudeConfigHomeDir(), 'rules')
+  return join(getFrameworkConfigHomeDir(), 'rules')
 }
 
 // 仅为测试而导出

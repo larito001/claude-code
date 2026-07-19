@@ -11,7 +11,7 @@
 import { dirname, join } from 'path'
 import { getSessionId } from 'src/bootstrap/state.js'
 import { logForDebugging } from './debug.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getFrameworkConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { getFsImplementation } from './fsOperations.js'
 import { formatMs, formatTimelineLine, getPerformance } from './profilerBase.js'
 import { writeFileSync_DEPRECATED } from './slowOperations.js'
@@ -125,5 +125,5 @@ export function isDetailedProfilingEnabled(): boolean {
 }
 
 export function getStartupPerfLogPath(): string {
-  return join(getClaudeConfigHomeDir(), 'startup-perf', `${getSessionId()}.txt`)
+  return join(getFrameworkConfigHomeDir(), 'startup-perf', `${getSessionId()}.txt`)
 }

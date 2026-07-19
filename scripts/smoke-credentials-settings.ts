@@ -56,22 +56,18 @@ try {
   for (const name of environmentNames) delete process.env[name]
   process.env.CLAUDE_CODE_API_KEY_HELPER_TTL_MS = '60000'
 
-  const legacyProjectConfig = {
-    allowedTools: '["Bash","Read"]',
+  const projectConfig: ProjectConfig = {
+    allowedTools: ['Bash', 'Read'],
     projectOnboardingSeenCount: 0,
-  } as unknown as ProjectConfig
+  }
   _setGlobalConfigCacheForTesting({
     ...structuredClone(DEFAULT_GLOBAL_CONFIG),
-    projects: { [getProjectPathForConfig()]: legacyProjectConfig },
+    projects: { [getProjectPathForConfig()]: projectConfig },
   })
-  const normalizedProjectConfig = getCurrentProjectConfig()
+  const currentProjectConfig = getCurrentProjectConfig()
   assert(
-    normalizedProjectConfig.allowedTools.join(',') === 'Bash,Read',
-    '旧版 allowedTools 字符串未被规范化',
-  )
-  assert(
-    typeof (legacyProjectConfig.allowedTools as unknown) === 'string',
-    '读取旧版 allowedTools 时意外修改了全局配置缓存',
+    currentProjectConfig.allowedTools.join(',') === 'Bash,Read',
+    'schemaVersion=1 项目工具配置读取失败',
   )
 
   _setGlobalConfigCacheForTesting(structuredClone(DEFAULT_GLOBAL_CONFIG))
@@ -136,7 +132,7 @@ try {
   }
 
   const projectRoot = join(temporaryRoot, 'project')
-  const projectSettingsDirectory = join(projectRoot, '.claude')
+  const projectSettingsDirectory = join(projectRoot, '.claude-code-core-framework')
   await mkdir(projectSettingsDirectory, { recursive: true })
   await Bun.write(
     join(projectSettingsDirectory, 'settings.json'),

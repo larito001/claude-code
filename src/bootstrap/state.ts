@@ -92,9 +92,9 @@ type State = {
   inlinePlugins: Array<string>
   // 仅会话的绕过权限模式标志（不持久化）
   sessionBypassPermissionsMode: boolean
-  // 控制.claude/scheduled_tasks.json监视器的仅会话标志（useScheduledTasks）。当JSON有条目时由cronScheduler.start()设置，或由CronCreateTool设置。不持久化。
+  // 控制.claude-code-core-framework/scheduled_tasks.json监视器的仅会话标志（useScheduledTasks）。当JSON有条目时由cronScheduler.start()设置，或由CronCreateTool设置。不持久化。
   scheduledTasksEnabled: boolean
-  // 通过CronCreate创建的仅会话cron任务，durable: false。按计划触发，如同文件支持的任务，但从不写入.claude/scheduled_tasks.json —— 它们随进程终止。通过下面的SessionCronTask类型化（不从cronTasks.ts导入以保持bootstrap作为导入DAG的叶节点）。
+  // 通过CronCreate创建的仅会话cron任务，durable: false。按计划触发，如同文件支持的任务，但从不写入.claude-code-core-framework/scheduled_tasks.json —— 它们随进程终止。通过下面的SessionCronTask类型化（不从cronTasks.ts导入以保持bootstrap作为导入DAG的叶节点）。
   sessionCronTasks: SessionCronTask[]
   // 通过TeamCreate在此会话中创建的Teams。cleanupSessionTeams()在优雅关闭时移除它们，这样subagent创建的团队不会永远持久化在磁盘上（gh-32730）。TeamDelete移除条目以避免重复清理。存储在此处（而非teamHelpers.ts），以便resetStateForTests()在测试之间清除它。
   sessionCreatedTeams: Set<string>

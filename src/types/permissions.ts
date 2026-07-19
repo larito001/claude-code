@@ -314,7 +314,7 @@ export type PermissionDecisionReason =
       type: 'safetyCheck'
       reason: string
       // 当 true 时，自动模式让分类器评估它而不是
-      // 强制提示。对于敏感文件路径（.claude/、.git/、
+      // 强制提示。对于敏感文件路径（.claude-code-core-framework/、.git/、
       // shell 配置）——分类器可以查看上下文并作出判断；Windows 路径绕过尝试和跨机器桥接消息则必须保持不可批准。
       classifierApprovable: boolean
     }

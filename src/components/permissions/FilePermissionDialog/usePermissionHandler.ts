@@ -1,8 +1,8 @@
 import type { ToolPermissionContext } from '../../../Tool.js'
 import {
-  CLAUDE_FOLDER_PERMISSION_PATTERN,
+  FRAMEWORK_FOLDER_PERMISSION_PATTERN,
   FILE_EDIT_TOOL_NAME,
-  GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN,
+  GLOBAL_FRAMEWORK_FOLDER_PERMISSION_PATTERN,
 } from '../../../tools/FileEditTool/constants.js'
 import { generateSuggestions } from '../../../utils/permissions/filesystem.js'
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js'
@@ -50,15 +50,15 @@ function handleAcceptSession(
     operationType,
   } = params
 
-  // For claude-folder scope, grant session-level access to all .claude/ files
+  // For claude-folder scope, grant session-level access to all .claude-code-core-framework/ files
   if (
     options?.scope === 'claude-folder' ||
     options?.scope === 'global-claude-folder'
   ) {
     const pattern =
       options.scope === 'global-claude-folder'
-        ? GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN
-        : CLAUDE_FOLDER_PERMISSION_PATTERN
+        ? GLOBAL_FRAMEWORK_FOLDER_PERMISSION_PATTERN
+        : FRAMEWORK_FOLDER_PERMISSION_PATTERN
     const suggestions: PermissionUpdate[] = [
       {
         type: 'addRules',

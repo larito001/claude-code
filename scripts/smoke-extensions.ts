@@ -19,19 +19,19 @@ const dependentPluginRoot = join(tempRoot, 'dependent-extension')
 const missingPluginRoot = join(tempRoot, 'missing-plugin')
 const mcpFixture = resolve(import.meta.dir, 'fixtures/mcp-smoke-server.ts')
 const previousEnvironment = new Map(
-  ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_SIMPLE', 'LOCAL_PLUGIN_SMOKE_VALUE'].map(name => [
+  ['FRAMEWORK_CONFIG_DIR', 'CLAUDE_CODE_SIMPLE', 'LOCAL_PLUGIN_SMOKE_VALUE'].map(name => [
     name,
     process.env[name],
   ]),
 )
 
-process.env.CLAUDE_CONFIG_DIR = tempConfig
+process.env.FRAMEWORK_CONFIG_DIR = tempConfig
 delete process.env.CLAUDE_CODE_SIMPLE
 process.env.LOCAL_PLUGIN_SMOKE_VALUE = 'LOCAL_PLUGIN_ENV_OK'
 
 try {
   await Promise.all([
-    mkdir(join(tempProject, '.claude', 'skills', 'framework-quality'), {
+    mkdir(join(tempProject, '.claude-code-core-framework', 'skills', 'framework-quality'), {
       recursive: true,
     }),
     mkdir(join(pluginRoot, '.claude-plugin'), { recursive: true }),
@@ -45,7 +45,7 @@ try {
 
   await Promise.all([
     writeFile(
-      join(tempProject, '.claude', 'skills', 'framework-quality', 'SKILL.md'),
+      join(tempProject, '.claude-code-core-framework', 'skills', 'framework-quality', 'SKILL.md'),
       [
         '---',
         'name: framework-quality',

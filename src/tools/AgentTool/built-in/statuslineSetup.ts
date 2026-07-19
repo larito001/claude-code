@@ -94,10 +94,10 @@ How to use the statusLine command:
    Or to display context used percentage:
    - input=$(cat); used=$(echo "$input" | jq -r '.context_window.used_percentage // empty'); [ -n "$used" ] && echo "Context: $used% used"
 
-2. For longer commands, you can save a new file in the user's ~/.claude directory, e.g.:
-   - ~/.claude/statusline-command.sh and reference that file in the settings.
+2. For longer commands, you can save a new file in the user's ~/.claude-code-core-framework directory, e.g.:
+   - ~/.claude-code-core-framework/statusline-command.sh and reference that file in the settings.
 
-3. Update the user's ~/.claude/settings.json with:
+3. Update the user's ~/.claude-code-core-framework/settings.json with:
    {
      "statusLine": {
        "type": "command", 
@@ -105,7 +105,7 @@ How to use the statusLine command:
      }
    }
 
-4. If ~/.claude/settings.json is a symlink, update the target file instead.
+4. If ~/.claude-code-core-framework/settings.json is a symlink, update the target file instead.
 
 Guidelines:
 - Preserve existing settings when updating

@@ -107,7 +107,7 @@ export function getAllHooks(appState: AppState): IndividualHookConfig[] {
 
     // 跟踪我们已经处理过的设置文件以避免重复
     // （例如，从 home 目录运行时，userSettings 和 projectSettings
-    // 都解析为 ~/.claude/settings.json）
+    // 都解析为 ~/.claude-code-core-framework/settings.json）
     const seenFiles = new Set<string>()
 
     for (const source of sources) {
@@ -171,15 +171,15 @@ export function getHooksForEvent(
 export function hookSourceDescriptionDisplayString(source: HookSource): string {
   switch (source) {
     case 'userSettings':
-      return 'User settings (~/.claude/settings.json)'
+      return 'User settings (~/.claude-code-core-framework/settings.json)'
     case 'projectSettings':
-      return 'Project settings (.claude/settings.json)'
+      return 'Project settings (.claude-code-core-framework/settings.json)'
     case 'localSettings':
-      return 'Local settings (.claude/settings.local.json)'
+      return 'Local settings (.claude-code-core-framework/settings.local.json)'
     case 'pluginHook':
       // 一个插件可合并多个 hooks 文件，当前运行时只保留合并后的配置与插件名，
       // 不保留每条命令的文件来源；因此这里使用可迁移的路径模式，避免显示错误的单一路径。
-      return 'Plugin hooks (~/.claude/plugins/*/hooks/hooks.json)'
+      return 'Plugin hooks (~/.claude-code-core-framework/plugins/*/hooks/hooks.json)'
     case 'sessionHook':
       return 'Session hooks (in-memory, temporary)'
     case 'builtinHook':

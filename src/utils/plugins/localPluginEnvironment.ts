@@ -1,6 +1,6 @@
 import { mkdirSync } from 'fs'
 import { join } from 'path'
-import { getClaudeConfigHomeDir } from '../envUtils.js'
+import { getFrameworkConfigHomeDir } from '../envUtils.js'
 
 function safePluginName(pluginId: string): string {
   return pluginId.replace(/[^a-zA-Z0-9._-]/g, '-')
@@ -9,7 +9,7 @@ function safePluginName(pluginId: string): string {
 /** Return the persistent data directory for a local plugin, creating it lazily. */
 export function getLocalPluginDataDir(pluginId: string): string {
   const dir = join(
-    getClaudeConfigHomeDir(),
+    getFrameworkConfigHomeDir(),
     'plugin-data',
     safePluginName(pluginId),
   )

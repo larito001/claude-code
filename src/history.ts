@@ -4,7 +4,7 @@ import { getProjectRoot, getSessionId } from './bootstrap/state.js'
 import { registerCleanup } from './utils/cleanupRegistry.js'
 import type { HistoryEntry, PastedContent } from './utils/config.js'
 import { logForDebugging } from './utils/debug.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from './utils/envUtils.js'
+import { getFrameworkConfigHomeDir, isEnvTruthy } from './utils/envUtils.js'
 import { getErrnoCode } from './utils/errors.js'
 import { readLinesReverse } from './utils/fsOperations.js'
 import { lock } from './utils/lockfile.js'
@@ -106,7 +106,7 @@ async function* makeLogEntryReader(): AsyncGenerator<LogEntry> {
   }
 
   // 从全局历史文件读取（跨所有项目共享）
-  const historyPath = join(getClaudeConfigHomeDir(), 'history.jsonl')
+  const historyPath = join(getFrameworkConfigHomeDir(), 'history.jsonl')
 
   try {
     for await (const line of readLinesReverse(historyPath)) {
@@ -282,7 +282,7 @@ async function immediateFlushHistory(): Promise<void> {
 
   let release
   try {
-    const historyPath = join(getClaudeConfigHomeDir(), 'history.jsonl')
+    const historyPath = join(getFrameworkConfigHomeDir(), 'history.jsonl')
 
     // 在获取锁之前确保文件存在（追加模式会创建不存在的文件）
     await writeFile(historyPath, '', {

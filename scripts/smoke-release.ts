@@ -141,7 +141,7 @@ try {
 
   const isolatedEnv = {
     ...process.env,
-    CLAUDE_CONFIG_DIR: tempConfig,
+    FRAMEWORK_CONFIG_DIR: tempConfig,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
   }
   assert(
@@ -229,7 +229,7 @@ try {
       cwd: tempProject,
       env: {
         ...process.env,
-        CLAUDE_CONFIG_DIR: tempConfig,
+        FRAMEWORK_CONFIG_DIR: tempConfig,
         CONFIG_PORT: String(port),
         CONFIG_UI_ENV_PATH: tempEnv,
         CONFIG_UI_NO_OPEN: '1',

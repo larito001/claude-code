@@ -23,14 +23,14 @@ const tempConfig = join(tempRoot, 'config')
 const tempProject = join(tempRoot, 'project')
 const previousEnvironment = new Map(
   [
-    'CLAUDE_CONFIG_DIR',
+    'FRAMEWORK_CONFIG_DIR',
     'CLAUDE_CODE_ENABLE_TASKS',
     'CLAUDE_CODE_TASK_LIST_ID',
     'CLAUDE_CODE_SIMPLE',
   ].map(name => [name, process.env[name]]),
 )
 
-process.env.CLAUDE_CONFIG_DIR = tempConfig
+process.env.FRAMEWORK_CONFIG_DIR = tempConfig
 process.env.CLAUDE_CODE_ENABLE_TASKS = '1'
 process.env.CLAUDE_CODE_TASK_LIST_ID = 'core-chain-smoke'
 delete process.env.CLAUDE_CODE_SIMPLE
@@ -427,7 +427,7 @@ try {
     'Deleted task remained readable',
   )
 
-  const agentDir = join(tempProject, '.claude', 'agents')
+  const agentDir = join(tempProject, '.claude-code-core-framework', 'agents')
   await mkdir(agentDir, { recursive: true })
   await writeFile(
     join(agentDir, 'smoke-reviewer.md'),

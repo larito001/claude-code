@@ -87,7 +87,7 @@ const TEAMMATE_ENV_VARS = [
   // Custom API endpoint
   'ANTHROPIC_BASE_URL',
   // Config directory override
-  'CLAUDE_CONFIG_DIR',
+  'FRAMEWORK_CONFIG_DIR',
   // Preserve ordinary proxy and custom-CA configuration for teammates.
   'HTTPS_PROXY',
   'https_proxy',

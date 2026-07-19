@@ -48,7 +48,7 @@ export function generatePrompt(): string {
 ## Configurable settings list
 The following settings are available for you to change:
 
-### Global Settings (stored in ~/.claude.json)
+### Global Settings (stored in ~/.claude-code-core-framework/config.json)
 ${globalSettings.join('\n')}
 
 ### Project Settings (stored in settings.json)

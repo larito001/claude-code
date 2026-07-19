@@ -139,13 +139,6 @@ import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession,
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') as typeof import('./utils/permissions/autoModeState.js') : null;
 
-import { migrateBypassPermissionsAcceptedToSettings } from './migrations/migrateBypassPermissionsAcceptedToSettings.js';
-import { migrateEnableAllProjectMcpServersToSettings } from './migrations/migrateEnableAllProjectMcpServersToSettings.js';
-import { migrateLegacyOpusToCurrent } from './migrations/migrateLegacyOpusToCurrent.js';
-import { migrateOpusToOpus1m } from './migrations/migrateOpusToOpus1m.js';
-import { migrateSonnet1mToSonnet45 } from './migrations/migrateSonnet1mToSonnet45.js';
-import { resetAutoModeOptInForDefaultOffer } from './migrations/resetAutoModeOptInForDefaultOffer.js';
-/* eslint-enable @typescript-eslint/no-require-imports */
 import { initializeLspServerManager } from './services/lsp/manager.js';
 import { shouldEnablePromptSuggestion } from './services/PromptSuggestion/promptSuggestion.js';
 import { type AppState, getDefaultAppState, IDLE_SPECULATION_STATE } from './state/AppStateStore.js';
@@ -169,27 +162,6 @@ profileCheckpoint('main_tsx_imports_loaded');
  * 这在 init() 完成后调用，以确保加载设置
  * 和环境变量在模型解析之前应用。
  */
-// @[MODEL LAUNCH]：考虑模型字符串可能需要的任何迁移。有关示例，请参阅 migrateSonnet1mToSonnet45.ts。
-// 添加新的同步迁移时请更改此设置，以便现有用户重新运行该集。
-const CURRENT_MIGRATION_VERSION = 11;
-/** 执行 run Migrations 对应的数据或状态。 */
-function runMigrations(): void {
-  if (getGlobalConfig().migrationVersion !== CURRENT_MIGRATION_VERSION) {
-    migrateBypassPermissionsAcceptedToSettings();
-    migrateEnableAllProjectMcpServersToSettings();
-    migrateSonnet1mToSonnet45();
-    migrateLegacyOpusToCurrent();
-    migrateOpusToOpus1m();
-    if (feature('TRANSCRIPT_CLASSIFIER')) {
-      resetAutoModeOptInForDefaultOffer();
-    }
-    saveGlobalConfig(prev => prev.migrationVersion === CURRENT_MIGRATION_VERSION ? prev : {
-      ...prev,
-      migrationVersion: CURRENT_MIGRATION_VERSION
-    });
-  }
-}
-
 /**
  * 仅在安全时才预取系统上下文（包括 git status）。
  * Git 命令可通过钩子和配置执行任意代码（例如 core.fsmonitor，
@@ -518,9 +490,6 @@ async function run(): Promise<CommanderCommand> {
       setInlinePlugins(pluginDir);
       clearPluginCache('preAction: --plugin-dir inline plugins');
     }
-    runMigrations();
-    profileCheckpoint('preAction_after_migrations');
-
   });
   program.name('claude').description(`Claude Code - starts an interactive session by default, use -p/--print for non-interactive output`).argument('[prompt]', 'Your prompt', String)
   // Subcommands inherit helpOption via commander's copyInheritedSettings —
@@ -1073,7 +1042,7 @@ async function run(): Promise<CommanderCommand> {
 
     const effectiveReplayUserMessages = !!options.replayUserMessages;
     if (getIsNonInteractiveSession()) {
-      // 现在应用完全合并的设置环境（包括项目范围的 .claude/settings.json PATH/GIT_DIR/GIT_WORK_TREE），以便 gitExe() 和下面的 git spawn 能够看到它们。信任在 -p 模式下是隐式的；managedEnv.ts:96-97 的文档字符串说明这应用来自所有来源的“潜在危险的环境变量如 LD_PRELOAD、PATH”。下面的 isNonInteractiveSession 块中的后续调用是幂等的（Object.assign，configureGlobalAgents 弹出之前的拦截器），并在插件初始化后获取任何插件贡献的环境。项目设置已经在这里加载：init() 中的 applySafeConfigEnvironmentVariables 调用了 managedEnv.ts:86 的 getSettings_DEPRECATED，它合并了所有启用的来源，包括 projectSettings/localSettings。
+      // 现在应用完全合并的设置环境（包括项目范围的 .claude-code-core-framework/settings.json PATH/GIT_DIR/GIT_WORK_TREE），以便 gitExe() 和下面的 git spawn 能够看到它们。信任在 -p 模式下是隐式的；managedEnv.ts:96-97 的文档字符串说明这应用来自所有来源的“潜在危险的环境变量如 LD_PRELOAD、PATH”。下面的 isNonInteractiveSession 块中的后续调用是幂等的（Object.assign，configureGlobalAgents 弹出之前的拦截器），并在插件初始化后获取任何插件贡献的环境。项目设置已经在这里加载：init() 中的 applySafeConfigEnvironmentVariables 调用了 managedEnv.ts:86 的 getSettings_DEPRECATED，它合并了所有启用的来源，包括 projectSettings/localSettings。
       applyConfigEnvironmentVariables();
 
       // 现在生成 git status/log/branch，以便子进程执行与下面的 getCommands await 和 startDeferredPrefetches 重叠。在 setup() 之后，以便 cwd 是最终的（setup.ts:254 可能对 --worktree 执行 process.chdir(worktreePath)），并且在上述 applyConfigEnvironmentVariables 之后，以便来自所有来源（受信任 + 项目）的 PATH/GIT_DIR/GIT_WORK_TREE 被应用。getSystemContext 被记忆化；startDeferredPrefetches 中的 prefetchSystemContextIfSafe 调用变为缓存命中。await getIsGit() 产生的微任务在下面的 getCommands Promise.all await 中耗尽。信任在 -p 模式下是隐式的（与 prefetchSystemContextIfSafe 相同的条件）。
@@ -1397,7 +1366,7 @@ async function run(): Promise<CommanderCommand> {
     registerCleanup(async () => {
       logForDiagnosticsNoPII('info', 'exited');
     });
-    // 为并发会话检测（~/.claude/sessions/）注册 PID 文件
+    // 为并发会话检测（~/.claude-code-core-framework/sessions/）注册 PID 文件
     // 用于交互路径。放在这里（而不是 init.ts）以便只有 REPL 路径注册——
     // 而不是像 `claude doctor` 这样的子命令。链式：
     // 计数必须在注册写入完成后运行，否则会错过我们自己的文件。

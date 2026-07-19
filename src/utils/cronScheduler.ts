@@ -1,4 +1,4 @@
-// Non-React scheduler core for .claude/scheduled_tasks.json.
+// Non-React scheduler core for .claude-code-core-framework/scheduled_tasks.json.
 // Shared by REPL (via useScheduledTasks) and SDK/-p mode (print.ts).
 //
 // Lifecycle: poll getScheduledTasksEnabled() until true (flag flips when
@@ -82,7 +82,7 @@ type CronSchedulerOptions = {
    */
   onMissed?: (tasks: CronTask[]) => void
   /**
-   * Directory containing .claude/scheduled_tasks.json. When provided, the
+   * Directory containing .claude-code-core-framework/scheduled_tasks.json. When provided, the
    * scheduler never touches bootstrap state: getProjectRoot/getSessionId are
    * not read, and the getScheduledTasksEnabled() poll is skipped (enable()
    * runs immediately on start). Required for Agent SDK daemon callers.
@@ -520,7 +520,7 @@ export function buildMissedTaskNotification(missed: CronTask[]): string {
   const plural = missed.length > 1
   const header =
     `The following one-shot scheduled task${plural ? 's were' : ' was'} missed while Claude was not running. ` +
-    `${plural ? 'They have' : 'It has'} already been removed from .claude/scheduled_tasks.json.\n\n` +
+    `${plural ? 'They have' : 'It has'} already been removed from .claude-code-core-framework/scheduled_tasks.json.\n\n` +
     `Do NOT execute ${plural ? 'these prompts' : 'this prompt'} yet. ` +
     `First use the AskUserQuestion tool to ask whether to run ${plural ? 'each one' : 'it'} now. ` +
     `Only execute if the user confirms.`

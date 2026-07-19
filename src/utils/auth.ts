@@ -5,7 +5,7 @@ import {
 } from './config.js'
 import { logDebugError, logForDebugging } from './debug.js'
 import {
-  getClaudeConfigHomeDir,
+  getFrameworkConfigHomeDir,
   isBareMode,
 } from './envUtils.js'
 import { errorMessage } from './errors.js'

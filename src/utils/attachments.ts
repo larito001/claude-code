@@ -169,7 +169,7 @@ import {
   isThinkingMessage,
 } from './messages.js'
 import { isHumanTurn } from './messagePredicates.js'
-import { isEnvTruthy, getClaudeConfigHomeDir } from './envUtils.js'
+import { isEnvTruthy, getFrameworkConfigHomeDir } from './envUtils.js'
 import { feature } from 'src/utils/features.js'
 import { hasUltrathinkKeyword, isUltrathinkEnabled } from './thinking.js'
 import {
@@ -3501,7 +3501,7 @@ function getTeamContextAttachment(messages: Message[]): Attachment[] {
     return []
   }
 
-  const configDir = getClaudeConfigHomeDir()
+  const configDir = getFrameworkConfigHomeDir()
   const teamConfigPath = `${configDir}/teams/${teamName}/config.json`
   const taskListPath = `${configDir}/tasks/${teamName}/`
 

@@ -131,7 +131,7 @@ export function attachErrorLogSink(newSink: ErrorLogSink): void {
  * Logs an error to multiple destinations for debugging and monitoring.
  *
  * This function logs errors to:
- * - Debug logs (visible via `claude --debug` or `tail -f ~/.claude/debug/latest`)
+ * - Debug logs (visible via `claude --debug` or `tail -f ~/.claude-code-core-framework/debug/latest`)
  * - In-memory error log (accessible via `getInMemoryErrors()`, useful for including
  *   in bug reports or displaying recent errors to users)
  * - Persistent error log file when file logging is enabled
@@ -142,7 +142,7 @@ export function attachErrorLogSink(newSink: ErrorLogSink): void {
  * ```
  *
  * To view errors:
- * - Debug: Run `claude --debug` or `tail -f ~/.claude/debug/latest`
+ * - Debug: Run `claude --debug` or `tail -f ~/.claude-code-core-framework/debug/latest`
  * - In-memory: Call `getInMemoryErrors()` to get recent errors for the current session
  */
 const isHardFailMode = memoize((): boolean => {

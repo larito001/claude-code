@@ -75,13 +75,13 @@ const sessionId = randomUUID()
 const marker = 'SESSION_CHAIN_7Q9X'
 const previousEnvironment = new Map(
   [
-    'CLAUDE_CONFIG_DIR',
+    'FRAMEWORK_CONFIG_DIR',
     'CLAUDE_CODE_FEATURES',
     'CLAUDE_CODE_SIMPLE',
   ].map(name => [name, process.env[name]]),
 )
 
-process.env.CLAUDE_CONFIG_DIR = tempConfig
+process.env.FRAMEWORK_CONFIG_DIR = tempConfig
 process.env.CLAUDE_CODE_FEATURES = appendFeature(
   process.env.CLAUDE_CODE_FEATURES,
   'SESSION_TRANSCRIPT',
@@ -92,7 +92,7 @@ try {
   await mkdir(tempProject, { recursive: true })
   const liveEnvironment = {
     ...process.env,
-    CLAUDE_CONFIG_DIR: tempConfig,
+    FRAMEWORK_CONFIG_DIR: tempConfig,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     CLAUDE_CODE_FEATURES: process.env.CLAUDE_CODE_FEATURES,
   }
@@ -212,8 +212,8 @@ try {
     'Auto-memory escaped the portable configuration directory',
   )
   assert(
-    !memoryDir.startsWith(join(tempProject, '.claude')),
-    'Auto-memory incorrectly used the project .claude directory',
+    !memoryDir.startsWith(join(tempProject, '.claude-code-core-framework')),
+    'Auto-memory incorrectly used the project .claude-code-core-framework directory',
   )
 
   const { buildMemoryPrompt, ensureMemoryDirExists } = await import(

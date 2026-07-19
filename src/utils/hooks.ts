@@ -234,7 +234,7 @@ function executeInBackground({
 /**
  * 检查是否因缺乏工作区信任而应跳过钩子。
  *
- * 所有钩子都需要工作区信任，因为它们会执行来自 .claude/settings.json 的任意命令。这是一项深度防御的安全措施。
+ * 所有钩子都需要工作区信任，因为它们会执行来自 .claude-code-core-framework/settings.json 的任意命令。这是一项深度防御的安全措施。
  *
  * 上下文：钩子通过 captureHooksConfigSnapshot() 在显示信任对话框之前被捕获。虽然大多数钩子在通过正常程序流建立信任后才执行，但对所有钩子强制信任可以防止：
  * - 未来可能出现的意外执行钩子的 bug
@@ -4031,7 +4031,7 @@ export function hasInstructionsLoadedHook(): boolean {
 }
 
 /**
- * 执行指令加载钩子——当指令文件（CLAUDE.md 或 .claude/rules/*.md）被加载到上下文时触发。即发即弃——此钩子仅用于可观测性/审计，不支持阻塞。
+ * 执行指令加载钩子——当指令文件（CLAUDE.md 或 .claude-code-core-framework/rules/*.md）被加载到上下文时触发。即发即弃——此钩子仅用于可观测性/审计，不支持阻塞。
  *
  * 调度点：
  * - 会话启动时预加载（claudemd.ts 中的 getMemoryFiles）

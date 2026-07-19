@@ -64,7 +64,7 @@ const tempConfig = await mkdtemp(join(tmpdir(), 'claude-api-smoke-'))
 try {
   const baseEnv = {
     ...process.env,
-    CLAUDE_CONFIG_DIR: tempConfig,
+    FRAMEWORK_CONFIG_DIR: tempConfig,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
   }
   const noCredentialEnv = withoutApiCredentials(baseEnv)

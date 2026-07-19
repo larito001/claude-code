@@ -2,19 +2,23 @@ import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import { join } from 'path'
 
-// 已记忆化：150+ 调用者，很多在热路径上。以 CLAUDE_CONFIG_DIR 为键，这样更改环境变量的测试无需显式 cache.clear 就能获得新值。
-export const getClaudeConfigHomeDir = memoize(
+export const FRAMEWORK_STORAGE_DIRECTORY = '.claude-code-core-framework'
+export const FRAMEWORK_CONFIG_DIRECTORY_ENV = 'FRAMEWORK_CONFIG_DIR'
+
+// 已记忆化：150+ 调用者，很多在热路径上。以 FRAMEWORK_CONFIG_DIR 为键，这样更改环境变量的测试无需显式 cache.clear 就能获得新值。
+export const getFrameworkConfigHomeDir = memoize(
   (): string => {
     return (
-      process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
+      process.env[FRAMEWORK_CONFIG_DIRECTORY_ENV] ??
+      join(homedir(), FRAMEWORK_STORAGE_DIRECTORY)
     ).normalize('NFC')
   },
-  () => process.env.CLAUDE_CONFIG_DIR,
+  () => process.env[FRAMEWORK_CONFIG_DIRECTORY_ENV],
 )
 
 /** 获取 get Teams Dir 对应的数据或状态。 */
 export function getTeamsDir(): string {
-  return join(getClaudeConfigHomeDir(), 'teams')
+  return join(getFrameworkConfigHomeDir(), 'teams')
 }
 
 /** 检查 NODE_OPTIONS 是否包含特定标志。按空白分割并精确匹配以避免误报。 */
