@@ -7,20 +7,12 @@ import {
 } from '../utils/settings/settings.js'
 
 /**
- * Migrate first-party users off explicit Opus 4.0/4.1 model strings.
+ * 将第一方用户从显式的 Opus 4.0/4.1 模型字符串迁移出来。
  *
- * The 'opus' alias already resolves to Opus 4.6 for 1P, so anyone still
- * on an explicit 4.0/4.1 string pinned it in settings before 4.5 launched.
- * parseUserSpecifiedModel now silently remaps these at runtime anyway —
- * this migration cleans up the settings file so /model shows the right
- * thing, and sets a timestamp so the REPL can show a one-time notification.
+ * 'opus' 别名已经为第一方解析为 Opus 4.6，因此任何仍在显式 4.0/4.1 字符串上的用户都是在 4.5 发布之前就在设置中固定了它。
+ * parseUserSpecifiedModel 现在无论如何在运行时静默重新映射它们——此迁移清理设置文件，使 /model 显示正确的内容，并设置时间戳，以便 REPL 可以显示一次性通知。
  *
- * Only touches userSettings. Legacy strings in project/local/policy settings
- * are left alone (we can't/shouldn't rewrite those) and are still remapped at
- * runtime by parseUserSpecifiedModel. Reading and writing the same source
- * keeps this idempotent without a completion flag, and avoids silently
- * promoting 'opus' to the global default for users who only pinned it in one
- * project.
+ * 只修改 userSettings。项目/本地/策略设置中的遗留字符串保持不变（我们不能/不应该重写那些），并且在运行时仍由 parseUserSpecifiedModel 重新映射。读取和写入同一源使得此操作在没有完成标志的情况下保持幂等，并避免为仅在一个项目中固定了它的用户静默地将 'opus' 提升为全局默认值。
  */
 export function migrateLegacyOpusToCurrent(): void {
   if (getAPIProvider() !== 'firstParty') {

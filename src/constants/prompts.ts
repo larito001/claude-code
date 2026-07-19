@@ -58,7 +58,7 @@ import { logForDebugging } from '../utils/debug.js'
 import { loadMemoryPrompt } from '../memdir/memdir.js'
 import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js'
 
-// Dead code elimination: conditional imports for feature-gated modules
+// 死代码消除：功能门控模块的条件导入
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule =
   feature('PROACTIVE')
@@ -72,36 +72,39 @@ export const CLAUDE_CODE_DOCS_MAP_URL =
   'https://code.claude.com/docs/en/claude_code_docs_map.md'
 
 /**
- * Boundary marker separating static (cross-org cacheable) content from dynamic content.
- * Everything BEFORE this marker in the system prompt array can use scope: 'global'.
- * Everything AFTER contains user/session-specific content and should not be cached.
+ * 边界标记，分隔静态（跨组织可缓存）内容与动态内容。
+ * 系统提示数组中此标记之前的所有内容可以使用 scope: 'global'。
+ * 之后的内容包含用户/会话特定内容，不应缓存。
  *
- * WARNING: Do not remove or reorder this marker without updating cache logic in:
+ * 警告：如果不更新以下文件中的缓存逻辑，请勿删除或重新排序此标记：
  * - src/utils/api.ts (splitSysPromptPrefix)
  * - src/services/api/claude.ts (buildSystemPromptBlocks)
  */
 export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY =
   '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 
-// @[MODEL LAUNCH]: Update the latest frontier model.
+// @[MODEL LAUNCH]: 更新最新的前沿模型。
 const FRONTIER_MODEL_NAME = 'Claude Opus 4.6'
 
-// @[MODEL LAUNCH]: Update the model family IDs below to the latest in each tier.
+// @[MODEL LAUNCH]: 将下面的模型族ID更新为每个层级中的最新版本。
 const CLAUDE_4_5_OR_4_6_MODEL_IDS = {
   opus: 'claude-opus-4-6',
   sonnet: 'claude-sonnet-4-6',
   haiku: 'claude-haiku-4-5-20251001',
 }
 
+/** 获取 get Hooks Section 对应的数据或状态。 */
 function getHooksSection(): string {
   return `Users may configure 'hooks', shell commands that execute in response to events like tool calls, in settings. Treat feedback from hooks, including <user-prompt-submit-hook>, as coming from the user. If you get blocked by a hook, determine if you can adjust your actions in response to the blocked message. If not, ask the user to check their hooks configuration.`
 }
 
+/** 获取 get System Reminders Section 对应的数据或状态。 */
 function getSystemRemindersSection(): string {
   return `- Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are automatically added by the system, and bear no direct relation to the specific tool results or user messages in which they appear.
 - The conversation has unlimited context through automatic summarization.`
 }
 
+/** 获取 get Language Section 对应的数据或状态。 */
 function getLanguageSection(
   languagePreference: string | undefined,
 ): string | null {
@@ -111,6 +114,7 @@ function getLanguageSection(
 Always respond in ${languagePreference}. Use ${languagePreference} for all explanations, comments, and communications with the user. Technical terms and code identifiers should remain in their original form.`
 }
 
+/** 获取 get Output Style Section 对应的数据或状态。 */
 function getOutputStyleSection(
   outputStyleConfig: OutputStyleConfig | null,
 ): string | null {
@@ -120,6 +124,7 @@ function getOutputStyleSection(
 ${outputStyleConfig.prompt}`
 }
 
+/** 获取 get Mcp Instructions Section 对应的数据或状态。 */
 function getMcpInstructionsSection(
   mcpClients: MCPServerConnection[] | undefined,
 ): string | null {
@@ -127,6 +132,7 @@ function getMcpInstructionsSection(
   return getMcpInstructions(mcpClients)
 }
 
+/** 执行 prepend Bullets 对应的业务处理。 */
 export function prependBullets(items: Array<string | string[]>): string[] {
   return items.flatMap(item =>
     Array.isArray(item)
@@ -135,6 +141,7 @@ export function prependBullets(items: Array<string | string[]>): string[] {
   )
 }
 
+/** 获取 get Simple Intro Section 对应的数据或状态。 */
 function getSimpleIntroSection(
   outputStyleConfig: OutputStyleConfig | null,
 ): string {
@@ -146,6 +153,7 @@ ${CYBER_RISK_INSTRUCTION}
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`
 }
 
+/** 获取 get Simple System Section 对应的数据或状态。 */
 function getSimpleSystemSection(): string {
   const items = [
     `All text you output outside of tool use is displayed to the user. Output text to communicate with the user. You can use Github-flavored markdown for formatting, and will be rendered in a monospace font using the CommonMark specification.`,
@@ -159,6 +167,7 @@ function getSimpleSystemSection(): string {
   return ['# System', ...prependBullets(items)].join(`\n`)
 }
 
+/** 获取 get Simple Doing Tasks Section 对应的数据或状态。 */
 function getSimpleDoingTasksSection(): string {
   const codeStyleSubitems = [
     `Don't add features, refactor code, or make "improvements" beyond what was asked. A bug fix doesn't need surrounding code cleaned up. A simple feature doesn't need extra configurability. Don't add docstrings, comments, or type annotations to code you didn't change. Only add comments where the logic isn't self-evident.`,
@@ -194,6 +203,7 @@ function getSimpleDoingTasksSection(): string {
   return [`# Doing tasks`, ...prependBullets(items)].join(`\n`)
 }
 
+/** 获取 get Actions Section 对应的数据或状态。 */
 function getActionsSection(): string {
   return `# Executing actions with care
 
@@ -208,15 +218,16 @@ Examples of the kind of risky actions that warrant user confirmation:
 When you encounter an obstacle, do not use destructive actions as a shortcut to simply make it go away. For instance, try to identify root causes and fix underlying issues rather than bypassing safety checks (e.g. --no-verify). If you discover unexpected state like unfamiliar files, branches, or configuration, investigate before deleting or overwriting, as it may represent the user's in-progress work. For example, typically resolve merge conflicts rather than discarding changes; similarly, if a lock file exists, investigate what process holds it rather than deleting it. In short: only take risky actions carefully, and when in doubt, ask before acting. Follow both the spirit and letter of these instructions - measure twice, cut once.`
 }
 
+/** 获取 get Using Your Tools Section 对应的数据或状态。 */
 function getUsingYourToolsSection(enabledTools: Set<string>): string {
+  /** 执行 task Tool Name 对应的业务处理。 */
   const taskToolName = [TASK_CREATE_TOOL_NAME, TODO_WRITE_TOOL_NAME].find(n =>
     enabledTools.has(n),
   )
 
-  // In REPL mode, Read/Write/Edit/Glob/Grep/Bash/Agent are hidden from direct
-  // use (REPL_ONLY_TOOLS). The "prefer dedicated tools over Bash" guidance is
-  // irrelevant — REPL's own prompt covers how to call them from scripts.
+  // 在REPL模式下，Read/Write/Edit/Glob/Grep/Bash/Agent 被隐藏，不能直接使用（REPL_ONLY_TOOLS）。"优先使用专用工具而非Bash"的指导无关紧要——REPL自身的提示说明了如何从脚本中调用它们。
   if (isReplModeEnabled()) {
+    /** 执行 items 对应的业务处理。 */
     const items = [
       taskToolName
         ? `Break down and manage your work with the ${taskToolName} tool. These tools are helpful for planning your work and helping the user track your progress. Mark each task as completed as soon as you are done with the task. Do not batch up multiple tasks before marking them as completed.`
@@ -226,8 +237,7 @@ function getUsingYourToolsSection(enabledTools: Set<string>): string {
     return [`# Using your tools`, ...prependBullets(items)].join(`\n`)
   }
 
-  // Embedded-search builds alias find/grep to bundled bfs/ugrep and remove the
-  // dedicated Glob/Grep tools, so skip guidance pointing at them.
+  // 嵌入式搜索构建别名find/grep指向捆绑的bfs/ugrep，并移除专用的Glob/Grep工具，因此跳过指向它们的指南。
   const embedded = hasEmbeddedSearchTools()
 
   const providedToolSubitems = [
@@ -243,6 +253,7 @@ function getUsingYourToolsSection(enabledTools: Set<string>): string {
     `Reserve using the ${BASH_TOOL_NAME} exclusively for system commands and terminal operations that require shell execution. If you are unsure and there is a relevant dedicated tool, default to using the dedicated tool and only fallback on using the ${BASH_TOOL_NAME} tool for these if it is absolutely necessary.`,
   ]
 
+  /** 执行 items 对应的业务处理。 */
   const items = [
     `Do NOT use the ${BASH_TOOL_NAME} to run commands when a relevant dedicated tool is provided. Using dedicated tools allows the user to better understand and review your work. This is CRITICAL to assisting the user:`,
     providedToolSubitems,
@@ -255,6 +266,7 @@ function getUsingYourToolsSection(enabledTools: Set<string>): string {
   return [`# Using your tools`, ...prependBullets(items)].join(`\n`)
 }
 
+/** 获取 get Agent Tool Section 对应的数据或状态。 */
 function getAgentToolSection(): string {
   return isForkSubagentEnabled()
     ? `Calling ${AGENT_TOOL_NAME} without a subagent_type creates a fork, which runs in the background and keeps its tool output out of your context \u2014 so you can keep chatting with the user while it works. Reach for it when research or multi-step implementation work would otherwise fill your context with raw output you won't need again. **If you ARE the fork** \u2014 execute directly; do not re-delegate.`
@@ -262,13 +274,9 @@ function getAgentToolSection(): string {
 }
 
 /**
- * Session-variant guidance that would fragment the cacheScope:'global'
- * prefix if placed before SYSTEM_PROMPT_DYNAMIC_BOUNDARY. Each conditional
- * here is a runtime bit that would otherwise multiply the Blake2b prefix
- * hash variants (2^N). See PR #24490, #24171 for the same bug class.
+ * 会话变体指导，如果放在 SYSTEM_PROMPT_DYNAMIC_BOUNDARY 之前，会碎片化 cacheScope:'global' 前缀。这里的每个条件都是一个运行时位，否则会使 Blake2b 前缀哈希变体倍增（2^N）。同类型错误请参见 PR #24490、#24171。
  *
- * outputStyleConfig intentionally NOT moved here — identity framing lives
- * in the static intro pending eval.
+ * outputStyleConfig 故意不移至此处——身份框架位于静态介绍中，待评估。
  */
 function getSessionSpecificGuidanceSection(
   enabledTools: Set<string>,
@@ -282,6 +290,7 @@ function getSessionSpecificGuidanceSection(
     ? `\`find\` or \`grep\` via the ${BASH_TOOL_NAME} tool`
     : `the ${GLOB_TOOL_NAME} or ${GREP_TOOL_NAME}`
 
+  /** 执行 items 对应的业务处理。 */
   const items = [
     hasAskUserQuestionTool
       ? `If you do not understand why the user has denied a tool call, use the ${ASK_USER_QUESTION_TOOL_NAME} to ask them.`
@@ -289,8 +298,7 @@ function getSessionSpecificGuidanceSection(
     getIsNonInteractiveSession()
       ? null
       : `If you need the user to run a shell command themselves (e.g., an interactive login like \`gcloud auth login\`), suggest they type \`! <command>\` in the prompt — the \`!\` prefix runs the command in this session so its output lands directly in the conversation.`,
-    // isForkSubagentEnabled() reads getIsNonInteractiveSession() — must be
-    // post-boundary or it fragments the static prefix on session type.
+    // isForkSubagentEnabled() 读取 getIsNonInteractiveSession() — 必须在边界之后，否则会按会话类型碎片化静态前缀。
     hasAgentTool ? getAgentToolSection() : null,
     ...(hasAgentTool &&
     areExplorePlanAgentsEnabled() &&
@@ -313,6 +321,7 @@ function getSessionSpecificGuidanceSection(
   return ['# Session-specific guidance', ...prependBullets(items)].join('\n')
 }
 
+/** 获取 get Output Efficiency Section 对应的数据或状态。 */
 function getOutputEfficiencySection(): string {
   return `# Output efficiency
 
@@ -328,7 +337,9 @@ Focus text output on:
 If you can say it in one sentence, don't use three. Prefer short, direct sentences over long explanations. This does not apply to code or tool calls.`
 }
 
+/** 获取 get Simple Tone And Style Section 对应的数据或状态。 */
 function getSimpleToneAndStyleSection(): string {
+  /** 执行 items 对应的业务处理。 */
   const items = [
     `Only use emojis if the user explicitly requests it. Avoid using emojis in all communication unless asked.`,
     `Your responses should be short and concise.`,
@@ -340,6 +351,7 @@ function getSimpleToneAndStyleSection(): string {
   return [`# Tone and style`, ...prependBullets(items)].join(`\n`)
 }
 
+/** 获取 get System Prompt 对应的数据或状态。 */
 export async function getSystemPrompt(
   tools: Tools,
   model: string,
@@ -375,8 +387,7 @@ ${CYBER_RISK_INSTRUCTION}`,
       await loadMemoryPrompt(),
       envInfo,
       getLanguageSection(settings.language),
-      // When delta enabled, instructions are announced via persisted
-      // mcp_instructions_delta attachments (attachments.ts) instead.
+      // 当delta启用时，指令通过持久化的mcp_instructions_delta附件（attachments.ts）发布。
       isMcpInstructionsDeltaEnabled()
         ? null
         : getMcpInstructionsSection(mcpClients),
@@ -400,11 +411,7 @@ ${CYBER_RISK_INSTRUCTION}`,
     systemPromptSection('output_style', () =>
       getOutputStyleSection(outputStyleConfig),
     ),
-    // When delta enabled, instructions are announced via persisted
-    // mcp_instructions_delta attachments (attachments.ts) instead of this
-    // per-turn recompute, which busts the prompt cache on late MCP connect.
-    // Gate check inside compute (not selecting between section variants)
-    // so a mid-session gate flip doesn't read a stale cached value.
+    // 当delta启用时，指令通过持久化的mcp_instructions_delta附件（attachments.ts）发布，而不是这种每轮重新计算，后者会在MCP连接延迟时破坏提示缓存。在计算内部进行门控检查（不在段落变体之间选择），以便会话中间的门控切换不会读取过时的缓存值。
     DANGEROUS_uncachedSystemPromptSection(
       'mcp_instructions',
       () =>
@@ -420,11 +427,7 @@ ${CYBER_RISK_INSTRUCTION}`,
     ),
     ...(feature('TOKEN_BUDGET')
       ? [
-          // Cached unconditionally — the "When the user specifies..." phrasing
-          // makes it a no-op with no budget active. Was DANGEROUS_uncached
-          // (toggled on getCurrentTurnTokenBudget()), busting ~20K tokens per
-          // budget flip. Not moved to a tail attachment: first-response and
-          // budget-continuation paths don't see attachments (#21577).
+          // 无条件缓存——“当用户指定...”的措辞使其在没有预算活动时成为空操作。之前是DANGEROUS_uncached（在getCurrentTurnTokenBudget()上切换），每次预算切换会占用约20K令牌。未移至尾部附件：首次响应和预算延续路径看不到附件（#21577）。
           systemPromptSection(
             'token_budget',
             () =>
@@ -438,7 +441,7 @@ ${CYBER_RISK_INSTRUCTION}`,
     await resolveSystemPromptSections(dynamicSections)
 
   return [
-    // --- Static content (cacheable) ---
+    // --- 静态内容（可缓存）---
     getSimpleIntroSection(outputStyleConfig),
     getSimpleSystemSection(),
     outputStyleConfig === null ||
@@ -449,18 +452,21 @@ ${CYBER_RISK_INSTRUCTION}`,
     getUsingYourToolsSection(enabledTools),
     getSimpleToneAndStyleSection(),
     getOutputEfficiencySection(),
-    // === BOUNDARY MARKER - DO NOT MOVE OR REMOVE ===
+    // === 边界标记 - 请勿移动或删除 ===
     ...(shouldUseGlobalCacheScope() ? [SYSTEM_PROMPT_DYNAMIC_BOUNDARY] : []),
-    // --- Dynamic content (registry-managed) ---
+    // --- 动态内容（注册表管理）---
     ...resolvedDynamicSections,
   ].filter(s => s !== null)
 }
 
+/** 获取 get Mcp Instructions 对应的数据或状态。 */
 function getMcpInstructions(mcpClients: MCPServerConnection[]): string | null {
+  /** 执行 connected Clients 对应的业务处理。 */
   const connectedClients = mcpClients.filter(
     (client): client is ConnectedMCPServer => client.type === 'connected',
   )
 
+  /** 执行 clients With Instructions 对应的业务处理。 */
   const clientsWithInstructions = connectedClients.filter(
     client => client.instructions,
   )
@@ -483,6 +489,7 @@ The following MCP servers have provided instructions for how to use their tools 
 ${instructionBlocks}`
 }
 
+/** 计算 compute Env Info 对应的数据或状态。 */
 export async function computeEnvInfo(
   modelId: string,
   additionalWorkingDirectories?: string[],
@@ -515,6 +522,7 @@ OS Version: ${unameSR}
 ${modelDescription}${knowledgeCutoffMessage}`
 }
 
+/** 计算 compute Simple Env Info 对应的数据或状态。 */
 export async function computeSimpleEnvInfo(
   modelId: string,
   additionalWorkingDirectories?: string[],
@@ -534,6 +542,7 @@ export async function computeSimpleEnvInfo(
   const cwd = getCwd()
   const isWorktree = getCurrentWorktreeSession() !== null
 
+  /** 执行 env Items 对应的业务处理。 */
   const envItems = [
     `Primary working directory: ${cwd}`,
     isWorktree
@@ -563,7 +572,8 @@ export async function computeSimpleEnvInfo(
   ].join(`\n`)
 }
 
-// @[MODEL LAUNCH]: Add a knowledge cutoff date for the new model.
+// @[MODEL LAUNCH]：为新模型添加知识截止日期。
+/** 获取 get Knowledge Cutoff 对应的数据或状态。 */
 function getKnowledgeCutoff(modelId: string): string | null {
   const canonical = getCanonicalName(modelId)
   if (canonical.includes('claude-sonnet-4-6')) {
@@ -583,6 +593,7 @@ function getKnowledgeCutoff(modelId: string): string | null {
   return null
 }
 
+/** 获取 get Shell Info Line 对应的数据或状态。 */
 function getShellInfoLine(): string {
   const shell = process.env.SHELL || 'unknown'
   const shellName = shell.includes('zsh')
@@ -596,13 +607,9 @@ function getShellInfoLine(): string {
   return `Shell: ${shellName}`
 }
 
+/** 获取 get Uname SR 对应的数据或状态。 */
 export function getUnameSR(): string {
-  // os.type() and os.release() both wrap uname(3) on POSIX, producing output
-  // byte-identical to `uname -sr`: "Darwin 25.3.0", "Linux 6.6.4", etc.
-  // Windows has no uname(3); os.type() returns "Windows_NT" there, but
-  // os.version() gives the friendlier "Windows 11 Pro" (via GetVersionExW /
-  // RtlGetVersion) so use that instead. Feeds the OS Version line in the
-  // system prompt env section.
+  // os.type()和os.release()在POSIX上都封装了uname(3)，产生与`uname -sr`字节相同的输出："Darwin 25.3.0"、"Linux 6.6.4"等。Windows没有uname(3)；os.type()返回"Windows_NT"，但os.version()给出更友好的"Windows 11 Pro"（通过GetVersionExW / RtlGetVersion），因此改用后者。用于填充系统提示环境部分中的操作系统版本行。
   if (env.platform === 'win32') {
     return `${osVersion()} ${osRelease()}`
   }
@@ -611,6 +618,7 @@ export function getUnameSR(): string {
 
 export const DEFAULT_AGENT_PROMPT = `You are an agent for Claude Code, Anthropic's official CLI for Claude. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`
 
+/** 执行 enhance System Prompt With Env Details 对应的业务处理。 */
 export async function enhanceSystemPromptWithEnvDetails(
   existingSystemPrompt: string[],
   model: string,
@@ -629,10 +637,8 @@ export async function enhanceSystemPromptWithEnvDetails(
   ]
 }
 
-/**
- * Returns instructions for using the scratchpad directory if enabled.
- * The scratchpad is a per-session directory where Claude can write temporary files.
- */
+/** 如果启用，返回使用暂存区目录的说明。暂存区是一个按会话划分的目录，Claude可以在其中写入临时文件。 */
+/** 获取 get Scratchpad Instructions 对应的数据或状态。 */
 export function getScratchpadInstructions(): string | null {
   if (!isScratchpadEnabled()) {
     return null
@@ -659,6 +665,7 @@ The scratchpad directory is session-specific, isolated from the user's project, 
 
 const SUMMARIZE_TOOL_RESULTS_SECTION = `When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.`
 
+/** 获取 get Proactive Section 对应的数据或状态。 */
 function getProactiveSection(): string | null {
   if (!(feature('PROACTIVE'))) return null
   if (!proactiveModule?.isProactiveActive()) return null

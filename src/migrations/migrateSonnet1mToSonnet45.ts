@@ -9,18 +9,13 @@ import {
 } from '../utils/settings/settings.js'
 
 /**
- * Migrate users who had "sonnet[1m]" saved to the explicit "sonnet-4-5-20250929[1m]".
+ * 将保存了"sonnet[1m]"的用户迁移到显式的"sonnet-4-5-20250929[1m]"。
  *
- * The "sonnet" alias now resolves to Sonnet 4.6, so users who previously set
- * "sonnet[1m]" (targeting Sonnet 4.5 with 1M context) need to be pinned to the
- * explicit version to preserve their intended model.
+ * 现在"sonnet"别名解析到Sonnet 4.6，因此之前设置"sonnet[1m]"（指向带1M上下文的Sonnet 4.5）的用户需要固定到显式版本以保留他们意图使用的模型。
  *
- * This is needed because Sonnet 4.6 1M was offered to a different group of users than
- * Sonnet 4.5 1M, so we needed to pin existing sonnet[1m] users to Sonnet 4.5 1M.
+ * 之所以需要这样做，是因为Sonnet 4.6 1M提供给的用户群与Sonnet 4.5 1M不同，因此我们需要将现有的sonnet[1m]用户固定到Sonnet 4.5 1M。
  *
- * Reads from userSettings specifically (not merged settings) so we don't
- * promote a project-scoped "sonnet[1m]" to the global default. Runs once,
- * tracked by a completion flag in global config.
+ * 仅从userSettings读取（而非合并的设置），以免将项目范围的"sonnet[1m]"提升为全局默认。只运行一次，由全局配置中的完成标志跟踪。
  */
 export function migrateSonnet1mToSonnet45(): void {
   const config = getGlobalConfig()
@@ -35,7 +30,7 @@ export function migrateSonnet1mToSonnet45(): void {
     })
   }
 
-  // Also migrate the in-memory override if already set
+  // 如果内存中已设置覆盖，也一并迁移。
   const override = getMainLoopModelOverride()
   if (override === 'sonnet[1m]') {
     setMainLoopModelOverride('sonnet-4-5-20250929[1m]')

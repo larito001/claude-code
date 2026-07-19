@@ -66,12 +66,19 @@ function isFunctionProperty(node: ts.PropertyDeclaration | ts.PropertySignature)
   )
 }
 
-function hasChineseDocumentation(source: string, node: ts.Node): boolean {
+function getAdjacentCommentRanges(
+  source: string,
+  node: ts.Node,
+): ts.CommentRange[] {
   const ranges = ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []
-  return ranges.some(
-    range =>
-      source.slice(range.end, node.getStart()).trim() === '' &&
-      CJK_PATTERN.test(source.slice(range.pos, range.end)),
+  return ranges.filter(
+    range => source.slice(range.end, node.getStart()).trim() === '',
+  )
+}
+
+function hasChineseDocumentation(source: string, node: ts.Node): boolean {
+  return getAdjacentCommentRanges(source, node).some(range =>
+    CJK_PATTERN.test(source.slice(range.pos, range.end)),
   )
 }
 
@@ -181,11 +188,39 @@ function description(names: string[]): string {
   return `提供 ${uniqueNames.map(splitName).join('、')} 的处理逻辑。`
 }
 
-function indentation(sourceFile: ts.SourceFile, position: number): string {
+function insertionLayout(
+  sourceFile: ts.SourceFile,
+  position: number,
+): { indent: string; position: number; leadingLineBreak: boolean } {
   const { character } = sourceFile.getLineAndCharacterOfPosition(position)
   const lineStart = position - character
   const prefix = sourceFile.text.slice(lineStart, position)
-  return /^\s*$/u.test(prefix) ? prefix : ' '.repeat(character)
+  if (/^\s*$/u.test(prefix)) {
+    return { indent: prefix, position, leadingLineBreak: false }
+  }
+  const trailingWhitespace = prefix.match(/[\t ]*$/u)?.[0] ?? ''
+  return {
+    indent: ' '.repeat(character),
+    position: position - trailingWhitespace.length,
+    leadingLineBreak: true,
+  }
+}
+
+function mergeIntoJSDoc(
+  sourceFile: ts.SourceFile,
+  range: ts.CommentRange,
+  text: string,
+): string {
+  const raw = sourceFile.text.slice(range.pos, range.end)
+  const { character } = sourceFile.getLineAndCharacterOfPosition(range.pos)
+  const indent = ' '.repeat(character)
+  const eol = sourceFile.text.includes('\r\n') ? '\r\n' : '\n'
+  const body = raw.slice(3, -2).trim()
+  if (!body) return `/** ${text} */`
+  if (!raw.includes('\n')) {
+    return `/** ${text}${eol}${indent} * ${body}${eol}${indent} */`
+  }
+  return raw.replace('/**', `/** ${text}`)
 }
 
 async function annotateFile(file: string): Promise<number> {
@@ -202,11 +237,26 @@ async function annotateFile(file: string): Promise<number> {
   const eol = source.includes('\r\n') ? '\r\n' : '\n'
   let output = source
   for (const target of targets.toSorted((left, right) => right.node.getStart() - left.node.getStart())) {
-    const position = target.node.getStart()
-    const indent = indentation(sourceFile, position)
+    const targetDescription = description(target.names)
+    const adjacentRanges = getAdjacentCommentRanges(source, target.node)
+    const jsDocRange = adjacentRanges.findLast(range =>
+      source.slice(range.pos, range.end).startsWith('/**'),
+    )
+    if (jsDocRange) {
+      output =
+        output.slice(0, jsDocRange.pos) +
+        mergeIntoJSDoc(sourceFile, jsDocRange, targetDescription) +
+        output.slice(jsDocRange.end)
+      continue
+    }
+
+    // 必须把新增文档放在 next-line 工具指令之前，避免指令错误地作用于注释本身。
+    const position = adjacentRanges[0]?.pos ?? target.node.getStart()
+    const layout = insertionLayout(sourceFile, position)
+    const leading = layout.leadingLineBreak ? `${eol}${layout.indent}` : ''
     output =
-      output.slice(0, position) +
-      `/** ${description(target.names)} */${eol}${indent}` +
+      output.slice(0, layout.position) +
+      `${leading}/** ${targetDescription} */${eol}${layout.indent}` +
       output.slice(position)
   }
   await writeFile(file, output, 'utf8')

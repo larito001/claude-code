@@ -60,6 +60,7 @@ try {
     { TaskListTool },
     {
       executePreToolHooks,
+      executeUserPromptSubmitHooks,
     },
     {
       addSessionHook,
@@ -312,6 +313,26 @@ try {
     executePreToolHooks('Read', 'hook-success', {}, context, 'default'),
   )
   assert(hookSucceeded, 'Successful command hook did not execute')
+  clearSessionHooks(setAppState, sessionId)
+
+  addSessionHook(
+    setAppState,
+    sessionId,
+    'UserPromptSubmit',
+    '',
+    makeHookCommand(
+      process.platform === 'win32'
+        ? `Write-Output '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","sessionTitle":"CORE_HOOK_TITLE"}}'`
+        : `printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","sessionTitle":"CORE_HOOK_TITLE"}}'`,
+    ),
+  )
+  const promptHookResults = await collect(
+    executeUserPromptSubmitHooks('smoke prompt', 'default', context),
+  )
+  assert(
+    promptHookResults.some(result => result.sessionTitle === 'CORE_HOOK_TITLE'),
+    'UserPromptSubmit hook did not return its session title',
+  )
   clearSessionHooks(setAppState, sessionId)
 
   addSessionHook(

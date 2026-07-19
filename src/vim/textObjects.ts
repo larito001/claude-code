@@ -1,7 +1,7 @@
 /**
- * Vim Text Object Finding
+ * Vim 文本对象查找
  *
- * Functions for finding text object boundaries (iw, aw, i", a(, etc.)
+ * 用于查找文本对象边界的函数（iw、aw、i"、a( 等）
  */
 
 import {
@@ -13,9 +13,7 @@ import { getGraphemeSegmenter } from '../utils/intl.js'
 
 export type TextObjectRange = { start: number; end: number } | null
 
-/**
- * Delimiter pairs for text objects.
- */
+/** 文本对象的分隔符对。 */
 const PAIRS: Record<string, [string, string]> = {
   '(': ['(', ')'],
   ')': ['(', ')'],
@@ -32,9 +30,7 @@ const PAIRS: Record<string, [string, string]> = {
   '`': ['`', '`'],
 }
 
-/**
- * Find a text object at the given position.
- */
+/** 在给定位置查找文本对象。 */
 export function findTextObject(
   text: string,
   offset: number,
@@ -57,19 +53,20 @@ export function findTextObject(
   return null
 }
 
+/** 获取 find Word Object 对应的数据或状态。 */
 function findWordObject(
   text: string,
   offset: number,
   isInner: boolean,
   isWordChar: (ch: string) => boolean,
 ): TextObjectRange {
-  // Pre-segment into graphemes for grapheme-safe iteration
+  // 预分割为字素以实现安全的字素迭代
   const graphemes: Array<{ segment: string; index: number }> = []
   for (const { segment, index } of getGraphemeSegmenter().segment(text)) {
     graphemes.push({ segment, index })
   }
 
-  // Find which grapheme index the offset falls in
+  // 查找偏移量所在的字素索引
   let graphemeIdx = graphemes.length - 1
   for (let i = 0; i < graphemes.length; i++) {
     const g = graphemes[i]!
@@ -81,11 +78,16 @@ function findWordObject(
     }
   }
 
+  /** 执行 grapheme At 对应的业务处理。 */
   const graphemeAt = (idx: number): string => graphemes[idx]?.segment ?? ''
+  /** 执行 offset At 对应的业务处理。 */
   const offsetAt = (idx: number): number =>
     idx < graphemes.length ? graphemes[idx]!.index : text.length
+  /** 判断是否满足 is Ws 对应的数据或状态。 */
   const isWs = (idx: number): boolean => isVimWhitespace(graphemeAt(idx))
+  /** 判断是否满足 is Word 对应的数据或状态。 */
   const isWord = (idx: number): boolean => isWordChar(graphemeAt(idx))
+  /** 判断是否满足 is Punct 对应的数据或状态。 */
   const isPunct = (idx: number): boolean => isVimPunctuation(graphemeAt(idx))
 
   let startIdx = graphemeIdx
@@ -104,7 +106,7 @@ function findWordObject(
   }
 
   if (!isInner) {
-    // Include surrounding whitespace
+    // 包含周围的空白字符
     if (endIdx < graphemes.length && isWs(endIdx)) {
       while (endIdx < graphemes.length && isWs(endIdx)) endIdx++
     } else if (startIdx > 0 && isWs(startIdx - 1)) {
@@ -115,6 +117,7 @@ function findWordObject(
   return { start: offsetAt(startIdx), end: offsetAt(endIdx) }
 }
 
+/** 获取 find Quote Object 对应的数据或状态。 */
 function findQuoteObject(
   text: string,
   offset: number,
@@ -132,7 +135,7 @@ function findQuoteObject(
     if (line[i] === quote) positions.push(i)
   }
 
-  // Pair quotes correctly: 0-1, 2-3, 4-5, etc.
+  // 正确配对引号：0-1、2-3、4-5 等
   for (let i = 0; i < positions.length - 1; i += 2) {
     const qs = positions[i]!
     const qe = positions[i + 1]!
@@ -146,6 +149,7 @@ function findQuoteObject(
   return null
 }
 
+/** 获取 find Bracket Object 对应的数据或状态。 */
 function findBracketObject(
   text: string,
   offset: number,

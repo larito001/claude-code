@@ -9,12 +9,12 @@ import inkRender, {
 
 export type { RenderOptions, Instance, Root }
 
-// Wrap all CC render calls with ThemeProvider so ThemedBox/ThemedText work
-// without every call site having to mount it. Ink itself is theme-agnostic.
+// 将所有CC渲染调用包裹在ThemeProvider中，以便ThemedBox/ThemedText能够正常工作，无需在每个调用点挂载它。Ink本身是与主题无关的。
 function withTheme(node: ReactNode): ReactNode {
   return createElement(ThemeProvider, null, node)
 }
 
+/** 渲染当前视图。 */
 export async function render(
   node: ReactNode,
   options?: NodeJS.WriteStream | RenderOptions,
@@ -22,10 +22,12 @@ export async function render(
   return inkRender(withTheme(node), options)
 }
 
+/** 创建 create Root 对应的数据或状态。 */
 export async function createRoot(options?: RenderOptions): Promise<Root> {
   const root = await inkCreateRoot(options)
   return {
     ...root,
+    /** 渲染当前视图。 */
     render: node => root.render(withTheme(node)),
   }
 }

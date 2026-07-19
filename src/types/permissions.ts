@@ -19,19 +19,20 @@ export const EXTERNAL_PERMISSION_MODES = [
   'default',
   'dontAsk',
   'plan',
+  'auto',
 ] as const
 
 export type ExternalPermissionMode = (typeof EXTERNAL_PERMISSION_MODES)[number]
 
 // 用于类型检查的穷举模式联合。用户可寻址运行时集
 // 下面是 INTERNAL_PERMISSION_MODES。
-export type InternalPermissionMode = ExternalPermissionMode | 'auto' | 'bubble'
+export type InternalPermissionMode = ExternalPermissionMode | 'bubble'
 export type PermissionMode = InternalPermissionMode
 
 // 运行时验证集：用户可寻址的模式（settings.json
 // defaultMode、--permission-mode CLI 标志、对话恢复）。
 export const INTERNAL_PERMISSION_MODES = [
-  ...EXTERNAL_PERMISSION_MODES,
+  ...EXTERNAL_PERMISSION_MODES.filter(mode => mode !== 'auto'),
   ...(feature('TRANSCRIPT_CLASSIFIER') ? (['auto'] as const) : ([] as const)),
 ] as const satisfies readonly PermissionMode[]
 
@@ -314,8 +315,7 @@ export type PermissionDecisionReason =
       reason: string
       // 当 true 时，自动模式让分类器评估它而不是
       // 强制提示。对于敏感文件路径（.claude/、.git/、
-      // shell 配置）——分类器可以查看上下文并做出决定。错误的
-      // for Windows path bypass attempts and cross-machine bridge messages.
+      // shell 配置）——分类器可以查看上下文并作出判断；Windows 路径绕过尝试和跨机器桥接消息则必须保持不可批准。
       classifierApprovable: boolean
     }
   | {

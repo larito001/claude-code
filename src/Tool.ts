@@ -38,14 +38,14 @@ import type {
   SystemMessage,
   UserMessage,
 } from './types/message.js'
-// Import permission types from centralized location to break import cycles
-// Import PermissionResult from centralized location to break import cycles
+// 从中心位置导入权限类型以打破导入循环
+// 从中心位置导入 PermissionResult 以打破导入循环
 import type {
   AdditionalWorkingDirectory,
   PermissionMode,
   PermissionResult,
 } from './types/permissions.js'
-// Import tool progress types from centralized location to break import cycles
+// 从中心位置导入工具进度类型以打破导入循环
 import type {
   AgentToolProgress,
   BashProgress,
@@ -113,7 +113,7 @@ export type SetToolJSXFn = (
   } | null,
 ) => void
 
-// Import tool permission types from centralized location to break import cycles
+// 从中心位置导入工具权限类型以打破导入循环
 import type { ToolPermissionRulesBySource } from './types/permissions.js'
 
 // 重新导出以实现向后兼容性
@@ -137,6 +137,7 @@ export type ToolPermissionContext = DeepImmutable<{
   prePlanMode?: PermissionMode
 }>
 
+/** 获取 get Empty Tool Permission Context 对应的数据或状态。 */
 export const getEmptyToolPermissionContext: () => ToolPermissionContext =
   () => ({
     mode: 'default',
@@ -179,7 +180,9 @@ export type ToolUseContext = {
   }
   abortController: AbortController
   readFileState: FileStateCache
+  /** 获取 get App State 对应的数据或状态。 */
   getAppState(): AppState
+  /** 设置并保存 set App State 对应的数据或状态。 */
   setAppState(f: (prev: AppState) => AppState): void
   /**
    * 始终共享的 setAppState 用于会话范围的基础设施（后台
@@ -201,6 +204,7 @@ export type ToolUseContext = {
     signal: AbortSignal,
   ) => Promise<ElicitResult>
   setToolJSX?: SetToolJSXFn
+  /** 添加或注册 add Notification 对应的数据或状态。 */
   addNotification?: (notif: Notification) => void
   /** 将仅 UI 系统消息附加到 REPL 消息列表。脱光于
    *  NormalizeMessagesForAPI 边界 — Exclude<> 使该类型强制执行。 */
@@ -222,22 +226,31 @@ export type ToolUseContext = {
   loadedNestedMemoryPaths?: Set<string>
   dynamicSkillDirTriggers?: Set<string>
   userModified?: boolean
+  /** 设置并保存 set In Progress Tool Use I Ds 对应的数据或状态。 */
   setInProgressToolUseIDs: (f: (prev: Set<string>) => Set<string>) => void
   /** 仅在交互式 (REPL) 上下文中连接； SDK/QueryEngine 不设置此项。 */
   setHasInterruptibleToolInProgress?: (v: boolean) => void
+  /** 设置并保存 set Response Length 对应的数据或状态。 */
   setResponseLength: (f: (prev: number) => number) => void
   /** 当新的 API 请求开始时，由子代理流推送 TTFT 指标。 */
   pushApiMetricsEntry?: (ttftMs: number) => void
+  /** 设置并保存 set Stream Mode 对应的数据或状态。 */
   setStreamMode?: (mode: SpinnerMode) => void
+  /** 处理 on Compact Progress 对应的数据或状态。 */
   onCompactProgress?: (event: CompactProgressEvent) => void
+  /** 设置并保存 set SDK Status 对应的数据或状态。 */
   setSDKStatus?: (status: SDKStatus) => void
+  /** 启动或启用 open Message Selector 对应的数据或状态。 */
   openMessageSelector?: () => void
+  /** 更新 update File History State 对应的数据或状态。 */
   updateFileHistoryState: (
     updater: (prev: FileHistoryState) => FileHistoryState,
   ) => void
+  /** 更新 update Attribution State 对应的数据或状态。 */
   updateAttributionState: (
     updater: (prev: AttributionState) => AttributionState,
   ) => void
+  /** 设置并保存 set Conversation Id 对应的数据或状态。 */
   setConversationId?: (id: UUID) => void
   agentId?: AgentId // 仅为子代理设置；使用 getSessionId() 获取会话 ID。挂钩使用它来区分子代理调用。
   agentType?: string // 子代理类型名称。对于主线程的 --agent 类型，钩子会回退到 getMainThreadAgentType()。
@@ -298,6 +311,7 @@ export type ToolProgress<P extends ToolProgressData> = {
   data: P
 }
 
+/** 整理 filter Tool Progress Messages 对应的数据或状态。 */
 export function filterToolProgressMessages(
   progressMessagesForMessage: ProgressMessage[],
 ): ProgressMessage<ToolProgressData>[] {
@@ -328,7 +342,7 @@ export type ToolCallProgress<P extends ToolProgressData = ToolProgressData> = (
   progress: ToolProgress<P>,
 ) => void
 
-// Type for any schema that outputs an object with string keys
+// 任何输出具有字符串键的对象的模式类型
 export type AnyObject = z.ZodType<{ [key: string]: unknown }>
 
 /**
@@ -365,6 +379,7 @@ export type Tool<
    * 首选工具名称中尚未包含的术语（例如 NotebookEdit 的“jupyter”）。
    */
   searchHint?: string
+  /** 执行 call 对应的数据或状态。 */
   call(
     args: z.infer<Input>,
     context: ToolUseContext,
@@ -372,6 +387,7 @@ export type Tool<
     parentMessage: AssistantMessage,
     onProgress?: ToolCallProgress<P>,
   ): Promise<ToolResult<Output>>
+  /** 执行 description 对应的业务处理。 */
   description(
     input: z.infer<Input>,
     options: {
@@ -381,14 +397,17 @@ export type Tool<
     },
   ): Promise<string>
   readonly inputSchema: Input
-  // Type for MCP tools that can specify their input schema directly in JSON Schema format
-  // 而不是从 Zod 模式转换
+  // MCP 工具可直接用 JSON Schema 指定输入模式，无需从 Zod 模式转换。
   readonly inputJSONSchema?: ToolInputJSONSchema
   // 当我们这样做时，我们还可以检查并使其更加类型安全。
   outputSchema?: z.ZodType<unknown>
+  /** 执行 inputs Equivalent 对应的业务处理。 */
   inputsEquivalent?(a: z.infer<Input>, b: z.infer<Input>): boolean
+  /** 判断是否满足 is Concurrency Safe 对应的数据或状态。 */
   isConcurrencySafe(input: z.infer<Input>): boolean
+  /** 判断是否满足 is Enabled 对应的数据或状态。 */
   isEnabled(): boolean
+  /** 判断是否满足 is Read Only 对应的数据或状态。 */
   isReadOnly(input: z.infer<Input>): boolean
   /** 默认为 false。仅当工具执行不可逆操作（删除、覆盖、发送）时才设置。 */
   isDestructive?(input: z.infer<Input>): boolean
@@ -419,7 +438,9 @@ export type Tool<
     isRead: boolean
     isList?: boolean
   }
+  /** 判断是否满足 is Open World 对应的数据或状态。 */
   isOpenWorld?(input: z.infer<Input>): boolean
+  /** 执行 requires User Interaction 对应的业务处理。 */
   requiresUserInteraction?(): boolean
   isMcp?: boolean
   isLsp?: boolean
@@ -503,13 +524,17 @@ export type Tool<
     input: z.infer<Input>,
   ): Promise<(pattern: string) => boolean>
 
+  /** 执行 prompt 对应的业务处理。 */
   prompt(options: {
+    /** 获取 get Tool Permission Context 对应的数据或状态。 */
     getToolPermissionContext: () => Promise<ToolPermissionContext>
     tools: Tools
     agents: AgentDefinition[]
     allowedAgentTypes?: string[]
   }): Promise<string>
+  /** 执行 user Facing Name 对应的业务处理。 */
   userFacingName(input: Partial<z.infer<Input>> | undefined): string
+  /** 执行 user Facing Name Background Color 对应的业务处理。 */
   userFacingNameBackgroundColor?(
     input: Partial<z.infer<Input>> | undefined,
   ): keyof Theme | undefined
@@ -542,6 +567,7 @@ export type Tool<
    * 当调用者 JSON 包装值时进行双重编码。
    */
   toAutoClassifierInput(input: z.infer<Input>): unknown
+  /** 转换 map Tool Result To Tool Result Block Param 对应的数据或状态。 */
   mapToolResultToToolResultBlockParam(
     content: Output,
     toolUseID: string,
@@ -619,6 +645,7 @@ export type Tool<
       isTranscriptMode?: boolean
     },
   ): React.ReactNode
+  /** 执行 render Tool Use Queued Message 对应的业务处理。 */
   renderToolUseQueuedMessage?(): React.ReactNode
   /**
    * 选修的。省略时，回退到 <FallbackToolUseRejectedMessage />。
@@ -742,16 +769,23 @@ type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
  * - `userFacingName` → `名称`
  */
 const TOOL_DEFAULTS = {
+  /** 判断是否满足 is Enabled 对应的数据或状态。 */
   isEnabled: () => true,
+  /** 判断是否满足 is Concurrency Safe 对应的数据或状态。 */
   isConcurrencySafe: (_input?: unknown) => false,
+  /** 判断是否满足 is Read Only 对应的数据或状态。 */
   isReadOnly: (_input?: unknown) => false,
+  /** 判断是否满足 is Destructive 对应的数据或状态。 */
   isDestructive: (_input?: unknown) => false,
+  /** 检查 check Permissions 对应的数据或状态。 */
   checkPermissions: (
     input: { [key: string]: unknown },
     _ctx?: ToolUseContext,
   ): Promise<PermissionResult> =>
     Promise.resolve({ behavior: 'allow', updatedInput: input }),
+  /** 转换 to Auto Classifier Input 对应的数据或状态。 */
   toAutoClassifierInput: (_input?: unknown) => '',
+  /** 执行 user Facing Name 对应的业务处理。 */
   userFacingName: (_input?: unknown) => '',
 }
 
@@ -767,12 +801,14 @@ type ToolDefaults = typeof TOOL_DEFAULTS
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyToolDef = ToolDef<any, any, any>
 
+/** 创建 build Tool 对应的数据或状态。 */
 export function buildTool<D extends AnyToolDef>(def: D): BuiltTool<D> {
   // 运行时间分布很简单； “as”弥合了两者之间的差距
   // 结构任意约束和精确的Bui​​ltTool<D> 返回。这
-  // type semantics are proven by the 0-error typecheck across all 60+ tools.
+  // 这套类型语义由全部 60 多个工具的零错误类型检查验证。
   return {
     ...TOOL_DEFAULTS,
+    /** 执行 user Facing Name 对应的业务处理。 */
     userFacingName: () => def.name,
     ...def,
   } as BuiltTool<D>

@@ -4,9 +4,9 @@ import { LocalAgentTask } from './tasks/LocalAgentTask/LocalAgentTask.js'
 import { LocalShellTask } from './tasks/LocalShellTask/LocalShellTask.js'
 
 /**
- * Get all tasks.
- * Mirrors the pattern from tools.ts
- * Note: Returns array inline to avoid circular dependency issues with top-level const
+ * 获取所有任务。
+ * 镜像来自tools.ts的模式
+ * 注意：返回内联数组以避免与顶层常量的循环依赖问题。
  */
 export function getAllTasks(): Task[] {
   const tasks: Task[] = [
@@ -16,9 +16,7 @@ export function getAllTasks(): Task[] {
   return tasks
 }
 
-/**
- * Get a task by its type.
- */
+/** 按其类型获取任务。 */
 export function getTaskByType(type: TaskType): Task | undefined {
   return getAllTasks().find(t => t.type === type)
 }

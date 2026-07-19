@@ -13,20 +13,19 @@ import type {
 } from 'src/entrypoints/agentSdkTypes.js'
 import type { Message } from 'src/types/message.js'
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js'
-import { permissionBehaviorSchema } from 'src/utils/permissions/PermissionRule.js'
 import { permissionUpdateSchema } from 'src/utils/permissions/PermissionUpdateSchema.js'
 import type { AppState } from '../state/AppState.js'
 import type { AttributionState } from '../utils/commitAttribution.js'
 
+/** 判断是否满足 is Hook Event 对应的数据或状态。 */
 export function isHookEvent(value: string): value is HookEvent {
   return HOOK_EVENTS.includes(value as HookEvent)
 }
 
-// Prompt elicitation protocol types. The `prompt` key acts as discriminator
-// (mirroring the {async:true} pattern), with the id as its value.
+// 提示引导协议类型。`prompt`键作为鉴别器（镜像{async:true}模式），其id作为值。
 export const promptRequestSchema = lazySchema(() =>
   z.object({
-    prompt: z.string(), // request id
+    prompt: z.string(), // 请求id
     message: z.string(),
     options: z.array(
       z.object({
@@ -41,11 +40,11 @@ export const promptRequestSchema = lazySchema(() =>
 export type PromptRequest = z.infer<ReturnType<typeof promptRequestSchema>>
 
 export type PromptResponse = {
-  prompt_response: string // request id
+  prompt_response: string // 请求id
   selected: string
 }
 
-// Sync hook response schema
+// 同步钩子响应模式
 export const syncHookResponseSchema = lazySchema(() =>
   z.object({
     continue: z
@@ -70,7 +69,9 @@ export const syncHookResponseSchema = lazySchema(() =>
       .union([
         z.object({
           hookEventName: z.literal('PreToolUse'),
-          permissionDecision: permissionBehaviorSchema().optional(),
+          permissionDecision: z
+            .enum(['allow', 'deny', 'ask', 'defer'])
+            .optional(),
           permissionDecisionReason: z.string().optional(),
           updatedInput: z.record(z.string(), z.unknown()).optional(),
           additionalContext: z.string().optional(),
@@ -78,6 +79,7 @@ export const syncHookResponseSchema = lazySchema(() =>
         z.object({
           hookEventName: z.literal('UserPromptSubmit'),
           additionalContext: z.string().optional(),
+          sessionTitle: z.string().optional(),
         }),
         z.object({
           hookEventName: z.literal('SessionStart'),
@@ -164,9 +166,9 @@ export const syncHookResponseSchema = lazySchema(() =>
   }),
 )
 
-// Zod schema for hook JSON output validation
+// 用于钩子JSON输出验证的Zod模式
 export const hookJSONOutputSchema = lazySchema(() => {
-  // Async hook response schema
+  // 异步钩子响应模式
   const asyncHookResponseSchema = z.object({
     async: z.literal(true),
     asyncTimeout: z.number().optional(),
@@ -174,53 +176,56 @@ export const hookJSONOutputSchema = lazySchema(() => {
   return z.union([asyncHookResponseSchema, syncHookResponseSchema()])
 })
 
-// Infer the TypeScript type from the schema
+// 从模式推断TypeScript类型
 type SchemaHookJSONOutput = z.infer<ReturnType<typeof hookJSONOutputSchema>>
 
-// Type guard function to check if response is sync
+// 检查响应是否为同步的类型保护函数
 export function isSyncHookJSONOutput(
   json: HookJSONOutput,
 ): json is SyncHookJSONOutput {
   return !('async' in json && json.async === true)
 }
 
-// Type guard function to check if response is async
+// 检查响应是否为异步的类型保护函数
 export function isAsyncHookJSONOutput(
   json: HookJSONOutput,
 ): json is AsyncHookJSONOutput {
   return 'async' in json && json.async === true
 }
 
-// Compile-time assertion that SDK and Zod types match
+// 编译时断言SDK和Zod类型匹配
 import type { IsEqual } from 'type-fest'
 type Assert<T extends true> = T
 type _assertSDKTypesMatch = Assert<
   IsEqual<SchemaHookJSONOutput, HookJSONOutput>
 >
 
-/** Context passed to callback hooks for state access */
+/** 传递给回调钩子以访问状态的上下文 */
 export type HookCallbackContext = {
+  /** 获取 get App State 对应的数据或状态。 */
   getAppState: () => AppState
+  /** 更新 update Attribution State 对应的数据或状态。 */
   updateAttributionState: (
     updater: (prev: AttributionState) => AttributionState,
   ) => void
 }
 
-/** Hook that is a callback. */
+/** 作为回调的钩子。 */
 export type HookCallback = {
   type: 'callback'
+  /** 执行 callback 对应的数据或状态。 */
   callback: (
     input: HookInput,
     toolUseID: string | null,
     abort: AbortSignal | undefined,
-    /** Hook index for SessionStart hooks to compute CLAUDE_ENV_FILE path */
+    /** 用于SessionStart钩子计算CLAUDE_ENV_FILE路径的钩子索引 */
     hookIndex?: number,
-    /** Optional context for accessing app state */
+    /** 用于访问应用状态的可选上下文 */
     context?: HookCallbackContext,
   ) => Promise<HookJSONOutput>
-  /** Timeout in seconds for this hook */
+  /** 此钩子的超时时间（秒） */
   timeout?: number
-  /** Internal callbacks use a streamlined execution path without user-facing progress. */
+  /** 内部回调使用简化的执行路径，没有面向用户的进度。 */
   internal?: boolean
 }
 
@@ -266,6 +271,7 @@ export type HookResult = {
   permissionBehavior?: 'ask' | 'deny' | 'allow' | 'passthrough'
   hookPermissionDecisionReason?: string
   additionalContext?: string
+  sessionTitle?: string
   initialUserMessage?: string
   updatedInput?: Record<string, unknown>
   updatedMCPToolOutput?: unknown
@@ -281,6 +287,7 @@ export type AggregatedHookResult = {
   hookPermissionDecisionReason?: string
   permissionBehavior?: PermissionResult['behavior']
   additionalContexts?: string[]
+  sessionTitle?: string
   initialUserMessage?: string
   updatedInput?: Record<string, unknown>
   updatedMCPToolOutput?: unknown

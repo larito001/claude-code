@@ -8,12 +8,12 @@ import type { QueueOperationMessage } from './messageQueueTypes.js'
 export type SerializedMessage = Message & {
   cwd: string
   userType: string
-  entrypoint?: string // CLAUDE_CODE_ENTRYPOINT — distinguishes cli/sdk-ts/sdk-py/etc.
+  entrypoint?: string // CLAUDE_CODE_ENTRYPOINT — 区分 cli/sdk-ts/sdk-py 等
   sessionId: string
   timestamp: string
   version: string
   gitBranch?: string
-  slug?: string // Session slug for files like plans (used for resume)
+  slug?: string // 用于计划等文件的会话标识（用于恢复）
 }
 
 export type LogOption = {
@@ -25,29 +25,29 @@ export type LogOption = {
   modified: Date
   firstPrompt: string
   messageCount: number
-  fileSize?: number // File size in bytes (for display)
+  fileSize?: number // 文件大小（以字节为单位，用于显示）
   isSidechain: boolean
-  isLite?: boolean // True for lite logs (messages not loaded)
-  sessionId?: string // Session ID for lite logs
-  teamName?: string // Team name if this is a spawned agent session
-  agentName?: string // Agent's custom name (from /rename or swarm)
-  agentColor?: string // Agent's color (from /rename or swarm)
-  agentSetting?: string // Agent definition used (from --agent flag or settings.agent)
-  isTeammate?: boolean // Whether this session was created by a swarm teammate
-  leafUuid?: UUID // If given, this uuid must appear in the DB
-  summary?: string // Optional conversation summary
-  customTitle?: string // Optional user-set custom title
-  tag?: string // Optional tag for the session (searchable in /resume)
-  fileHistorySnapshots?: FileHistorySnapshot[] // Optional file history snapshots
-  attributionSnapshots?: AttributionSnapshotMessage[] // Optional attribution snapshots
-  gitBranch?: string // Git branch at the end of the session
-  projectPath?: string // Original project directory path
-  prNumber?: number // GitHub PR number linked to this session
-  prUrl?: string // Full URL to the linked PR
-  prRepository?: string // Repository in "owner/repo" format
-  mode?: 'coordinator' | 'normal' // Session mode for coordinator/normal detection
-  worktreeSession?: PersistedWorktreeSession | null // Worktree state at session end (null = exited, undefined = never entered)
-  contentReplacements?: ContentReplacementRecord[] // Replacement decisions for resume reconstruction
+  isLite?: boolean // 精简日志时为 true（未加载消息）
+  sessionId?: string // 精简日志的会话 ID
+  teamName?: string // 如果是衍生代理会话，则为团队名称
+  agentName?: string // 代理的自定义名称（来自 /rename 或 swarm）
+  agentColor?: string // 代理的颜色（来自 /rename 或 swarm）
+  agentSetting?: string // 使用的代理定义（来自 --agent 标志或 settings.agent）
+  isTeammate?: boolean // 此会话是否由 swarm 队友创建
+  leafUuid?: UUID // 如果提供，此 uuid 必须存在于数据库中
+  summary?: string // 可选的对话摘要
+  customTitle?: string // 可选的用户设置自定义标题
+  tag?: string // 会话的可选标签（可在 /resume 中搜索）
+  fileHistorySnapshots?: FileHistorySnapshot[] // 可选的文件历史快照
+  attributionSnapshots?: AttributionSnapshotMessage[] // 可选的归属快照
+  gitBranch?: string // 会话结束时的 Git 分支
+  projectPath?: string // 原始项目目录路径
+  prNumber?: number // 链接到此会话的 GitHub PR 编号
+  prUrl?: string // 链接到 PR 的完整 URL
+  prRepository?: string // 仓库格式为 "owner/repo"
+  mode?: 'coordinator' | 'normal' // 用于协调器/普通检测的会话模式
+  worktreeSession?: PersistedWorktreeSession | null // 会话结束时的工位树状态（null = 已退出，undefined = 从未进入）
+  contentReplacements?: ContentReplacementRecord[] // 用于恢复重建的替换决策
 }
 
 export type SummaryMessage = {
@@ -63,12 +63,10 @@ export type CustomTitleMessage = {
 }
 
 /**
- * AI-generated session title. Distinct from CustomTitleMessage so that:
- * - User renames (custom-title) always win over AI titles in read preference
- * - reAppendSessionMetadata never re-appends AI titles (they're ephemeral/
- *   regeneratable; re-appending would clobber user renames on resume)
- * - VS Code's onlyIfNoCustomTitle CAS check only matches user titles,
- *   allowing AI to overwrite its own previous AI title but not user titles
+ * AI生成的会话标题。与CustomTitleMessage不同，以便：
+ * - 用户重命名（custom-title）在读取偏好中始终优先于AI标题
+ * - reAppendSessionMetadata永不重新追加AI标题（它们是临时的/可重新生成的；重新追加会在恢复时覆盖用户重命名）
+ * - VS Code的onlyIfNoCustomTitle CAS检查仅匹配用户标题，允许AI覆盖其自身先前的AI标题，但不能覆盖用户标题
  */
 export type AiTitleMessage = {
   type: 'ai-title'
@@ -83,10 +81,7 @@ export type LastPromptMessage = {
 }
 
 /**
- * Periodic fork-generated summary of what the agent is currently doing.
- * Written every min(5 steps, 2min) by forking the main thread mid-turn so
- * `claude ps` can show something more useful than the last user prompt
- * (which is often "ok go" or "fix it").
+ * 定期从分支生成的代理当前行为摘要。每 min(5 steps, 2min) 通过在回合中途中分叉主线程写入，以便 `claude ps` 能显示比最后一条用户提示（通常是"ok go"或"fix it"）更有用的内容。
  */
 export type TaskSummaryMessage = {
   type: 'task-summary'
@@ -119,17 +114,14 @@ export type AgentSettingMessage = {
   agentSetting: string
 }
 
-/**
- * PR link message stored in session transcript.
- * Links a session to a GitHub pull request for tracking and navigation.
- */
+/** 存储在会话记录中的PR链接消息。将会话链接到GitHub拉取请求以进行跟踪和导航。 */
 export type PRLinkMessage = {
   type: 'pr-link'
   sessionId: UUID
   prNumber: number
   prUrl: string
-  prRepository: string // e.g., "owner/repo"
-  timestamp: string // ISO timestamp when linked
+  prRepository: string // 例如，“owner/repo”
+  timestamp: string // 链接时的ISO时间戳
 }
 
 export type ModeEntry = {
@@ -138,11 +130,7 @@ export type ModeEntry = {
   mode: 'coordinator' | 'normal'
 }
 
-/**
- * Worktree session state persisted to the transcript for resume.
- * Subset of WorktreeSession from utils/worktree.ts — excludes ephemeral
- * fields that are not required when restoring the worktree.
- */
+/** 持久化到记录中以供恢复的工作树会话状态。来自 utils/worktree.ts 的 WorktreeSession 的子集——排除了恢复工作树时不需要的临时字段。 */
 export type PersistedWorktreeSession = {
   originalCwd: string
   worktreePath: string
@@ -156,10 +144,7 @@ export type PersistedWorktreeSession = {
 }
 
 /**
- * Records whether the session is currently inside a worktree created by
- * EnterWorktree or --worktree. Last-wins: an enter writes the session,
- * an exit writes null. On --resume, restored only if the worktreePath
- * still exists on disk (the /exit dialog may have removed it).
+ * 记录会话当前是否在由 EnterWorktree 或 --worktree 创建的工作树内。最后写入者胜出：进入时写入会话，退出时写入 null。在 --resume 时，仅当 worktreePath 仍存在于磁盘上时才恢复（/exit 对话框可能已将其移除）。
  */
 export type WorktreeStateEntry = {
   type: 'worktree-state'
@@ -168,12 +153,7 @@ export type WorktreeStateEntry = {
 }
 
 /**
- * Records content blocks whose in-context representation was replaced with a
- * smaller stub (the full content was persisted elsewhere). Replayed on resume
- * for prompt cache stability. Written once per enforcement pass that replaces
- * at least one block. When agentId is set, the record belongs to a subagent
- * sidechain (AgentTool resume reads these); when absent, it's main-thread
- * (/resume reads these).
+ * 记录那些在上下文表示中被替换为较小存根的内容块（完整内容已持久化到其他地方）。在恢复时重放以实现提示缓存稳定性。每次至少替换一个块的强制执行遍历时写入一次。当设置了agentId时，该记录属于子代理侧链（AgentTool 恢复读取这些）；当未设置时，属于主线程（/resume 读取这些）。
  */
 export type ContentReplacementEntry = {
   type: 'content-replacement'
@@ -189,42 +169,37 @@ export type FileHistorySnapshotMessage = {
   isSnapshotUpdate: boolean
 }
 
-/**
- * Per-file attribution state tracking Claude's character contributions.
- */
+/** 跟踪Claude角色贡献的按文件归属状态。 */
 export type FileAttributionState = {
-  contentHash: string // SHA-256 hash of file content
-  claudeContribution: number // Characters written by Claude
-  mtime: number // File modification time
+  contentHash: string // 文件内容的SHA-256哈希值
+  claudeContribution: number // 由Claude写入的字符数
+  mtime: number // 文件修改时间
 }
 
-/**
- * Attribution snapshot message stored in session transcript.
- * Tracks character-level contributions by Claude for commit attribution.
- */
+/** 存储在会话记录中的归属快照消息。跟踪Claude的字符级贡献以用于提交归属。 */
 export type AttributionSnapshotMessage = {
   type: 'attribution-snapshot'
   messageId: UUID
-  surface: string // Client surface (cli, ide, web, api)
+  surface: string // 客户端界面（cli, ide, web, api）
   fileStates: Record<string, FileAttributionState>
-  promptCount?: number // Total prompts in session
-  promptCountAtLastCommit?: number // Prompts at last commit
-  permissionPromptCount?: number // Total permission prompts shown
-  permissionPromptCountAtLastCommit?: number // Permission prompts at last commit
-  escapeCount?: number // Total ESC presses (cancelled permission prompts)
-  escapeCountAtLastCommit?: number // ESC presses at last commit
+  promptCount?: number // 会话中的总提示次数
+  promptCountAtLastCommit?: number // 上次提交时的提示次数
+  permissionPromptCount?: number // 显示的权限提示总次数
+  permissionPromptCountAtLastCommit?: number // 上次提交时的权限提示次数
+  escapeCount?: number // ESC按键总次数（取消的权限提示）
+  escapeCountAtLastCommit?: number // 上次提交时的ESC按键次数
 }
 
 export type TranscriptMessage = SerializedMessage & {
   parentUuid: UUID | null
-  logicalParentUuid?: UUID | null // Preserves logical parent when parentUuid is nullified for session breaks
+  logicalParentUuid?: UUID | null // 当parentUuid因会话中断而被设为null时，保留逻辑父级
   isSidechain: boolean
   gitBranch?: string
-  agentId?: string // Agent ID for sidechain transcripts to enable resuming agents
-  teamName?: string // Team name if this is a spawned agent session
-  agentName?: string // Agent's custom name (from /rename or swarm)
-  agentColor?: string // Agent's color (from /rename or swarm)
-  promptId?: string // Correlates with OTel prompt.id for user prompt messages
+  agentId?: string // 用于侧链记录的代理ID，以支持恢复代理
+  teamName?: string // 如果是生成的代理会话，则为团队名称
+  agentName?: string // 代理的自定义名称（来自 /rename 或 swarm）
+  agentColor?: string // 代理的颜色（来自 /rename 或 swarm）
+  promptId?: string // 与用户提示消息的 OTel prompt.id 相关联
 }
 
 export type SpeculationAcceptMessage = {
@@ -253,15 +228,16 @@ export type Entry =
   | WorktreeStateEntry
   | ContentReplacementEntry
 
+/** 整理 sort Logs 对应的数据或状态。 */
 export function sortLogs(logs: LogOption[]): LogOption[] {
   return logs.sort((a, b) => {
-    // Sort by modified date (newest first)
+    // 按修改日期排序（最新的在前）
     const modifiedDiff = b.modified.getTime() - a.modified.getTime()
     if (modifiedDiff !== 0) {
       return modifiedDiff
     }
 
-    // If modified dates are equal, sort by created date (newest first)
+    // 如果修改日期相同，则按创建日期排序（最新的在前）
     return b.created.getTime() - a.created.getTime()
   })
 }

@@ -25,6 +25,7 @@ import type { PermissionMode } from './utils/permissions/PermissionMode.js';
 import { getBaseRenderOptions } from './utils/renderOptions.js';
 import { getSettingsWithAllErrors } from './utils/settings/allErrors.js';
 import { hasAutoModeOptIn, hasSkipDangerousModePermissionPrompt } from './utils/settings/settings.js';
+/** 执行 complete Onboarding 对应的业务处理。 */
 export function completeOnboarding(): void {
   saveGlobalConfig(current => ({
     ...current,
@@ -32,18 +33,19 @@ export function completeOnboarding(): void {
     lastOnboardingVersion: MACRO.VERSION
   }));
 }
+/** 执行 show Dialog 对应的业务处理。 */
 export function showDialog<T = void>(root: Root, renderer: (done: (result: T) => void) => React.ReactNode): Promise<T> {
   return new Promise<T>(resolve => {
+    /** 执行 done 对应的业务处理。 */
     const done = (result: T): void => void resolve(result);
     root.render(renderer(done));
   });
 }
 
 /**
- * Render an error message through Ink, then unmount and exit.
- * Use this for fatal errors after the Ink root has been created —
- * console.error is swallowed by Ink's patchConsole, so we render
- * through the React tree instead.
+ * 通过 Ink 渲染错误消息，然后卸载并退出。
+ * 在创建 Ink 根节点后用于致命错误——
+ * console.error 被 Ink 的 patchConsole 吞没，所以我们改为通过 React 树渲染。
  */
 export async function exitWithError(root: Root, message: string, beforeExit?: () => Promise<void>): Promise<never> {
   return exitWithMessage(root, message, {
@@ -53,14 +55,14 @@ export async function exitWithError(root: Root, message: string, beforeExit?: ()
 }
 
 /**
- * Render a message through Ink, then unmount and exit.
- * Use this for messages after the Ink root has been created —
- * console output is swallowed by Ink's patchConsole, so we render
- * through the React tree instead.
+ * 通过 Ink 渲染消息，然后卸载并退出。
+ * 在创建 Ink 根节点后用于消息——
+ * console 输出被 Ink 的 patchConsole 吞没，所以我们改为通过 React 树渲染。
  */
 export async function exitWithMessage(root: Root, message: string, options?: {
   color?: TextProps['color'];
   exitCode?: number;
+  /** 执行 before Exit 对应的业务处理。 */
   beforeExit?: () => Promise<void>;
 }): Promise<never> {
   const {
@@ -76,8 +78,8 @@ export async function exitWithMessage(root: Root, message: string, options?: {
 }
 
 /**
- * Show a setup dialog wrapped in AppStateProvider + KeybindingSetup.
- * Reduces boilerplate in showSetupScreens() where every dialog needs these wrappers.
+ * 显示包裹在 AppStateProvider + KeybindingSetup 中的设置对话框。
+ * 减少 showSetupScreens() 中每个对话框都需要这些包装器的样板代码。
  */
 export function showSetupDialog<T = void>(root: Root, renderer: (done: (result: T) => void) => React.ReactNode, options?: {
   onChangeAppState?: typeof onChangeAppState;
@@ -88,8 +90,8 @@ export function showSetupDialog<T = void>(root: Root, renderer: (done: (result: 
 }
 
 /**
- * Render the main UI into the root and wait for it to exit.
- * Handles the common epilogue: start deferred prefetches, wait for exit, graceful shutdown.
+ * 将主 UI 渲染到根节点中，并等待其退出。
+ * 处理常见的收尾工作：启动延迟预取，等待退出，优雅关闭。
  */
 export async function renderAndRun(root: Root, element: React.ReactNode): Promise<void> {
   root.render(element);
@@ -97,6 +99,7 @@ export async function renderAndRun(root: Root, element: React.ReactNode): Promis
   await root.waitUntilExit();
   await gracefulShutdown(0);
 }
+/** 执行 show Setup Screens 对应的业务处理。 */
 export async function showSetupScreens(root: Root, permissionMode: PermissionMode, allowDangerouslySkipPermissions: boolean, commands?: Command[], devChannels?: ChannelEntry[]): Promise<void> {
   if (
     process.env.NODE_ENV === 'test' ||
@@ -105,7 +108,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     return;
   }
   const config = getGlobalConfig();
-  if (!config.theme || !config.hasCompletedOnboarding // always show onboarding at least once
+  if (!config.theme || !config.hasCompletedOnboarding // 始终至少显示一次引导流程
   ) {
     const {
       Onboarding
@@ -118,16 +121,16 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     });
   }
 
-  // Always show the trust dialog in interactive sessions, regardless of permission mode.
-  // The trust dialog is the workspace trust boundary — it warns about untrusted repos
-  // and checks CLAUDE.md external includes. bypassPermissions mode
-  // only affects tool execution permissions, not workspace trust.
-  // Note: non-interactive sessions (CI/CD with -p) never reach showSetupScreens at all.
-  // Skip permission checks in claubbit
+  // 在交互式会话中始终显示信任对话框，无论权限模式如何。
+  // 信任对话框是工作区信任边界——它警告不受信任的仓库
+  // 并检查 CLAUDE.md 外部包含。bypassPermissions 模式
+  // 仅影响工具执行权限，不影响工作区信任。
+  // 注意：非交互式会话（使用 -p 的 CI/CD）永远不会到达 showSetupScreens。
+  // 在 claubbit 中跳过权限检查
   if (!isEnvTruthy(process.env.CLAUBBIT)) {
-    // Fast-path: skip TrustDialog import+render when CWD is already trusted.
-    // If it returns true, the TrustDialog would auto-resolve regardless of
-    // security features, so we can skip the dynamic import and render cycle.
+    // 快速路径：当 CWD 已被信任时跳过 TrustDialog 导入+渲染。
+    // 如果返回 true，则 TrustDialog 将自动解析，无论
+    // 安全特性如何，因此我们可以跳过动态导入和渲染循环。
     if (!checkHasTrustDialogAccepted()) {
       const {
         TrustDialog
@@ -135,17 +138,17 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       await showSetupDialog(root, done => <TrustDialog commands={commands} onDone={done} />);
     }
 
-    // Signal that trust has been verified for this session.
+    // 表示信任已针对此会话得到验证。
     setSessionTrustAccepted(true);
 
-    // Reinitialize feature gates after trust establishes access to settings.
+    // 在信任建立对设置的访问后重新初始化功能开关。
     resetFeatureConfig();
     void initializeFeatureConfig();
 
-    // Now that trust is established, prefetch system context if it wasn't already
+    // 既然已建立信任，则预取系统上下文（如果尚未预取）
     void getSystemContext();
 
-    // If settings are valid, check for any mcp.json servers that need approval
+    // 如果设置有效，检查是否有任何 mcp.json 服务器需要批准
     const {
       errors: allErrors
     } = getSettingsWithAllErrors();
@@ -153,7 +156,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       await handleMcpjsonServerApprovals(root);
     }
 
-    // Check for claude.md includes that need approval
+    // 检查是否有 claude.md 包含项需要批准
     if (await shouldShowClaudeMdExternalIncludesWarning()) {
       const externalIncludes = getExternalClaudeMdIncludes(await getMemoryFiles(true));
       const {
@@ -163,19 +166,19 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     }
   }
 
-  // Track the current repository path (fire-and-forget)
-  // This must happen AFTER trust to prevent untrusted directories from poisoning the mapping
+  // 跟踪当前仓库路径（即发即忘）
+  // 这必须在信任之后进行，以防止不受信任的目录污染映射
   void updateGithubRepoPathMapping();
-  // Apply full environment variables after trust dialog is accepted OR in bypass mode
-  // In bypass mode (CI/CD, automation), we trust the environment so apply all variables
-  // In normal mode, this happens after the trust dialog is accepted
-  // This includes potentially dangerous environment variables from untrusted sources
+  // 在信任对话框被接受后或在绕过模式下应用完整的环境变量
+  // 在绕过模式（CI/CD、自动化）中，我们信任环境，因此应用所有变量
+  // 在正常模式下，这是在信任对话框被接受后进行的
+  // 这包括来自不受信任来源的潜在危险环境变量
   applyConfigEnvironmentVariables();
 
-  // Initialize telemetry after env vars are applied so OTEL endpoint env vars and
-  // otelHeadersHelper (which requires trust to execute) are available.
-  // Defer to next tick so the OTel dynamic import resolves after first render
-  // instead of during the pre-render microtask queue.
+  // 在应用环境变量后初始化遥测，以便 OTEL 端点环境变量和
+  // otelHeadersHelper（需要信任才能执行）可用。
+  // 推迟到下一个微任务，以便 OTel 动态导入在首次渲染后解析，
+  // 而不是在预渲染微任务队列期间。
   setImmediate(() => initializeTelemetryAfterTrust());
   if ((permissionMode === 'bypassPermissions' || allowDangerouslySkipPermissions) && !hasSkipDangerousModePermissionPrompt()) {
     const {
@@ -184,10 +187,10 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     await showSetupDialog(root, done => <BypassPermissionsModeDialog onAccept={done} />);
   }
   if (feature('TRANSCRIPT_CLASSIFIER')) {
-    // Only show the opt-in dialog if auto mode actually resolved — if the
-    // gate denied it (org not allowlisted, settings disabled), showing
-    // consent for an unavailable feature is pointless. The
-    // verifyAutoModeGateAccess notification will explain why instead.
+    // 仅当自动模式实际解析时才显示选择加入对话框——如果
+    // 门控拒绝（组织未列入白名单、设置禁用），则显示
+    // 同意不可用的功能是没有意义的。
+    // verifyAutoModeGateAccess 通知将解释原因。
     if (permissionMode === 'auto' && !hasAutoModeOptIn()) {
       const {
         AutoModeOptInDialog
@@ -196,19 +199,16 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     }
   }
 
-  // --dangerously-load-development-channels confirmation. On accept, append
-  // dev channels to any --channels list already set in main.tsx. Org policy
-  // is NOT bypassed — gateChannelServer() still runs; this flag only exists
-  // to sidestep the --channels approved-server allowlist.
+  // --dangerously-load-development-channels 确认。接受后，将开发频道追加到
+  // main.tsx 中已设置的 --channels 列表中。组织策略
+  // 不会被绕过——gateChannelServer() 仍然运行；此标志仅存在
+  // 用于绕过 --channels 批准的服务器白名单。
   if (feature('MCP_CHANNELS')) {
-    // Channel gating reads tengu_harbor after this
-    // function returns. A cold disk cache (fresh install, or first run after
-    // the flag was added server-side) defaults to false and silently drops
-    // channel notifications for the whole session — gh#37026.
-    // isFeatureEnabled returns immediately if disk already says
-    // true; only blocks on a cold/stale-false cache (awaits the same memoized
-    // initializeFeatureConfig promise fired earlier). Also warms the
-    // isChannelsEnabled() check in the dev-channels dialog below.
+    // 频道门控在此函数返回后读取 tengu_harbor。
+    // 冷磁盘缓存（新安装，或首次在服务端添加标志后运行）默认值为 false，并静默丢弃
+    // 整个会话的频道通知——gh#37026。
+    // isFeatureEnabled 如果磁盘已为 true 则立即返回；仅在冷/过时-false 缓存上阻塞（等待之前触发的相同记忆化的
+    // initializeFeatureConfig promise）。同时预热下面开发频道对话框中的 isChannelsEnabled() 检查。
     if (getAllowedChannels().length > 0 || (devChannels?.length ?? 0) > 0) {
       await isFeatureEnabled('tengu_harbor');
     }
@@ -216,10 +216,10 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       const {
         isChannelsEnabled
       } = await import('./services/mcp/channelAllowlist.js');
-      // Skip the dialog when channels are disabled.
-      // Append development entries so channel gating can name them.
-      // (hasNonDev check); the allowlist bypass it also grants is moot
-      // since the gate blocks upstream.
+      // 当频道禁用时跳过对话框。
+      // 附加开发条目以便频道门控可以命名它们。
+      // （hasNonDev 检查）；白名单绕过它也无意义，
+      // 因为门控在上游阻止。
       if (!isChannelsEnabled()) {
         setAllowedChannels([...getAllowedChannels(), ...devChannels.map(c => ({
           ...c,
@@ -231,8 +231,8 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
           DevChannelsDialog
         } = await import('./components/DevChannelsDialog.js');
         await showSetupDialog(root, done => <DevChannelsDialog channels={devChannels} onAccept={() => {
-          // Mark dev entries per-entry so the allowlist bypass doesn't leak
-          // to --channels entries when both flags are passed.
+          // 按条目标记开发条目，以便白名单绕过不会泄漏
+          // 当两个标志都传递时，不会泄漏到 --channels 条目。
           setAllowedChannels([...getAllowedChannels(), ...devChannels.map(c => ({
             ...c,
             dev: true
@@ -245,8 +245,10 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   }
 
 }
+/** 获取 get Render Context 对应的数据或状态。 */
 export function getRenderContext(exitOnCtrlC: boolean): {
   renderOptions: RenderOptions;
+  /** 获取 get Fps Metrics 对应的数据或状态。 */
   getFpsMetrics: () => FpsMetrics | undefined;
   stats: StatsStore;
 } {
@@ -256,23 +258,25 @@ export function getRenderContext(exitOnCtrlC: boolean): {
   const stats = createStatsStore();
   setStatsStore(stats);
 
-  // Bench mode: when set, append per-frame phase timings as JSONL for
-  // offline analysis by bench/repl-scroll.ts. Captures the full TUI
-  // render pipeline (yoga → screen buffer → diff → optimize → stdout)
-  // so perf work on any phase can be validated against real user flows.
+  // 基准模式：设置后，以 JSONL 格式附加每帧阶段时序，用于
+  // 离线分析（bench/repl-scroll.ts）。捕获完整的 TUI
+  // 渲染管道（yoga → screen buffer → diff → optimize → stdout）
+  // 以便任何阶段的性能工作都可以针对真实用户流程进行验证。
   const frameTimingLogPath = process.env.CLAUDE_CODE_FRAME_TIMING_LOG;
   return {
+    /** 获取 get Fps Metrics 对应的数据或状态。 */
     getFpsMetrics: () => fpsTracker.getMetrics(),
     stats,
     renderOptions: {
       ...baseOptions,
+      /** 处理 on Frame 对应的数据或状态。 */
       onFrame: event => {
         fpsTracker.record(event.durationMs);
         stats.observe('frame_duration_ms', event.durationMs);
         if (frameTimingLogPath && event.phases) {
-          // Bench-only env-var-gated path: sync write so no frames dropped
-          // on abrupt exit. ~100 bytes at ≤60fps is negligible. rss/cpu are
-          // single syscalls; cpu is cumulative — bench side computes delta.
+          // 仅基准环境变量门控路径：同步写入，因此在突然退出时不会丢失帧。
+          // 在≤60fps 时约100字节可忽略。rss/cpu 是
+          // 单个系统调用；cpu 是累积的——基准端计算增量。
           const line =
           // eslint-disable-next-line custom-rules/no-direct-json-operations -- tiny object, hot bench path
           JSON.stringify({
@@ -284,8 +288,8 @@ export function getRenderContext(exitOnCtrlC: boolean): {
           // eslint-disable-next-line custom-rules/no-sync-fs -- bench-only, sync so no frames dropped on exit
           appendFileSync(frameTimingLogPath, line);
         }
-        // Skip flicker reporting for terminals with synchronized output —
-        // DEC 2026 buffers between BSU/ESU so clear+redraw is atomic.
+        // 跳过具有同步输出终端的闪烁报告——
+        // DEC 2026 在 BSU/ESU 之间缓冲，因此清除+重绘是原子的。
         if (isSynchronizedOutputSupported()) {
           return;
         }

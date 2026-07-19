@@ -1,11 +1,9 @@
 /**
- * Hook Zod schemas extracted to break import cycles.
+ * 提取Hook Zod模式以打破导入循环。
  *
- * This file contains hook-related schema definitions that were originally
- * in src/utils/settings/types.ts. By extracting them here, we break the
- * circular dependency between settings/types.ts and plugins/schemas.ts.
+ * 此文件包含与hook相关的模式定义，这些定义最初位于src/utils/settings/types.ts中。通过将它们提取到这里，我们打破了settings/types.ts和plugins/schemas.ts之间的循环依赖。
  *
- * Both files now import from this shared location instead of each other.
+ * 两个文件现在都从此共享位置导入，而不是相互导入。
  */
 
 import type { HookEvent } from 'src/entrypoints/agentSdkTypes.js'
@@ -14,9 +12,9 @@ import { z } from 'zod/v4'
 import { lazySchema } from '../utils/lazySchema.js'
 import { SHELL_TYPES } from '../utils/shell/shellProvider.js'
 
-// Shared schema for the `if` condition field.
-// Uses permission rule syntax (e.g., "Bash(git *)", "Read(*.ts)") to filter hooks
-// before spawning. Evaluated against the hook input's tool_name and tool_input.
+// `if`条件字段的共享模式。
+// 使用权限规则语法（例如"Bash(git *)", "Read(*.ts)"）在生成前过滤hook。
+// 根据hook输入的tool_name和tool_input进行评估。
 const IfConditionSchema = lazySchema(() =>
   z
     .string()
@@ -27,8 +25,7 @@ const IfConditionSchema = lazySchema(() =>
     ),
 )
 
-// Internal factory for individual hook schemas (shared between exported
-// discriminated union members and the HookCommandSchema factory)
+// 单个hook模式的内部工厂（在导出的判别联合成员和HookCommandSchema工厂之间共享）
 function buildHookSchemas() {
   const BashCommandHookSchema = z.object({
     type: z.literal('command').describe('Shell command hook type'),
@@ -78,7 +75,7 @@ function buildHookSchemas() {
       .positive()
       .optional()
       .describe('Timeout in seconds for this specific prompt evaluation'),
-    // @[MODEL LAUNCH]: Update the example model ID in the .describe() strings below (prompt + agent hooks).
+    // @[MODEL LAUNCH]: 更新下方.describe()字符串中的示例模型ID（prompt + agent hooks）。
     model: z
       .string()
       .optional()
@@ -128,13 +125,11 @@ function buildHookSchemas() {
 
   const AgentHookSchema = z.object({
     type: z.literal('agent').describe('Agentic verifier hook type'),
-    // DO NOT add .transform() here. This schema is used by parseSettingsFile,
-    // and updateSettingsForSource round-trips the parsed result through
-    // JSON.stringify — a transformed function value is silently dropped,
-    // deleting the user's prompt from settings.json (gh-24920, CC-79). The
-    // transform (from #10594) wrapped the string in `(_msgs) => prompt`
-    // for an old programmatic-construction path. Agent hooks now remain
-    // declarative settings objects throughout parsing and persistence.
+    // 此处不要添加.transform()。此模式由parseSettingsFile使用，
+    // 而updateSettingsForSource会通过JSON.stringify对解析结果进行往返处理——转换后的函数值会被静默丢弃，
+    // 从而从settings.json中删除用户的prompt（gh-24920, CC-79）。
+    // 该.transform（来自#10594）将字符串包装在`(_msgs) => prompt`中，
+    // 用于旧的程序化构造路径。Agent hooks现在在整个解析和持久化过程中保持为声明式设置对象。
     prompt: z
       .string()
       .describe(
@@ -170,9 +165,7 @@ function buildHookSchemas() {
   }
 }
 
-/**
- * Schema for hook command (excludes function hooks - they can't be persisted)
- */
+/** hook命令的模式（排除函数hook——它们无法持久化） */
 export const HookCommandSchema = lazySchema(() => {
   const {
     BashCommandHookSchema,
@@ -188,15 +181,13 @@ export const HookCommandSchema = lazySchema(() => {
   ])
 })
 
-/**
- * Schema for matcher configuration with multiple hooks
- */
+/** 具有多个hook的匹配器配置的模式 */
 export const HookMatcherSchema = lazySchema(() =>
   z.object({
     matcher: z
       .string()
       .optional()
-      .describe('String pattern to match (e.g. tool names like "Write")'), // String (e.g. Write) to match values related to the hook event, e.g. tool names
+      .describe('String pattern to match (e.g. tool names like "Write")'), // 字符串（例如Write）用于匹配与hook事件相关的值，例如工具名称
     hooks: z
       .array(HookCommandSchema())
       .describe('List of hooks to execute when the matcher matches'),
@@ -204,15 +195,15 @@ export const HookMatcherSchema = lazySchema(() =>
 )
 
 /**
- * Schema for hooks configuration
- * The key is the hook event. The value is an array of matcher configurations.
- * Uses partialRecord since not all hook events need to be defined.
+ * hook配置的模式
+ * 键是hook事件。值是一个匹配器配置数组。
+ * 使用partialRecord，因为并非所有hook事件都需要定义。
  */
 export const HooksSchema = lazySchema(() =>
   z.partialRecord(z.enum(HOOK_EVENTS), z.array(HookMatcherSchema())),
 )
 
-// Inferred types from schemas
+// 从模式推断的类型
 export type HookCommand = z.infer<ReturnType<typeof HookCommandSchema>>
 export type BashCommandHook = Extract<HookCommand, { type: 'command' }>
 export type PromptHook = Extract<HookCommand, { type: 'prompt' }>

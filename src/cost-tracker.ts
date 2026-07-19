@@ -76,21 +76,21 @@ type StoredCostState = {
 }
 
 /**
- * Gets stored cost state from project config for a specific session.
- * Returns the cost data if the session ID matches, or undefined otherwise.
- * Use this to read costs BEFORE overwriting the config with saveCurrentSessionCosts().
+ * 从项目配置中获取特定会话的已存储成本状态。
+ * 如果会话ID匹配则返回成本数据，否则返回undefined。
+ * 在调用 saveCurrentSessionCosts() 覆盖配置之前，使用此函数读取成本。
  */
 export function getStoredSessionCosts(
   sessionId: string,
 ): StoredCostState | undefined {
   const projectConfig = getCurrentProjectConfig()
 
-  // Only return costs if this is the same session that was last saved
+  // 仅当这是上次保存的同一会话时才返回成本。
   if (projectConfig.lastSessionId !== sessionId) {
     return undefined
   }
 
-  // Build model usage with context windows
+  // 使用上下文窗口构建模型使用量。
   let modelUsage: { [modelName: string]: ModelUsage } | undefined
   if (projectConfig.lastModelUsage) {
     modelUsage = Object.fromEntries(
@@ -119,9 +119,9 @@ export function getStoredSessionCosts(
 }
 
 /**
- * Restores cost state from project config when resuming a session.
- * Only restores if the session ID matches the last saved session.
- * @returns true if cost state was restored, false otherwise
+ * 在恢复会话时从项目配置还原成本状态。
+ * 仅当会话ID与上次保存的会话匹配时才还原。
+ * @returns 如果成本状态已还原则返回 true，否则返回 false。
  */
 export function restoreCostStateForSession(sessionId: string): boolean {
   const data = getStoredSessionCosts(sessionId)
@@ -133,8 +133,8 @@ export function restoreCostStateForSession(sessionId: string): boolean {
 }
 
 /**
- * Saves the current session's costs to project config.
- * Call this before switching sessions to avoid losing accumulated costs.
+ * 将当前会话的成本保存到项目配置。
+ * 在切换会话之前调用此函数以避免丢失累积的成本。
  */
 export function saveCurrentSessionCosts(fpsMetrics?: FpsMetrics): void {
   saveCurrentProjectConfig(current => ({
@@ -153,6 +153,7 @@ export function saveCurrentSessionCosts(fpsMetrics?: FpsMetrics): void {
     lastTotalWebSearchRequests: getTotalWebSearchRequests(),
     lastFpsAverage: fpsMetrics?.averageFps,
     lastFpsLow1Pct: fpsMetrics?.low1PctFps,
+    /** 执行 last Model Usage 对应的业务处理。 */
     lastModelUsage: Object.fromEntries(
       Object.entries(getModelUsage()).map(([model, usage]) => [
         model,
@@ -170,17 +171,19 @@ export function saveCurrentSessionCosts(fpsMetrics?: FpsMetrics): void {
   }))
 }
 
+/** 格式化 format Cost 对应的数据或状态。 */
 function formatCost(cost: number, maxDecimalPlaces: number = 4): string {
   return `$${cost > 0.5 ? round(cost, 100).toFixed(2) : cost.toFixed(maxDecimalPlaces)}`
 }
 
+/** 格式化 format Model Usage 对应的数据或状态。 */
 function formatModelUsage(): string {
   const modelUsageMap = getModelUsage()
   if (Object.keys(modelUsageMap).length === 0) {
     return 'Usage:                 0 input, 0 output, 0 cache read, 0 cache write'
   }
 
-  // Accumulate usage by short name
+  // 按短名称累积使用量
   const usageByShortName: { [shortName: string]: ModelUsage } = {}
   for (const [model, usage] of Object.entries(modelUsageMap)) {
     const shortName = getCanonicalName(model)
@@ -221,6 +224,7 @@ function formatModelUsage(): string {
   return result
 }
 
+/** 格式化 format Total Cost 对应的数据或状态。 */
 export function formatTotalCost(): string {
   const costDisplay =
     formatCost(getTotalCostUSD()) +
@@ -239,10 +243,12 @@ ${modelUsageDisplay}`,
   )
 }
 
+/** 执行 round 对应的业务处理。 */
 function round(number: number, precision: number): number {
   return Math.round(number * precision) / precision
 }
 
+/** 添加或注册 add To Total Model Usage 对应的数据或状态。 */
 function addToTotalModelUsage(
   cost: number,
   usage: Usage,
@@ -271,6 +277,7 @@ function addToTotalModelUsage(
   return modelUsage
 }
 
+/** 添加或注册 add To Total Session Cost 对应的数据或状态。 */
 export function addToTotalSessionCost(
   cost: number,
   usage: Usage,

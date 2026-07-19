@@ -24,6 +24,7 @@ const CJK_PATTERN = /[\u3400-\u9fff]/u
 const ENGLISH_WORD_PATTERN = /\b[A-Za-z]{3,}\b/u
 const DIRECTIVE_PATTERN = /^(?:\/\s*)?(?:eslint|biome|prettier|stylelint|istanbul|c8|@ts-|webpack|vite|sourceMappingURL|#(?:end)?region)\b/iu
 const REFERENCE_PATTERN = /^\/\s*<reference\b/iu
+const STANDALONE_JSDOC_TAG_PATTERN = /^@(?:internal|public|private|protected|packageDocumentation|inheritdoc)\s*$/iu
 
 function argumentValue(name: string): string | undefined {
   return process.argv
@@ -78,6 +79,7 @@ function isDirective(content: string): boolean {
   return (
     DIRECTIVE_PATTERN.test(content) ||
     REFERENCE_PATTERN.test(content) ||
+    STANDALONE_JSDOC_TAG_PATTERN.test(content) ||
     /^https?:\/\//iu.test(content) ||
     /^(?:SPDX-License-Identifier|Copyright)\b/iu.test(content)
   )
@@ -90,27 +92,31 @@ function lineIndent(source: string, position: number): string {
 }
 
 function collectCommentBlocks(source: string, scriptKind: ts.ScriptKind): CommentBlock[] {
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    false,
-    scriptKind === ts.ScriptKind.TSX
-      ? ts.LanguageVariant.JSX
-      : ts.LanguageVariant.Standard,
+  const sourceFile = ts.createSourceFile(
+    'source' + (scriptKind === ts.ScriptKind.TSX ? '.tsx' : '.ts'),
     source,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind,
   )
-  const ranges: Array<{ start: number; end: number; raw: string }> = []
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (
-      token === ts.SyntaxKind.SingleLineCommentTrivia ||
-      token === ts.SyntaxKind.MultiLineCommentTrivia
-    ) {
-      ranges.push({
-        start: scanner.getTokenPos(),
-        end: scanner.getTextPos(),
-        raw: scanner.getTokenText(),
-      })
+  const commentRanges = new Map<string, ts.CommentRange>()
+  function collect(node: ts.Node): void {
+    for (const range of ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []) {
+      commentRanges.set(`${range.pos}:${range.end}`, range)
     }
+    for (const range of ts.getTrailingCommentRanges(source, node.getEnd()) ?? []) {
+      commentRanges.set(`${range.pos}:${range.end}`, range)
+    }
+    ts.forEachChild(node, collect)
   }
+  collect(sourceFile)
+  const ranges = [...commentRanges.values()]
+    .toSorted((left, right) => left.pos - right.pos)
+    .map(range => ({
+      start: range.pos,
+      end: range.end,
+      raw: source.slice(range.pos, range.end),
+    }))
 
   const grouped: Array<{ start: number; end: number; raw: string }> = []
   for (const range of ranges) {

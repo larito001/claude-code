@@ -19,23 +19,26 @@ import { logError } from './utils/log.js'
 
 const MAX_STATUS_CHARS = 2000
 
-// Optional system-prompt injection used for local cache-break diagnostics.
+// 用于本地缓存中断诊断的可选系统提示注入。
 let systemPromptInjection: string | null = null
 
+/** 获取 get System Prompt Injection 对应的数据或状态。 */
 export function getSystemPromptInjection(): string | null {
   return systemPromptInjection
 }
 
+/** 设置并保存 set System Prompt Injection 对应的数据或状态。 */
 export function setSystemPromptInjection(value: string | null): void {
   systemPromptInjection = value
-  // Clear context caches immediately when injection changes
+  // 当注入改变时立即清除上下文缓存。
   getUserContext.cache.clear?.()
   getSystemContext.cache.clear?.()
 }
 
+/** 获取 get Git Status 对应的数据或状态。 */
 export const getGitStatus = memoize(async (): Promise<string | null> => {
   if (process.env.NODE_ENV === 'test') {
-    // Avoid cycles in tests
+    // 避免测试中的循环。
     return null
   }
 
@@ -81,7 +84,7 @@ export const getGitStatus = memoize(async (): Promise<string | null> => {
       status_length: status.length,
     })
 
-    // Check if status exceeds character limit
+    // 检查状态是否超过字符限制。
     const truncatedStatus =
       status.length > MAX_STATUS_CHARS
         ? status.substring(0, MAX_STATUS_CHARS) +
@@ -110,9 +113,8 @@ export const getGitStatus = memoize(async (): Promise<string | null> => {
   }
 })
 
-/**
- * This context is prepended to each conversation, and cached for the duration of the conversation.
- */
+/** 该上下文会预先附加到每次对话中，并在对话期间缓存。 */
+/** 获取 get System Context 对应的数据或状态。 */
 export const getSystemContext = memoize(
   async (): Promise<{
     [k: string]: string
@@ -122,7 +124,7 @@ export const getSystemContext = memoize(
 
     const gitStatus = shouldIncludeGitInstructions() ? await getGitStatus() : null
 
-    // Include the diagnostic injection only when explicitly enabled.
+    // 仅在显式启用时包含诊断注入。
     const injection = feature('BREAK_CACHE_COMMAND')
       ? getSystemPromptInjection()
       : null
@@ -144,9 +146,8 @@ export const getSystemContext = memoize(
   },
 )
 
-/**
- * This context is prepended to each conversation, and cached for the duration of the conversation.
- */
+/** 该上下文会预先附加到每次对话中，并在对话期间缓存。 */
+/** 获取 get User Context 对应的数据或状态。 */
 export const getUserContext = memoize(
   async (): Promise<{
     [k: string]: string
@@ -154,20 +155,17 @@ export const getUserContext = memoize(
     const startTime = Date.now()
     logForDiagnosticsNoPII('info', 'user_context_started')
 
-    // CLAUDE_CODE_DISABLE_CLAUDE_MDS: hard off, always.
-    // --bare: skip auto-discovery (cwd walk), BUT honor explicit --add-dir.
-    // --bare means "skip what I didn't ask for", not "ignore what I asked for".
+    // CLAUDE_CODE_DISABLE_CLAUDE_MDS: 硬关闭，始终。
+    // --bare: 跳过自动发现（cwd遍历），但尊重显式的 --add-dir。
+    // --bare 意为“跳过我没有要求的内容”，而非“忽略我要求的内容”。
     const shouldDisableClaudeMd =
       isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS) ||
       (isBareMode() && getAdditionalDirectoriesForClaudeMd().length === 0)
-    // Await the async I/O (readFile/readdir directory walk) so the event
-    // loop yields naturally at the first fs.readFile.
+    // 等待异步 I/O（readFile/readdir 目录遍历），使事件循环在第一次 fs.readFile 时自然让出。
     const claudeMd = shouldDisableClaudeMd
       ? null
       : getClaudeMds(filterInjectedMemoryFiles(await getMemoryFiles()))
-    // Cache for the auto-mode classifier (yoloClassifier.ts reads this
-    // instead of importing claudemd.ts directly, which would create a
-    // cycle through permissions/filesystem → permissions → yoloClassifier).
+    // 自动模式分类器的缓存（yoloClassifier.ts 读取此缓存而不是直接导入 claudemd.ts，因为后者会创建通过 permissions/filesystem → permissions → yoloClassifier 的循环）。
     setCachedClaudeMdContent(claudeMd || null)
 
     logForDiagnosticsNoPII('info', 'user_context_completed', {

@@ -1,5 +1,6 @@
 import { getInitialSettings } from '../utils/settings/settings.js'
 
+/** 获取 get Spinner Verbs 对应的数据或状态。 */
 export function getSpinnerVerbs(): string[] {
   const settings = getInitialSettings()
   const config = settings.spinnerVerbs
@@ -12,7 +13,7 @@ export function getSpinnerVerbs(): string[] {
   return [...SPINNER_VERBS, ...config.verbs]
 }
 
-// Spinner verbs for loading messages
+// 用于加载消息的旋转器动词
 export const SPINNER_VERBS = [
   'Accomplishing',
   'Actioning',

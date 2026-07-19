@@ -1,7 +1,7 @@
 /**
- * Yoga enums — ported from yoga-layout/src/generated/YGEnums.ts
- * Kept as `const` objects (not TS enums) per repo convention.
- * Values match upstream exactly so callers don't change.
+ * Yoga 枚举——从 yoga-layout/src/generated/YGEnums.ts 移植而来
+ * 依据仓库约定，保持为 `const` 对象（而非 TS 枚举）。
+ * 数值与上游完全一致，因此调用者无需更改。
  */
 
 export const Align = {

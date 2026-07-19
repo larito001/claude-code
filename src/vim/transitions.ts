@@ -1,8 +1,8 @@
 /**
- * Vim State Transition Table
+ * Vim 状态转换表
  *
- * This is the scannable source of truth for state transitions.
- * To understand what happens in any state, look up that state's transition function.
+ * 这是状态转换的可扫描真实来源。
+ * 要了解任何状态下的行为，请查看该状态的转换函数。
  */
 
 import { resolveMotion } from './motions.js'
@@ -37,25 +37,22 @@ import {
   type TextObjScope,
 } from './types.js'
 
-/**
- * Context passed to transition functions.
- */
+/** 传递给转换函数的上下文。 */
 export type TransitionContext = OperatorContext & {
+  /** 处理 on Undo 对应的数据或状态。 */
   onUndo?: () => void
+  /** 处理 on Dot Repeat 对应的数据或状态。 */
   onDotRepeat?: () => void
 }
 
-/**
- * Result of a transition.
- */
+/** 转换的结果。 */
 export type TransitionResult = {
   next?: CommandState
+  /** 执行 execute 对应的数据或状态。 */
   execute?: () => void
 }
 
-/**
- * Main transition function. Dispatches based on current state type.
- */
+/** 主转换函数。根据当前状态类型进行分发。 */
 export function transition(
   state: CommandState,
   input: string,
@@ -88,12 +85,12 @@ export function transition(
 }
 
 // ============================================================================
-// Shared Input Handling
+// 共享输入处理
 // ============================================================================
 
 /**
- * Handle input that's valid in both idle and count states.
- * Returns null if input is not recognized.
+ * 处理在空闲和计数状态下都有效的输入。
+ * 如果输入未被识别，则返回 null。
  */
 function handleNormalInput(
   input: string,
@@ -106,6 +103,7 @@ function handleNormalInput(
 
   if (SIMPLE_MOTIONS.has(input)) {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () => {
         const target = resolveMotion(input, ctx.cursor, count)
         ctx.setOffset(target.offset)
@@ -123,31 +121,53 @@ function handleNormalInput(
     return { next: { type: 'indent', dir: input, count } }
   }
   if (input === '~') {
-    return { execute: () => executeToggleCase(count, ctx) }
+    return {
+      /** 执行大小写切换。 */
+      execute: () => executeToggleCase(count, ctx),
+    }
   }
   if (input === 'x') {
-    return { execute: () => executeX(count, ctx) }
+    return {
+      /** 删除光标处字符。 */
+      execute: () => executeX(count, ctx),
+    }
   }
   if (input === 'J') {
-    return { execute: () => executeJoin(count, ctx) }
+    return {
+      /** 合并当前行及后续行。 */
+      execute: () => executeJoin(count, ctx),
+    }
   }
   if (input === 'p' || input === 'P') {
-    return { execute: () => executePaste(input === 'p', count, ctx) }
+    return {
+      /** 在光标前后粘贴寄存内容。 */
+      execute: () => executePaste(input === 'p', count, ctx),
+    }
   }
   if (input === 'D') {
-    return { execute: () => executeOperatorMotion('delete', '$', 1, ctx) }
+    return {
+      /** 删除到行尾。 */
+      execute: () => executeOperatorMotion('delete', '$', 1, ctx),
+    }
   }
   if (input === 'C') {
-    return { execute: () => executeOperatorMotion('change', '$', 1, ctx) }
+    return {
+      /** 修改到行尾并进入插入模式。 */
+      execute: () => executeOperatorMotion('change', '$', 1, ctx),
+    }
   }
   if (input === 'Y') {
-    return { execute: () => executeLineOp('yank', count, ctx) }
+    return {
+      /** 复制指定数量的整行。 */
+      execute: () => executeLineOp('yank', count, ctx),
+    }
   }
   if (input === 'G') {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () => {
-        // count=1 means no count given, go to last line
-        // otherwise go to line N
+        // count=1 表示没有给定计数，跳转到最后一行
+        // 否则跳转到第 N 行
         if (count === 1) {
           ctx.setOffset(ctx.cursor.startOfLastLine().offset)
         } else {
@@ -157,25 +177,39 @@ function handleNormalInput(
     }
   }
   if (input === '.') {
-    return { execute: () => ctx.onDotRepeat?.() }
+    return {
+      /** 重复上一次修改命令。 */
+      execute: () => ctx.onDotRepeat?.(),
+    }
   }
   if (input === ';' || input === ',') {
-    return { execute: () => executeRepeatFind(input === ',', count, ctx) }
+    return {
+      /** 按原方向或反方向重复字符查找。 */
+      execute: () => executeRepeatFind(input === ',', count, ctx),
+    }
   }
   if (input === 'u') {
-    return { execute: () => ctx.onUndo?.() }
+    return {
+      /** 撤销上一次修改。 */
+      execute: () => ctx.onUndo?.(),
+    }
   }
   if (input === 'i') {
-    return { execute: () => ctx.enterInsert(ctx.cursor.offset) }
+    return {
+      /** 在当前光标位置进入插入模式。 */
+      execute: () => ctx.enterInsert(ctx.cursor.offset),
+    }
   }
   if (input === 'I') {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () =>
         ctx.enterInsert(ctx.cursor.firstNonBlankInLogicalLine().offset),
     }
   }
   if (input === 'a') {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () => {
         const newOffset = ctx.cursor.isAtEnd()
           ? ctx.cursor.offset
@@ -186,22 +220,29 @@ function handleNormalInput(
   }
   if (input === 'A') {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () => ctx.enterInsert(ctx.cursor.endOfLogicalLine().offset),
     }
   }
   if (input === 'o') {
-    return { execute: () => executeOpenLine('below', ctx) }
+    return {
+      /** 在下方打开新行。 */
+      execute: () => executeOpenLine('below', ctx),
+    }
   }
   if (input === 'O') {
-    return { execute: () => executeOpenLine('above', ctx) }
+    return {
+      /** 在上方打开新行。 */
+      execute: () => executeOpenLine('above', ctx),
+    }
   }
 
   return null
 }
 
 /**
- * Handle operator input (motion, find, text object scope).
- * Returns null if input is not recognized.
+ * 处理操作符输入（移动、查找、文本对象范围）。
+ * 如果输入未被识别，则返回 null。
  */
 function handleOperatorInput(
   op: Operator,
@@ -227,11 +268,17 @@ function handleOperatorInput(
   }
 
   if (SIMPLE_MOTIONS.has(input)) {
-    return { execute: () => executeOperatorMotion(op, input, count, ctx) }
+    return {
+      /** 对指定移动范围执行操作符。 */
+      execute: () => executeOperatorMotion(op, input, count, ctx),
+    }
   }
 
   if (input === 'G') {
-    return { execute: () => executeOperatorG(op, count, ctx) }
+    return {
+      /** 对文件末尾或指定行执行操作符。 */
+      execute: () => executeOperatorG(op, count, ctx),
+    }
   }
 
   if (input === 'g') {
@@ -242,16 +289,18 @@ function handleOperatorInput(
 }
 
 // ============================================================================
-// Transition Functions - One per state type
+// 转换函数 - 每个状态类型一个
 // ============================================================================
 
+/** 执行 from Idle 对应的业务处理。 */
 function fromIdle(input: string, ctx: TransitionContext): TransitionResult {
-  // 0 is line-start motion, not a count prefix
+  // 0 是行首移动，而不是计数前缀
   if (/[1-9]/.test(input)) {
     return { next: { type: 'count', digits: input } }
   }
   if (input === '0') {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () => ctx.setOffset(ctx.cursor.startOfLogicalLine().offset),
     }
   }
@@ -262,6 +311,7 @@ function fromIdle(input: string, ctx: TransitionContext): TransitionResult {
   return {}
 }
 
+/** 执行 from Count 对应的业务处理。 */
 function fromCount(
   state: { type: 'count'; digits: string },
   input: string,
@@ -280,14 +330,18 @@ function fromCount(
   return { next: { type: 'idle' } }
 }
 
+/** 执行 from Operator 对应的业务处理。 */
 function fromOperator(
   state: { type: 'operator'; op: Operator; count: number },
   input: string,
   ctx: TransitionContext,
 ): TransitionResult {
-  // dd, cc, yy = line operation
+  // dd, cc, yy = 行操作
   if (input === state.op[0]) {
-    return { execute: () => executeLineOp(state.op, state.count, ctx) }
+    return {
+      /** 执行整行删除、修改或复制。 */
+      execute: () => executeLineOp(state.op, state.count, ctx),
+    }
   }
 
   if (/[0-9]/.test(input)) {
@@ -307,6 +361,7 @@ function fromOperator(
   return { next: { type: 'idle' } }
 }
 
+/** 执行 from Operator Count 对应的业务处理。 */
 function fromOperatorCount(
   state: {
     type: 'operatorCount'
@@ -331,6 +386,7 @@ function fromOperatorCount(
   return { next: { type: 'idle' } }
 }
 
+/** 执行 from Operator Find 对应的业务处理。 */
 function fromOperatorFind(
   state: {
     type: 'operatorFind'
@@ -342,11 +398,13 @@ function fromOperatorFind(
   ctx: TransitionContext,
 ): TransitionResult {
   return {
+    /** 执行 execute 对应的数据或状态。 */
     execute: () =>
       executeOperatorFind(state.op, state.find, input, state.count, ctx),
   }
 }
 
+/** 执行 from Operator Text Obj 对应的业务处理。 */
 function fromOperatorTextObj(
   state: {
     type: 'operatorTextObj'
@@ -359,6 +417,7 @@ function fromOperatorTextObj(
 ): TransitionResult {
   if (TEXT_OBJ_TYPES.has(input)) {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () =>
         executeOperatorTextObj(state.op, state.scope, input, state.count, ctx),
     }
@@ -366,12 +425,14 @@ function fromOperatorTextObj(
   return { next: { type: 'idle' } }
 }
 
+/** 执行 from Find 对应的业务处理。 */
 function fromFind(
   state: { type: 'find'; find: FindType; count: number },
   input: string,
   ctx: TransitionContext,
 ): TransitionResult {
   return {
+    /** 执行 execute 对应的数据或状态。 */
     execute: () => {
       const result = ctx.cursor.findCharacter(input, state.find, state.count)
       if (result !== null) {
@@ -382,6 +443,7 @@ function fromFind(
   }
 }
 
+/** 执行 from G 对应的业务处理。 */
 function fromG(
   state: { type: 'g'; count: number },
   input: string,
@@ -389,6 +451,7 @@ function fromG(
 ): TransitionResult {
   if (input === 'j' || input === 'k') {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () => {
         const target = resolveMotion(`g${input}`, ctx.cursor, state.count)
         ctx.setOffset(target.offset)
@@ -396,27 +459,30 @@ function fromG(
     }
   }
   if (input === 'g') {
-    // If count provided (e.g., 5gg), go to that line. Otherwise go to first line.
+    // 如果提供了计数（例如 5gg），则跳转到该行。否则跳转到第一行。
     if (state.count > 1) {
       return {
+        /** 执行 execute 对应的数据或状态。 */
         execute: () => {
           const lines = ctx.text.split('\n')
           const targetLine = Math.min(state.count - 1, lines.length - 1)
           let offset = 0
           for (let i = 0; i < targetLine; i++) {
-            offset += (lines[i]?.length ?? 0) + 1 // +1 for newline
+            offset += (lines[i]?.length ?? 0) + 1 // +1 表示换行
           }
           ctx.setOffset(offset)
         },
       }
     }
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () => ctx.setOffset(ctx.cursor.startOfFirstLine().offset),
     }
   }
   return { next: { type: 'idle' } }
 }
 
+/** 执行 from Operator G 对应的业务处理。 */
 function fromOperatorG(
   state: { type: 'operatorG'; op: Operator; count: number },
   input: string,
@@ -424,44 +490,55 @@ function fromOperatorG(
 ): TransitionResult {
   if (input === 'j' || input === 'k') {
     return {
+      /** 执行 execute 对应的数据或状态。 */
       execute: () =>
         executeOperatorMotion(state.op, `g${input}`, state.count, ctx),
     }
   }
   if (input === 'g') {
-    return { execute: () => executeOperatorGg(state.op, state.count, ctx) }
+    return {
+      /** 对首行或指定行执行操作符。 */
+      execute: () => executeOperatorGg(state.op, state.count, ctx),
+    }
   }
-  // Any other input cancels the operator
+  // 其他输入会取消当前操作符。
   return { next: { type: 'idle' } }
 }
 
+/** 执行 from Replace 对应的业务处理。 */
 function fromReplace(
   state: { type: 'replace'; count: number },
   input: string,
   ctx: TransitionContext,
 ): TransitionResult {
-  // Backspace/Delete arrive as empty input in literal-char states. In vim,
-  // r<BS> cancels the replace; without this guard, executeReplace("") would
-  // delete the character under the cursor instead.
+  // 在字面字符状态中，Backspace/Delete 会作为空输入到达。Vim 的 r<BS> 应取消替换；若没有此保护，executeReplace("") 会误删光标下的字符。
   if (input === '') return { next: { type: 'idle' } }
-  return { execute: () => executeReplace(input, state.count, ctx) }
+  return {
+    /** 用输入字符替换光标处内容。 */
+    execute: () => executeReplace(input, state.count, ctx),
+  }
 }
 
+/** 执行 from Indent 对应的业务处理。 */
 function fromIndent(
   state: { type: 'indent'; dir: '>' | '<'; count: number },
   input: string,
   ctx: TransitionContext,
 ): TransitionResult {
   if (input === state.dir) {
-    return { execute: () => executeIndent(state.dir, state.count, ctx) }
+    return {
+      /** 缩进或反缩进指定数量的行。 */
+      execute: () => executeIndent(state.dir, state.count, ctx),
+    }
   }
   return { next: { type: 'idle' } }
 }
 
 // ============================================================================
-// Helper functions for special commands
+// 特殊命令辅助函数
 // ============================================================================
 
+/** 执行 execute Repeat Find 对应的数据或状态。 */
 function executeRepeatFind(
   reverse: boolean,
   count: number,
@@ -470,10 +547,10 @@ function executeRepeatFind(
   const lastFind = ctx.getLastFind()
   if (!lastFind) return
 
-  // Determine the effective find type based on reverse
+  // 根据反向决定有效的查找类型
   let findType = lastFind.type
   if (reverse) {
-    // Flip the direction
+    // 翻转方向
     const flipMap: Record<FindType, FindType> = {
       f: 'F',
       F: 'f',

@@ -5,6 +5,7 @@ import type {
   ImageBlockParam,
 } from '@anthropic-ai/sdk/resources/messages.mjs'
 import { randomUUID } from 'crypto'
+import type { UUID } from 'crypto'
 import type { QuerySource } from 'src/constants/querySource.js'
 import { getContentText } from 'src/utils/messages.js'
 import { type LocalJSXCommandContext } from '../../commands.js'
@@ -47,6 +48,8 @@ import {
   createUserMessage,
 } from '../messages.js'
 import { queryCheckpoint } from '../queryProfiler.js'
+import { getSessionId } from '../../bootstrap/state.js'
+import { saveCustomTitle } from '../sessionStorage.js'
 import { processTextPrompt } from './processTextPrompt.js'
 export type ProcessUserInputContext = ToolUseContext & LocalJSXCommandContext
 
@@ -62,15 +65,16 @@ export type ProcessUserInputBaseResult = {
   allowedTools?: string[]
   model?: string
   effort?: EffortValue
-  // Output text for non-interactive mode (e.g., forked commands)
-  // When set, this is used as the result in -p mode instead of empty string
+  // 非交互模式（如派生的命令）的输出文本
+  // 设置后，在 -p 模式下将以此结果代替空字符串
   resultText?: string
-  // When set, prefills or submits the next input after command completes
-  // Used by /discover to chain into the selected feature's command
+  // 设置后，在命令完成后预填或提交下一个输入
+  // 由 /discover 用于链入选定功能的命令
   nextInput?: string
   submitNextInput?: boolean
 }
 
+/** 处理 process User Input 对应的数据或状态。 */
 export async function processUserInput({
   input,
   preExpansionInput,
@@ -90,9 +94,7 @@ export async function processUserInput({
   skipAttachments,
 }: {
   input: string | Array<ContentBlockParam>
-  /**
-    * Input before pasted-content placeholders are expanded.
-   */
+  /** 粘贴内容占位符展开前的输入。 */
   preExpansionInput?: string
   mode: PromptInputMode
   setToolJSX: SetToolJSXFn
@@ -100,28 +102,27 @@ export async function processUserInput({
   pastedContents?: Record<number, PastedContent>
   ideSelection?: IDESelection
   messages?: Message[]
+  /** 设置并保存 set User Input On Processing 对应的数据或状态。 */
   setUserInputOnProcessing?: (prompt?: string) => void
   uuid?: string
   isAlreadyProcessing?: boolean
   querySource?: QuerySource
   canUseTool?: CanUseToolFn
   /**
-   * When true, input starting with `/` is treated as plain text.
-   * Used for injected messages that should not trigger local slash commands.
+   * 为 true 时，以 `/` 开头的输入被视为纯文本。
+   * 用于不应触发本地斜杠命令的注入消息。
    */
   skipSlashCommands?: boolean
   /**
-   * When true, the resulting UserMessage gets `isMeta: true` (user-hidden,
-   * model-visible). Propagated from `QueuedCommand.isMeta` for queued
-   * system-generated prompts.
+   * 为 true 时，生成的 UserMessage 标记 `isMeta: true`（用户隐藏，模型可见）。
+   * 从 QueuedCommand.isMeta 传播，用于队列中的系统生成提示。
    */
   isMeta?: boolean
   skipAttachments?: boolean
 }): Promise<ProcessUserInputBaseResult> {
   const inputString = typeof input === 'string' ? input : null
-  // Immediately show the user input prompt while we are still processing the input.
-  // Skip for isMeta (system-generated prompts like scheduled tasks) — those
-  // should run invisibly.
+  // 在仍在处理输入时立即显示用户输入提示。
+  // 对于 isMeta（系统生成的提示，如定时任务）跳过——这些应不可见地运行。
   if (mode === 'prompt' && inputString !== null && !isMeta) {
     setUserInputOnProcessing?.(inputString)
   }
@@ -154,7 +155,7 @@ export async function processUserInput({
     return result
   }
 
-  // Execute UserPromptSubmit hooks and handle blocking
+  // 执行 UserPromptSubmit 钩子并处理阻塞
   queryCheckpoint('query_hooks_start')
   const inputMessage = getContentText(input) || ''
 
@@ -164,19 +165,19 @@ export async function processUserInput({
     context,
     context.requestPrompt,
   )) {
-    // We only care about the result
+    // 我们只关心结果
     if (hookResult.message?.type === 'progress') {
       continue
     }
 
-    // Return only a system-level error message, erasing the original user input
+    // 仅返回系统级错误消息，删除原始用户输入
     if (hookResult.blockingError) {
       const blockingMessage = getUserPromptSubmitHookBlockingMessage(
         hookResult.blockingError,
       )
       return {
         messages: [
-          // TODO: Make this an attachment message
+          // TODO: 使其成为附件消息
           createSystemMessage(
             `${blockingMessage}\n\nOriginal prompt: ${input}`,
             'warning',
@@ -187,8 +188,7 @@ export async function processUserInput({
       }
     }
 
-    // If preventContinuation is set, stop processing but keep the original
-    // prompt in context.
+    // 如果设置了 preventContinuation，则停止处理但保留原始提示在上下文中。
     if (hookResult.preventContinuation) {
       const message = hookResult.stopReason
         ? `Operation stopped by hook: ${hookResult.stopReason}`
@@ -202,7 +202,17 @@ export async function processUserInput({
       return result
     }
 
-    // Collect additional contexts
+    // 钩子可在提交提示词时更新当前会话标题；持久化后缓存会立即同步，供界面读取。
+    if (hookResult.sessionTitle) {
+      await saveCustomTitle(
+        getSessionId() as UUID,
+        hookResult.sessionTitle,
+        undefined,
+        'auto',
+      )
+    }
+
+    // 收集额外的上下文
     if (
       hookResult.additionalContexts &&
       hookResult.additionalContexts.length > 0
@@ -218,12 +228,12 @@ export async function processUserInput({
       )
     }
 
-    // TODO: Clean this up
+    // TODO: 清理此代码
     if (hookResult.message) {
       switch (hookResult.message.attachment.type) {
         case 'hook_success':
           if (!hookResult.message.attachment.content) {
-            // Skip if there is no content
+            // 如果没有内容则跳过
             break
           }
           result.messages.push({
@@ -242,14 +252,15 @@ export async function processUserInput({
   }
   queryCheckpoint('query_hooks_end')
 
-  // Happy path: onQuery will clear userInputOnProcessing via startTransition
-  // so it resolves in the same frame as deferredMessages (no flicker gap).
-  // Error paths are handled by handlePromptSubmit's finally block.
+  // 理想路径：onQuery 通过 startTransition 清除 userInputOnProcessing，
+  // 因此与 deferredMessages 在同一帧中解析（无闪烁间隙）。
+  // 错误路径由 handlePromptSubmit 的 finally 块处理。
   return result
 }
 
 const MAX_HOOK_OUTPUT_LENGTH = 10000
 
+/** 执行 apply Truncation 对应的业务处理。 */
 function applyTruncation(content: string): string {
   if (content.length > MAX_HOOK_OUTPUT_LENGTH) {
     return `${content.substring(0, MAX_HOOK_OUTPUT_LENGTH)}… [output truncated - exceeded ${MAX_HOOK_OUTPUT_LENGTH} characters]`
@@ -257,6 +268,7 @@ function applyTruncation(content: string): string {
   return content
 }
 
+/** 处理 process User Input Base 对应的数据或状态。 */
 async function processUserInputBase(
   input: string | Array<ContentBlockParam>,
   mode: PromptInputMode,
@@ -278,15 +290,14 @@ async function processUserInputBase(
   let inputString: string | null = null
   let precedingInputBlocks: ContentBlockParam[] = []
 
-  // Collect image metadata texts for isMeta message
+  // 为 isMeta 消息收集图片元数据文本
   const imageMetadataTexts: string[] = []
 
-  // Normalized view of `input` with image blocks resized. For string input
-  // this is just `input`; for array input it's the processed blocks. We pass
-  // this (not raw `input`) to processTextPrompt so resized/normalized image
-  // blocks actually reach the API — otherwise the resize work above is
-  // discarded for the regular prompt path. Also normalizes bridge inputs
-  // where iOS may send `mediaType` instead of `media_type` (mobile-apps#5825).
+  // 带有图片块调整大小后的 `input` 归一化视图。对于字符串输入，
+  // 这只是 `input`；对于数组输入，它是处理后的块。我们将此（而非原始 `input`）
+  // 传递给 processTextPrompt，以便调整大小/归一化的图片块实际到达 API——
+  // 否则上述调整大小的工作对于常规提示路径会被丢弃。同时归一化桥接输入，
+  // 其中 iOS 可能发送 `mediaType` 而非 `media_type`（mobile-apps#5825）。
   let normalizedInput: string | ContentBlockParam[] = input
 
   if (typeof input === 'string') {
@@ -297,7 +308,7 @@ async function processUserInputBase(
     for (const block of input) {
       if (block.type === 'image') {
         const resized = await maybeResizeAndDownsampleImageBlock(block)
-        // Collect image metadata for isMeta message
+        // 为 isMeta 消息收集图片元数据
         if (resized.dimensions) {
           const metadataText = createImageMetadataText(resized.dimensions)
           if (metadataText) {
@@ -311,8 +322,7 @@ async function processUserInputBase(
     }
     normalizedInput = processedBlocks
     queryCheckpoint('query_image_processing_end')
-    // Extract the input string from the last content block if it is text,
-    // and keep track of the preceding content blocks
+    // 如果最后一个内容块是文本，从中提取输入字符串，并跟踪前面的内容块
     const lastBlock = processedBlocks[processedBlocks.length - 1]
     if (lastBlock?.type === 'text') {
       inputString = lastBlock.text
@@ -326,20 +336,21 @@ async function processUserInputBase(
     throw new Error(`Mode: ${mode} requires a string input.`)
   }
 
-  // Extract and convert image content to content blocks early
-  // Keep track of IDs in order for message storage
+  // 尽早提取图片内容并转换为内容块
+  // 按顺序跟踪 ID 以便消息存储
   const imageContents = pastedContents
     ? Object.values(pastedContents).filter(isValidImagePaste)
     : []
+  /** 执行 image Paste Ids 对应的业务处理。 */
   const imagePasteIds = imageContents.map(img => img.id)
 
-  // Store images to disk so Claude can reference the path in context
-  // (for manipulation with CLI tools, uploading to PRs, etc.)
+  // 将图片存储到磁盘，以便 Claude 可以在上下文中引用路径
+  // （用于通过 CLI 工具操作、上传到 PR 等）
   const storedImagePaths = pastedContents
     ? await storeImages(pastedContents)
     : new Map<number, string>()
 
-  // Resize pasted images to ensure they fit within API limits (parallel processing)
+  // 调整粘贴图片的大小以确保符合 API 限制（并行处理）
   queryCheckpoint('query_pasted_image_processing_start')
   const imageProcessingResults = await Promise.all(
     imageContents.map(async pastedImage => {
@@ -361,14 +372,14 @@ async function processUserInputBase(
       }
     }),
   )
-  // Collect results preserving order
+  // 收集结果，保持顺序
   const imageContentBlocks: ContentBlockParam[] = []
   for (const {
     resized,
     originalDimensions,
     sourcePath,
   } of imageProcessingResults) {
-    // Collect image metadata for isMeta message (prefer resized dimensions)
+    // 为 isMeta 消息收集图片元数据（优先使用调整后的尺寸）
     if (resized.dimensions) {
       const metadataText = createImageMetadataText(
         resized.dimensions,
@@ -378,7 +389,7 @@ async function processUserInputBase(
         imageMetadataTexts.push(metadataText)
       }
     } else if (originalDimensions) {
-      // Fall back to original dimensions if resize didn't provide them
+      // 如果 resize 没有提供尺寸，则回退到原始尺寸
       const metadataText = createImageMetadataText(
         originalDimensions,
         sourcePath,
@@ -387,14 +398,14 @@ async function processUserInputBase(
         imageMetadataTexts.push(metadataText)
       }
     } else if (sourcePath) {
-      // If we have a source path but no dimensions, still add source info
+      // 如果有源路径但没有尺寸，仍然添加源信息
       imageMetadataTexts.push(`[Image source: ${sourcePath}]`)
     }
     imageContentBlocks.push(resized.block)
   }
   queryCheckpoint('query_pasted_image_processing_end')
 
-  // For slash commands, attachments will be extracted within getMessagesForSlashCommand
+  // 对于斜杠命令，附件将在 getMessagesForSlashCommand 中提取
   const shouldExtractAttachments =
     !skipAttachments &&
     inputString !== null &&
@@ -415,7 +426,7 @@ async function processUserInputBase(
     : []
   queryCheckpoint('query_attachment_loading_end')
 
-  // Bash commands
+  // Bash 命令
   if (inputString !== null && mode === 'bash') {
     const { processBashCommand } = await import('./processBashCommand.js')
     return addImageMetadataMessage(
@@ -430,7 +441,7 @@ async function processUserInputBase(
     )
   }
 
-  // Slash commands
+  // 斜杠命令
   if (
     inputString !== null &&
     !skipSlashCommands &&
@@ -451,10 +462,11 @@ async function processUserInputBase(
     return addImageMetadataMessage(slashResult, imageMetadataTexts)
   }
 
-  // Log agent mention queries for analysis
+  // 记录 agent 提及查询以供分析
   if (inputString !== null && mode === 'prompt') {
     const trimmedInput = inputString.trim()
 
+    /** 执行 agent Mention 对应的业务处理。 */
     const agentMention = attachmentMessages.find(
       (m): m is AttachmentMessage<AgentMentionAttachment> =>
         m.attachment.type === 'agent_mention',
@@ -470,7 +482,7 @@ async function processUserInputBase(
     }
   }
 
-  // Regular user prompt
+  // 常规用户提示
   return addImageMetadataMessage(
     processTextPrompt(
       normalizedInput,
@@ -485,7 +497,7 @@ async function processUserInputBase(
   )
 }
 
-// Adds image metadata texts as isMeta message to result
+// 将图像元数据文本作为 isMeta 消息添加到结果中
 function addImageMetadataMessage(
   result: ProcessUserInputBaseResult,
   imageMetadataTexts: string[],
@@ -493,6 +505,7 @@ function addImageMetadataMessage(
   if (imageMetadataTexts.length > 0) {
     result.messages.push(
       createUserMessage({
+        /** 执行 content 对应的业务处理。 */
         content: imageMetadataTexts.map(text => ({ type: 'text', text })),
         isMeta: true,
       }),

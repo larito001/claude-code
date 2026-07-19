@@ -84,15 +84,48 @@ import {
 import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
 
+/** 判断未知内容是否为工具调用块。 */
+function isToolUseBlock(content: unknown): content is ToolUseBlock {
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    'type' in content &&
+    content.type === 'tool_use'
+  )
+}
+
+/** 判断未知内容是否为带调用标识的工具结果块。 */
+function isToolResultBlock(content: unknown): content is ToolResultBlockParam {
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    'type' in content &&
+    content.type === 'tool_result' &&
+    'tool_use_id' in content &&
+    typeof content.tool_use_id === 'string'
+  )
+}
+
+/** 判断未知内容是否为文本块。 */
+function isTextBlock(content: unknown): content is { type: 'text'; text: string } {
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    'type' in content &&
+    content.type === 'text' &&
+    'text' in content &&
+    typeof content.text === 'string'
+  )
+}
+
+/** 执行 yield Missing Tool Result Blocks 对应的业务处理。 */
 function* yieldMissingToolResultBlocks(
   assistantMessages: AssistantMessage[],
   errorMessage: string,
 ) {
   for (const assistantMessage of assistantMessages) {
     // 从此助手消息中提取所有工具使用块
-    const toolUseBlocks = assistantMessage.message.content.filter(
-      content => content.type === 'tool_use',
-    ) as ToolUseBlock[]
+    const toolUseBlocks = assistantMessage.message.content.filter(isToolUseBlock)
 
     // 每次使用工具时发出中断消息
     for (const toolUse of toolUseBlocks) {
@@ -180,6 +213,7 @@ type State = {
   transition: Continue | undefined
 }
 
+/** 执行 query 对应的业务处理。 */
 export async function* query(
   params: QueryParams,
 ): AsyncGenerator<
@@ -202,6 +236,7 @@ export async function* query(
   return terminal
 }
 
+/** 执行 query Loop 对应的业务处理。 */
 async function* queryLoop(
   params: QueryParams,
   consumedCommandUuids: string[],
@@ -247,14 +282,12 @@ async function* queryLoop(
   // 查看完整的历史记录并处理 {total} 本身的倒计时（请参阅
   // api/api/sampling/prompt/renderer.py:292)。压缩后，服务器看到
   // 仅提供摘要，并且会少算支出；剩余告诉它
-  // 预压缩的最终窗口已被总结。累计跨越
-  // 多个契约：每个契约减去该契约的最终上下文
-  // 触发点。本地循环（不在状态上）以避免触及 7 继续
-  // sites.
+  // 预压缩的最终窗口已被总结。该值会跨多次压缩累计：
+  // 每次都扣除当次压缩前的最终上下文触发点。
+  // 使用本地循环而不写入状态，可避免修改 7 个续跑调用点。
   let taskBudgetRemaining: number | undefined = undefined
 
-  // 在进入时对不可变的 env/feature configuration/session 状态进行快照。参见查询配置
-  // for what's included and why feature() gates are intentionally excluded.
+  // 进入查询时快照不可变的环境、功能配置和会话状态；具体内容及刻意排除 feature() 门控的原因见 queryConfig。
   const config = buildQueryConfig()
 
   // 每个用户回合触发一次 - 提示在循环迭代中保持不变，
@@ -426,7 +459,7 @@ async function* queryLoop(
 
     const assistantMessages: AssistantMessage[] = []
     const toolResults: (UserMessage | AttachmentMessage)[] = []
-    // @see https://docs.claude.com/en/docs/build-with-claude/tool-use
+    // 参见：https://docs.claude.com/en/docs/build-with-claude/tool-use
     // 注意：stop_reason === 'tool_use' 并不可靠，它不一定总能被正确设置。
     // 每当 tool_use 块到达时，在流式传输期间设置 — 唯一的
     // 循环退出信号。如果流式传输后为 false，我们就完成了（模停止挂钩重试）。
@@ -497,6 +530,7 @@ async function* queryLoop(
             tools: toolUseContext.options.tools,
             signal: toolUseContext.abortController.signal,
             options: {
+              /** 获取 get Tool Permission Context 对应的数据或状态。 */
               async getToolPermissionContext() {
                 const appState = toolUseContext.getAppState()
                 return appState.toolPermissionContext
@@ -509,6 +543,7 @@ async function* queryLoop(
               isNonInteractiveSession:
                 toolUseContext.options.isNonInteractiveSession,
               fallbackModel,
+              /** 处理 on Streaming Fallback 对应的数据或状态。 */
               onStreamingFallback: () => {
                 streamingFallbackOccured = true
               },
@@ -520,6 +555,7 @@ async function* queryLoop(
                 !!toolUseContext.options.appendSystemPrompt,
               maxOutputTokensOverride,
               mcpTools: appState.mcp.tools,
+              /** 判断是否满足 has Pending Mcp Servers 对应的数据或状态。 */
               hasPendingMcpServers: appState.mcp.clients.some(
                 c => c.type === 'pending',
               ),
@@ -593,9 +629,7 @@ async function* queryLoop(
                     // 仅在回填 ADDED 字段时生成克隆；跳过如果
                     // 它只会覆盖现有的（例如文件工具
                     // 扩展文件路径）。覆盖更改序列化
-                    // 简历上的成绩单和中断 VCR 固定哈希值，
-                    // while adding nothing the SDK stream needs — hooks get
-                    // 分别通过 toolExecution.ts 扩展路径。
+                    // 这会改变恢复记录并破坏 VCR 固定哈希，却不会为 SDK 流增加所需信息；Hook 会通过 toolExecution.ts 单独获得扩展路径。
                     const addedFields = Object.keys(inputCopy).some(
                       k => !(k in originalInput),
                     )
@@ -621,7 +655,7 @@ async function* queryLoop(
             // 独立，因此关闭一个不会破坏另一个
             // 恢复路径。
             //
-            // Keep the experimental classifier isolated behind the runtime feature gate.
+            // 将实验性分类器隔离在运行时功能门控之后。
             // 树摇动约束），因此折叠检查是嵌套的
             // 而不是组成。
             const withheld = isWithheldMaxOutputTokens(message)
@@ -631,9 +665,7 @@ async function* queryLoop(
             if (message.type === 'assistant') {
               assistantMessages.push(message)
 
-              const msgToolUseBlocks = message.message.content.filter(
-                content => content.type === 'tool_use',
-              ) as ToolUseBlock[]
+              const msgToolUseBlocks = message.message.content.filter(isToolUseBlock)
               if (msgToolUseBlocks.length > 0) {
                 toolUseBlocks.push(...msgToolUseBlocks)
                 needsFollowUp = true
@@ -723,7 +755,7 @@ async function* queryLoop(
       const errorMessage =
         error instanceof Error ? error.message : String(error)
 
-      // Handle image size/resize errors with user-friendly messages
+      // 用用户友好的消息处理图片尺寸/大小错误
       if (
         error instanceof ImageSizeError ||
         error instanceof ImageResizeError
@@ -734,26 +766,20 @@ async function* queryLoop(
         return { reason: 'image_error' }
       }
 
-      // Generally queryModelWithStreaming should not throw errors but instead
-      // yield them as synthetic assistant messages. However if it does throw
-      // due to a bug, we may end up in a state where we have already emitted
-      // a tool_use block but will stop before emitting the tool_result.
+      // 通常queryModelWithStreaming不应抛出错误，而是将其作为合成的助手消息产出。但如果因bug抛出，我们可能已经发出了tool_use块，但在发出tool_result之前停止。
       yield* yieldMissingToolResultBlocks(assistantMessages, errorMessage)
 
-      // Surface the real error instead of a misleading "[Request interrupted
-      // by user]" — this path is a model/runtime failure, not a user action.
-      // SDK consumers were seeing phantom interrupts on e.g. Node 18's missing
-      // Array.prototype.with(), masking the actual cause.
+      // 展示真实错误而非误导性的"[用户中断请求]"——此路径是模型/运行时故障，非用户操作。SDK消费者曾看到虚假中断，例如Node 18缺失的Array.prototype.with()，掩盖了实际原因。
       yield createAssistantAPIErrorMessage({
         content: errorMessage,
       })
 
-      // To help track down bugs, log loudly for ants
+      // 为追踪bug，对ants进行大声日志记录
       logDebugError('Query error', error)
       return { reason: 'model_error', error }
     }
 
-    // Execute post-sampling hooks after model response is complete
+    // 模型响应完成后执行采样后钩子
     if (assistantMessages.length > 0) {
       void executePostSamplingHooks(
         [...messagesForQuery, ...assistantMessages],
@@ -765,14 +791,11 @@ async function* queryLoop(
       )
     }
 
-    // We need to handle a streaming abort before anything else.
-    // When using streamingToolExecutor, we must consume getRemainingResults() so the
-    // executor can generate synthetic tool_result blocks for queued/in-progress tools.
+    // 必须优先处理流式中断。使用 streamingToolExecutor 时需要消费 getRemainingResults()，使执行器能为排队中或执行中的工具生成合成 tool_result 块。
     // 如果没有这一步，tool_use 块将缺少与之匹配的 tool_result 块。
     if (toolUseContext.abortController.signal.aborted) {
       if (streamingToolExecutor) {
-        // Consume remaining results - executor generates synthetic tool_results for
-        // aborted tools since it checks the abort signal in executeTool()
+        // 消耗剩余结果 - 执行器为中断的工具生成合成tool_result，因为它在executeTool()中检查中断信号
         for await (const update of streamingToolExecutor.getRemainingResults()) {
           if (update.message) {
             yield update.message
@@ -784,8 +807,7 @@ async function* queryLoop(
           'Interrupted by user',
         )
       }
-      // Skip the interruption message for submit-interrupts — the queued
-      // user message that follows provides sufficient context.
+      // 跳过提交中断的中断消息——后续排队的用户消息已提供足够上下文。
       if (toolUseContext.abortController.signal.reason !== 'interrupt') {
         yield createUserInterruptionMessage({
           toolUse: false,
@@ -794,7 +816,7 @@ async function* queryLoop(
       return { reason: 'aborted_streaming' }
     }
 
-    // Yield tool use summary from previous turn — haiku (~1s) resolved during model streaming (5-30s)
+    // 从上一轮产出工具使用摘要——Haiku（约1s）在模型流式传输期间解析（5-30s）
     if (pendingToolUseSummary) {
       const summary = await pendingToolUseSummary
       if (summary) {
@@ -805,16 +827,9 @@ async function* queryLoop(
     if (!needsFollowUp) {
       const lastMessage = assistantMessages.at(-1)
 
-      // Check for max_output_tokens and inject recovery message. The error
-      // was withheld from the stream above; only surface it if recovery
-      // exhausts.
+      // 检查max_output_tokens并注入恢复消息。该错误从流中保留，仅当恢复耗尽时才展示。
       if (isWithheldMaxOutputTokens(lastMessage)) {
-        // Escalating retry: if we used the capped 8k default and hit the
-        // limit, retry the SAME request at 64k — no meta message, no
-        // multi-turn dance. This fires once per turn (guarded by the
-        // override check), then falls through to multi-turn recovery if
-        // 64k also hits the cap.
-        // 3P default: false (not validated on Bedrock/Vertex)
+        // 升级重试：如果使用上限8k默认值并达到限制，则使用64k重试相同请求——无元消息，无多轮舞蹈。每轮触发一次（由覆盖检查保护），如果64k也达到上限，则回退到多轮恢复。3P默认值：false（在Bedrock/Vertex上未验证）
         const capEnabled = getFeatureValue(
           'tengu_otk_slot_v1',
           false,
@@ -869,14 +884,11 @@ async function* queryLoop(
           continue
         }
 
-        // Recovery exhausted — surface the withheld error now.
+        // 恢复耗尽——现在展示保留的错误。
         yield lastMessage
       }
 
-      // Skip stop hooks when the last message is an API error (rate limit,
-      // prompt-too-long, auth failure, etc.). The model never produced a
-      // real response — hooks evaluating it create a death spiral:
-      // error → hook blocking → retry → error → …
+      // 当最后一条消息是API错误（速率限制、提示太长、认证失败等）时跳过停止钩子。模型从未产生真实响应——评估它的钩子会产生死亡螺旋：错误→钩子阻塞→重试→错误→……
       if (lastMessage?.isApiErrorMessage) {
         void executeStopFailureHooks(lastMessage, toolUseContext)
         return { reason: 'completed' }
@@ -1000,7 +1012,7 @@ async function* queryLoop(
     }
     queryCheckpoint('query_tool_execution_end')
 
-    // Generate tool use summary after tool batch completes — passed to next recursive call
+    // 工具批次完成后生成工具使用摘要——传递给下一个递归调用
     let nextPendingToolUseSummary:
       | Promise<ToolUseSummaryMessage | null>
       | undefined
@@ -1008,15 +1020,14 @@ async function* queryLoop(
       config.gates.emitToolUseSummaries &&
       toolUseBlocks.length > 0 &&
       !toolUseContext.abortController.signal.aborted &&
-      !toolUseContext.agentId // subagents don't surface in mobile UI — skip the Haiku call
+      !toolUseContext.agentId // 子代理不在移动UI中展示——跳过Haiku调用
     ) {
-      // Extract the last assistant text block for context
+      // 提取最后一条助手文本块作为上下文
       const lastAssistantMessage = assistantMessages.at(-1)
       let lastAssistantText: string | undefined
       if (lastAssistantMessage) {
-        const textBlocks = lastAssistantMessage.message.content.filter(
-          block => block.type === 'text',
-        )
+        /** 执行 text Blocks 对应的业务处理。 */
+        const textBlocks = lastAssistantMessage.message.content.filter(isTextBlock)
         if (textBlocks.length > 0) {
           const lastTextBlock = textBlocks.at(-1)
           if (lastTextBlock && 'text' in lastTextBlock) {
@@ -1025,26 +1036,28 @@ async function* queryLoop(
         }
       }
 
-      // Collect tool info for summary generation
+      // 收集摘要生成所需的工具信息
+      /** 转换 tool Use Ids 对应的数据或状态。 */
       const toolUseIds = toolUseBlocks.map(block => block.id)
+      /** 转换 tool Info For Summary 对应的数据或状态。 */
       const toolInfoForSummary = toolUseBlocks.map(block => {
-        // Find the corresponding tool result
+        // 找到对应的工具结果
+        /** 转换 tool Result 对应的数据或状态。 */
         const toolResult = toolResults.find(
           result =>
             result.type === 'user' &&
             Array.isArray(result.message.content) &&
             result.message.content.some(
-              content =>
-                content.type === 'tool_result' &&
-                content.tool_use_id === block.id,
+              (content: unknown) =>
+                isToolResultBlock(content) && content.tool_use_id === block.id,
             ),
         )
         const resultContent =
           toolResult?.type === 'user' &&
           Array.isArray(toolResult.message.content)
             ? toolResult.message.content.find(
-                (c): c is ToolResultBlockParam =>
-                  c.type === 'tool_result' && c.tool_use_id === block.id,
+                (content: unknown): content is ToolResultBlockParam =>
+                  isToolResultBlock(content) && content.tool_use_id === block.id,
               )
             : undefined
         return {
@@ -1057,7 +1070,7 @@ async function* queryLoop(
         }
       })
 
-      // Fire off summary generation without blocking the next API call
+      // 启动摘要生成而不阻塞下一个API调用
       nextPendingToolUseSummary = generateToolUseSummary({
         tools: toolInfoForSummary,
         signal: toolUseContext.abortController.signal,
@@ -1073,16 +1086,15 @@ async function* queryLoop(
         .catch(() => null)
     }
 
-    // We were aborted during tool calls
+    // 我们在工具调用期间被中断
     if (toolUseContext.abortController.signal.aborted) {
-      // Skip the interruption message for submit-interrupts — the queued
-      // user message that follows provides sufficient context.
+      // 跳过提交中断的中断消息——后续排队的用户消息已提供足够上下文。
       if (toolUseContext.abortController.signal.reason !== 'interrupt') {
         yield createUserInterruptionMessage({
           toolUse: true,
         })
       }
-      // Check maxTurns before returning when aborted
+      // 中断时在返回前检查maxTurns
       const nextTurnCountOnAbort = turnCount + 1
       if (maxTurns && nextTurnCountOnAbort > maxTurns) {
         yield createAttachmentMessage({
@@ -1094,7 +1106,7 @@ async function* queryLoop(
       return { reason: 'aborted_tools' }
     }
 
-    // If a hook indicated to prevent continuation, stop here
+    // 如果钩子指示阻止继续，在此停止
     if (shouldPreventContinuation) {
       return { reason: 'hook_stopped' }
     }
@@ -1103,39 +1115,23 @@ async function* queryLoop(
       tracking.turnCounter++
     }
 
-    // Be careful to do this after tool calls are done, because the API
-    // will error if we interleave tool_result messages with regular user messages.
+    // 注意在工具调用完成后执行此操作，因为如果交叉使用tool_result消息和普通用户消息，API会报错。
 
-    // Instrumentation: Track message count before attachments
+    // 检测：在附件前跟踪消息计数
 
-    // Get queued commands snapshot before processing attachments.
-    // These will be sent as attachments so Claude can respond to them in the current turn.
-    //
-    // Drain pending notifications. Shell completions can be delivered in the
-    // current turn; other task types are delivered by the normal queue flow.
-    //
-    // Slash commands are excluded from mid-turn drain — they must go through
-    // processSlashCommand after the turn ends (via useQueueProcessor), not be
-    // sent to the model as text. Bash-mode commands are already excluded by
-    // INLINE_NOTIFICATION_MODES in getQueuedCommandAttachments.
-    //
-    // Agent scoping: the queue is a process-global singleton shared by the
-    // coordinator and all in-process subagents. Each loop drains only what's
-    // addressed to it — main thread drains agentId===undefined, subagents
-    // drain their own agentId. User prompts (mode:'prompt') still go to main
-    // only; subagents never see the prompt stream.
-    // eslint-disable-next-line custom-rules/require-tool-match-name -- ToolUseBlock.name has no aliases
+    // 在处理附件之前获取排队的命令快照。这些将作为附件发送，以便Claude可以在当前轮次中响应它们。处理待处理的通知。Shell补全可以在当前轮次中传递；其他任务类型通过正常队列流程传递。斜杠命令被排除在轮次中间的处理之外——它们必须在轮次结束后通过processSlashCommand（通过useQueueProcessor）处理，而不是作为文本发送给模型。Bash模式命令已经被getQueuedCommandAttachments中的INLINE_NOTIFICATION_MODES排除。代理作用域：队列是一个进程全局单例，由协调器和所有进程内子代理共享。每个循环只处理发送给自己的内容——主线程处理agentId===undefined，子代理处理自己的agentId。用户提示（mode:'prompt'）仍然只发送给主线程；子代理永远不会看到提示流。eslint-disable-next-line custom-rules/require-tool-match-name -- ToolUseBlock.name没有别名
+    /** 执行 sleep Ran 对应的业务处理。 */
     const sleepRan = toolUseBlocks.some(b => b.name === SLEEP_TOOL_NAME)
     const isMainThread =
       querySource.startsWith('repl_main_thread') || querySource === 'sdk'
     const currentAgentId = toolUseContext.agentId
+    /** 执行 queued Commands Snapshot 对应的业务处理。 */
     const queuedCommandsSnapshot = getCommandsByMaxPriority(
       sleepRan ? 'later' : 'next',
     ).filter(cmd => {
       if (isSlashCommand(cmd)) return false
       if (isMainThread) return cmd.agentId === undefined
-      // Subagents only drain task-notifications addressed to them — never
-      // user prompts, even if someone stamps an agentId on one.
+      // 子代理只处理发送给自己的任务通知——永远不会处理用户提示，即使有人在上面标记了agentId。
       return cmd.mode === 'task-notification' && cmd.agentId === currentAgentId
     })
 
@@ -1151,13 +1147,7 @@ async function* queryLoop(
       toolResults.push(attachment)
     }
 
-    // Memory prefetch consume: only if settled and not already consumed on
-    // an earlier iteration. If not settled yet, skip (zero-wait) and retry
-    // next iteration — the prefetch gets as many chances as there are loop
-    // iterations before the turn ends. readFileState (cumulative across
-    // iterations) filters out memories the model already Read/Wrote/Edited
-    // — including in earlier iterations, which the per-iteration
-    // toolUseBlocks array would miss.
+    // 内存预取消费：仅当已确定并且未在之前的迭代中已经消费过。如果尚未确定，则跳过（零等待）并在下一次迭代重试——预取在轮次结束前的循环迭代次数内获得同样多的机会。readFileState（跨迭代累积）过滤掉模型已经读取/写入/编辑过的内存——包括在早期迭代中，这是每次迭代的toolUseBlocks数组会遗漏的。
     if (
       pendingMemoryPrefetch &&
       pendingMemoryPrefetch.settledAt !== null &&
@@ -1176,8 +1166,8 @@ async function* queryLoop(
     }
 
 
-    // Remove only commands that were actually consumed as attachments.
-    // Prompt and task-notification commands are converted to attachments above.
+    // 仅移除实际作为附件消费的命令。上面的提示和任务通知命令已转换为附件。
+    /** 执行 consumed Commands 对应的业务处理。 */
     const consumedCommands = queuedCommandsSnapshot.filter(
       cmd => cmd.mode === 'prompt' || cmd.mode === 'task-notification',
     )
@@ -1191,7 +1181,8 @@ async function* queryLoop(
       removeFromQueue(consumedCommands)
     }
 
-    // Instrumentation: Track file change attachments after they're added
+    // 仪器化：在文件更改附件添加后跟踪它们
+    /** 执行 file Change Attachment Count 对应的业务处理。 */
     const fileChangeAttachmentCount = count(
       toolResults,
       tr =>
@@ -1199,7 +1190,7 @@ async function* queryLoop(
     )
 
 
-    // Refresh tools between turns so newly-connected MCP servers become available
+    // 在轮次之间刷新工具，以便新连接的MCP服务器可用
     if (updatedToolUseContext.options.refreshTools) {
       const refreshedTools = updatedToolUseContext.options.refreshTools()
       if (refreshedTools !== updatedToolUseContext.options.tools) {
@@ -1218,10 +1209,10 @@ async function* queryLoop(
       queryTracking,
     }
 
-    // Each time we have tool results and are about to recurse, that's a turn
+    // 每次我们拥有工具结果并即将递归时，那就是一个轮次
     const nextTurnCount = turnCount + 1
 
-    // Check if we've reached the max turns limit
+    // 检查是否已达到最大轮次限制
     if (maxTurns && nextTurnCount > maxTurns) {
       yield createAttachmentMessage({
         type: 'max_turns_reached',
@@ -1244,5 +1235,5 @@ async function* queryLoop(
       transition: { reason: 'next_turn' },
     }
     state = next
-  } // while (true)
+  } // 结束持续查询循环
 }

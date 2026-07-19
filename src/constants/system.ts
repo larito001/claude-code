@@ -1,4 +1,4 @@
-// Critical system constants extracted to break circular dependencies
+// 提取关键系统常量以打破循环依赖
 
 import { getFeatureValue } from '../services/featureConfig.js'
 import { logForDebugging } from '../utils/debug.js'
@@ -18,14 +18,12 @@ const CLI_SYSPROMPT_PREFIX_VALUES = [
 
 export type CLISyspromptPrefix = (typeof CLI_SYSPROMPT_PREFIX_VALUES)[number]
 
-/**
- * All possible CLI sysprompt prefix values, used by splitSysPromptPrefix
- * to identify prefix blocks by content rather than position.
- */
+/** 所有可能的CLI sysprompt前缀值，由splitSysPromptPrefix用于通过内容而非位置识别前缀块。 */
 export const CLI_SYSPROMPT_PREFIXES: ReadonlySet<string> = new Set(
   CLI_SYSPROMPT_PREFIX_VALUES,
 )
 
+/** 获取 get CLI Sysprompt Prefix 对应的数据或状态。 */
 export function getCLISyspromptPrefix(options?: {
   isNonInteractive: boolean
   hasAppendSystemPrompt: boolean
@@ -44,10 +42,7 @@ export function getCLISyspromptPrefix(options?: {
   return DEFAULT_PREFIX
 }
 
-/**
- * Check if attribution header is enabled.
- * Enabled by default, can be disabled via env var or local feature configuration killswitch.
- */
+/** 检查attribution header是否启用。默认启用，可通过环境变量或本地特性配置killswitch禁用。 */
 function isAttributionHeaderEnabled(): boolean {
   if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_ATTRIBUTION_HEADER)) {
     return false
@@ -56,18 +51,9 @@ function isAttributionHeaderEnabled(): boolean {
 }
 
 /**
- * Get attribution header for API requests.
- * Returns a header string with cc_version (including fingerprint) and cc_entrypoint.
- * Enabled by default, can be disabled via env var or local feature configuration killswitch.
- *
- * When NATIVE_CLIENT_ATTESTATION is enabled, includes a `cch=00000` placeholder.
- * Before the request is sent, Bun's native HTTP stack finds this placeholder
- * in the request body and overwrites the zeros with a computed hash. The
- * server verifies this token to confirm the request came from a real Claude
- * Code client. See bun-anthropic/src/http/Attestation.zig for implementation.
- *
- * We use a placeholder (instead of injecting from Zig) because same-length
- * replacement avoids Content-Length changes and buffer reallocation.
+ * 获取API请求的attribution header。返回包含cc_version（包括指纹）和cc_entrypoint的header字符串。默认启用，可通过环境变量或本地特性配置killswitch禁用。
+ * 当NATIVE_CLIENT_ATTESTATION启用时，包含一个`cch=00000`占位符。在发送请求之前，Bun的原生HTTP堆栈会在请求体中找到此占位符，并用计算出的哈希覆盖零。服务器验证此令牌以确认请求来自真实的Claude Code客户端。实现见bun-anthropic/src/http/Attestation.zig。
+ * 我们使用占位符（而不是从Zig注入）是因为相同长度的替换避免了Content-Length变化和缓冲区重新分配。
  */
 export function getAttributionHeader(fingerprint: string): string {
   if (!isAttributionHeaderEnabled()) {
@@ -77,13 +63,8 @@ export function getAttributionHeader(fingerprint: string): string {
   const version = `${MACRO.VERSION}.${fingerprint}`
   const entrypoint = process.env.CLAUDE_CODE_ENTRYPOINT ?? 'unknown'
 
-  // cch=00000 placeholder is overwritten by Bun's HTTP stack with attestation token
-  // cc_workload: turn-scoped hint so the API can route e.g. cron-initiated
-  // requests to a lower QoS pool. Absent = interactive default. Safe re:
-  // fingerprint (computed from msg chars + version only, line 78 above) and
-  // cch attestation (placeholder overwritten in serialized body bytes after
-  // this string is built). Server _parse_cc_header tolerates unknown extra
-  // fields so old API deploys silently ignore this.
+  // cch=00000 占位符被 Bun 的 HTTP 栈用认证令牌覆盖
+  // cc_workload: 轮次范围提示，以便 API 可以将例如 cron 发起的请求路由到较低 QoS 池。缺失时 = 交互式默认值。安全方面：指纹（仅从消息字符和版本计算，见上方第78行）和 cch 认证（在该字符串构建后，序列化主体字节中占位符被覆盖）。服务器 _parse_cc_header 容忍未知额外字段，因此旧 API 部署会静默忽略此项。
   const workload = getWorkload()
   const workloadPair = workload ? ` cc_workload=${workload};` : ''
   const header = `x-anthropic-billing-header: cc_version=${version}; cc_entrypoint=${entrypoint};${workloadPair}`

@@ -1,9 +1,7 @@
 /**
- * Internal message compatibility model.
+ * 内部消息兼容性模型。
  *
- * The runtime accepts additional fields as protocols evolve, so the base
- * shape remains open while preserving the discriminants used throughout the
- * query, rendering, session and hook pipelines.
+ * 随着协议的演进，运行时接受额外的字段，因此基本形状保持开放，同时保留整个查询、渲染、会话和钩子管道中使用的判别器。
  */
 export type MessageOrigin = 'user' | 'assistant' | 'system' | string
 export type SystemMessageLevel = 'info' | 'warning' | 'error' | string

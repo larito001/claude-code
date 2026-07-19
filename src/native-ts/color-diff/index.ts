@@ -1,43 +1,28 @@
 /**
- * Pure TypeScript port of vendor/color-diff-src.
+ * vendor/color-diff-src 的纯 TypeScript 移植。
  *
- * The Rust version uses syntect+bat for syntax highlighting and the similar
- * crate for word diffing. This port uses highlight.js (already a dep via
- * cli-highlight) and the diff npm package's diffArrays.
+ * Rust 版本使用 syntect+bat 进行语法高亮，并使用类似的 crate 进行单词差异比较。此移植使用 highlight.js（已经通过 cli-highlight 成为依赖）和 diff npm 包的 diffArrays。
  *
- * API matches vendor/color-diff-src/index.d.ts exactly so callers don't change.
+ * API 与 vendor/color-diff-src/index.d.ts 完全匹配，因此调用者无需更改。
  *
- * Key semantic differences from the native module:
- * - Syntax highlighting uses highlight.js. Scope colors were measured from
- *   syntect's output so most tokens match, but hljs's grammar has gaps:
- *   plain identifiers and operators like `=` `:` aren't scoped, so they
- *   render in default fg instead of white/pink. Output structure (line
- *   numbers, markers, backgrounds, word-diff) is identical.
- * - BAT_THEME env support is a stub: highlight.js has no bat theme set, so
- *   getSyntaxTheme always returns the default for the given Claude theme.
+ * 与原生模块的关键语义差异：
+ * - 语法高亮使用 highlight.js。作用域颜色是根据 syntect 的输出测量的，因此大多数标记都匹配，但 hljs 的语法存在空白：纯标识符和像 `=` `:` 这样的运算符没有被作用域化，因此它们会以默认前景色渲染，而不是白色/粉色。输出结构（行号、标记、背景、单词差异）相同。
+ * - BAT_THEME 环境支持是一个存根：highlight.js 没有 bat 主题集，因此 getSyntaxTheme 始终为给定的 Claude 主题返回默认值。
  */
 
 import { diffArrays } from 'diff'
-import type * as hljsNamespace from 'highlight.js'
+import type hljsDefault from 'highlight.js'
 import { basename, extname } from 'path'
 
-// Lazy: defers loading highlight.js until first render. The full bundle
-// registers 190+ language grammars at require time (~50MB, 100-200ms on
-// macOS, several× that on Windows). With a top-level import, any caller
-// chunk that reaches this module — including test/preload.ts via
-// StructuredDiff.tsx → colorDiff.ts — pays that cost at module-eval time
-// and carries the heap for the rest of the process. On Windows CI this
-// pushed later tests in the same shard into GC-pause territory and a
-// beforeEach/afterEach hook timeout (officialRegistry.test.ts, PR #24150).
-// Same lazy pattern the NAPI wrapper used for dlopen.
-type HLJSApi = typeof hljsNamespace
+// 惰性：将 highlight.js 的加载推迟到首次渲染。完整 bundle 在 require 时注册了 190 多种语言语法（约 50MB，macOS 上 100-200ms，Windows 上数倍于此）。如果使用顶级导入，任何到达此模块的调用者 chunk——包括通过 StructuredDiff.tsx → colorDiff.ts 的 test/preload.ts——都会在模块求值时支付该成本，并在进程的其余部分占用该堆内存。在 Windows CI 上，这会导致同一分片中的后续测试进入 GC 暂停区域，并导致 beforeEach/afterEach 钩子超时（officialRegistry.test.ts，PR #24150）。与 NAPI 包装器用于 dlopen 的相同惰性模式。
+type HLJSApi = typeof hljsDefault
 let cachedHljs: HLJSApi | null = null
+/** 执行 hljs 对应的业务处理。 */
 function hljs(): HLJSApi {
   if (cachedHljs) return cachedHljs
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('highlight.js')
-  // highlight.js uses `export =` (CJS). Under bun/ESM the interop wraps it
-  // in .default; under node CJS the module IS the API. Check at runtime.
+  // highlight.js 使用 `export =`（CJS）。在 bun/ESM 下，互操作将其包装在 .default 中；在 node CJS 下，模块本身就是 API。在运行时检查。
   cachedHljs = 'default' in mod && mod.default ? mod.default : mod
   return cachedHljs!
 }
@@ -46,7 +31,7 @@ import { stringWidth } from '../../ink/stringWidth.js'
 import { logError } from '../../utils/log.js'
 
 // ---------------------------------------------------------------------------
-// Public API types (match vendor/color-diff-src/index.d.ts)
+// 公共 API 类型（与 vendor/color-diff-src/index.d.ts 匹配）
 // ---------------------------------------------------------------------------
 
 export type Hunk = {
@@ -65,11 +50,12 @@ export type SyntaxTheme = {
 export type NativeModule = {
   ColorDiff: typeof ColorDiff
   ColorFile: typeof ColorFile
+  /** 获取 get Syntax Theme 对应的数据或状态。 */
   getSyntaxTheme: (themeName: string) => SyntaxTheme
 }
 
 // ---------------------------------------------------------------------------
-// Color / ANSI escape helpers
+// 颜色/ANSI 转义辅助工具
 // ---------------------------------------------------------------------------
 
 type Color = { r: number; g: number; b: number; a: number }
@@ -81,37 +67,38 @@ const RESET = '\x1b[0m'
 const DIM = '\x1b[2m'
 const UNDIM = '\x1b[22m'
 
+/** 执行 rgb 对应的业务处理。 */
 function rgb(r: number, g: number, b: number): Color {
   return { r, g, b, a: 255 }
 }
 
+/** 执行 ansi Idx 对应的业务处理。 */
 function ansiIdx(index: number): Color {
   return { r: index, g: 0, b: 0, a: 0 }
 }
 
-// Sentinel: a=1 means "terminal default" (matches bat convention)
+// 哨兵：a=1 表示“终端默认”（符合 bat 约定）
 const DEFAULT_BG: Color = { r: 0, g: 0, b: 0, a: 1 }
 
+/** 检查 detect Color Mode 对应的数据或状态。 */
 function detectColorMode(theme: string): ColorMode {
   if (theme.includes('ansi')) return 'ansi'
   const ct = process.env.COLORTERM ?? ''
   return ct === 'truecolor' || ct === '24bit' ? 'truecolor' : 'color256'
 }
 
-// Port of ansi_colours::ansi256_from_rgb — approximates RGB to the xterm-256
-// palette (6x6x6 cube + 24 greys). Picks the perceptually closest index by
-// comparing cube vs grey-ramp candidates, like the Rust crate.
+// ansi_colours::ansi256_from_rgb 的移植——将 RGB 近似为 xterm-256 调色板（6x6x6 立方体 + 24 灰度）。通过比较立方体与灰度斜坡候选，选择感知上最接近的索引，类似于 Rust crate。
 const CUBE_LEVELS = [0, 95, 135, 175, 215, 255]
+/** 执行 ansi256 From Rgb 对应的业务处理。 */
 function ansi256FromRgb(r: number, g: number, b: number): number {
+  /** 执行 q 对应的业务处理。 */
   const q = (c: number) =>
     c < 48 ? 0 : c < 115 ? 1 : c < 155 ? 2 : c < 195 ? 3 : c < 235 ? 4 : 5
   const qr = q(r)
   const qg = q(g)
   const qb = q(b)
   const cubeIdx = 16 + 36 * qr + 6 * qg + qb
-  // Grey ramp candidate (232-255, levels 8..238 step 10). Beyond the ramp's
-  // range the cube corner is the only option — ansi_colours snaps 248,248,242
-  // to 231 (cube white), not 255 (ramp top).
+  // 灰度斜坡候选（232-255，级别 8..238 步长 10）。超出斜坡范围时，立方体角是唯一选项——ansi_colours 将 248,248,242 捕捉到 231（立方体白色），而不是 255（斜坡顶部）。
   const grey = Math.round((r + g + b) / 3)
   if (grey < 5) return 16
   if (grey > 244 && qr === qg && qg === qb) return cubeIdx
@@ -126,15 +113,16 @@ function ansi256FromRgb(r: number, g: number, b: number): number {
   return dGrey < dCube ? greyIdx : cubeIdx
 }
 
+/** 执行 color To Escape 对应的业务处理。 */
 function colorToEscape(c: Color, fg: boolean, mode: ColorMode): string {
-  // alpha=0: palette index encoded in .r (bat's ansi-theme convention)
+  // alpha=0：调色板索引编码在 .r 中（bat 的 ansi-theme 约定）
   if (c.a === 0) {
     const idx = c.r
     if (idx < 8) return `\x1b[${(fg ? 30 : 40) + idx}m`
     if (idx < 16) return `\x1b[${(fg ? 90 : 100) + (idx - 8)}m`
     return `\x1b[${fg ? 38 : 48};5;${idx}m`
   }
-  // alpha=1: terminal default
+  // alpha=1: 终端默认
   if (c.a === 1) return fg ? '\x1b[39m' : '\x1b[49m'
 
   const codeType = fg ? 38 : 48
@@ -144,6 +132,7 @@ function colorToEscape(c: Color, fg: boolean, mode: ColorMode): string {
   return `\x1b[${codeType};5;${ansi256FromRgb(c.r, c.g, c.b)}m`
 }
 
+/** 执行 as Terminal Escaped 对应的业务处理。 */
 function asTerminalEscaped(
   blocks: readonly Block[],
   mode: ColorMode,
@@ -162,7 +151,7 @@ function asTerminalEscaped(
 }
 
 // ---------------------------------------------------------------------------
-// Theme
+// 主题
 // ---------------------------------------------------------------------------
 
 type Marker = '+' | '-' | ' '
@@ -179,14 +168,14 @@ type Theme = {
   scopes: Record<string, Color>
 }
 
+/** 执行 default Syntax Theme Name 对应的业务处理。 */
 function defaultSyntaxThemeName(themeName: string): string {
   if (themeName.includes('ansi')) return 'ansi'
   if (themeName.includes('dark')) return 'Monokai Extended'
   return 'GitHub'
 }
 
-// highlight.js scope → syntect Monokai Extended foreground (measured from the
-// Rust module's output so colors match the original exactly)
+// highlight.js scope → syntect Monokai Extended foreground (根据 Rust 模块的输出测量，使颜色与原始精确匹配)
 const MONOKAI_SCOPES: Record<string, Color> = {
   keyword: rgb(249, 38, 114),
   _storage: rgb(102, 217, 239),
@@ -214,7 +203,7 @@ const MONOKAI_SCOPES: Record<string, Color> = {
   subst: rgb(248, 248, 242),
 }
 
-// highlight.js scope → syntect GitHub-light foreground (measured from Rust)
+// highlight.js scope → syntect GitHub-light foreground (测量自 Rust)
 const GITHUB_SCOPES: Record<string, Color> = {
   keyword: rgb(167, 29, 93),
   _storage: rgb(167, 29, 93),
@@ -242,9 +231,7 @@ const GITHUB_SCOPES: Record<string, Color> = {
   subst: rgb(51, 51, 51),
 }
 
-// Keywords that syntect scopes as storage.type rather than keyword.control.
-// highlight.js lumps these under "keyword"; we re-split so const/function/etc.
-// get the cyan storage color instead of pink.
+// syntect 作用域为 storage.type 而非 keyword.control 的关键词。highlight.js 将它们归为 "keyword"；我们重新拆分，使 const/function 等获得青色 storage 颜色而非粉色。
 const STORAGE_KEYWORDS = new Set([
   'const',
   'let',
@@ -279,6 +266,7 @@ const ANSI_SCOPES: Record<string, Color> = {
   meta: ansiIdx(8),
 }
 
+/** 创建 build Theme 对应的数据或状态。 */
 function buildTheme(themeName: string, mode: ColorMode): Theme {
   const isDark = themeName.includes('dark')
   const isAnsi = themeName.includes('ansi')
@@ -330,7 +318,7 @@ function buildTheme(themeName: string, mode: ColorMode): Theme {
     }
   }
 
-  // light
+  // 浅色
   const fg = rgb(51, 51, 51)
   const deleteLine = rgb(255, 220, 220)
   const deleteWord = rgb(255, 199, 199)
@@ -361,10 +349,12 @@ function buildTheme(themeName: string, mode: ColorMode): Theme {
   }
 }
 
+/** 执行 default Style 对应的业务处理。 */
 function defaultStyle(theme: Theme): Style {
   return { foreground: theme.foreground, background: theme.background }
 }
 
+/** 执行 line Background 对应的业务处理。 */
 function lineBackground(marker: Marker, theme: Theme): Color {
   switch (marker) {
     case '+':
@@ -376,6 +366,7 @@ function lineBackground(marker: Marker, theme: Theme): Color {
   }
 }
 
+/** 执行 word Background 对应的业务处理。 */
 function wordBackground(marker: Marker, theme: Theme): Color {
   switch (marker) {
     case '+':
@@ -387,6 +378,7 @@ function wordBackground(marker: Marker, theme: Theme): Color {
   }
 }
 
+/** 执行 decoration Color 对应的业务处理。 */
 function decorationColor(marker: Marker, theme: Theme): Color {
   switch (marker) {
     case '+':
@@ -399,18 +391,17 @@ function decorationColor(marker: Marker, theme: Theme): Color {
 }
 
 // ---------------------------------------------------------------------------
-// Syntax highlighting via highlight.js
+// 通过 highlight.js 的语法高亮
 // ---------------------------------------------------------------------------
 
-// hljs 10.x uses `kind`; 11.x uses `scope`. Handle both.
+// hljs 10.x 使用 `kind`；11.x 使用 `scope`。处理两者。
 type HljsNode = {
   scope?: string
   kind?: string
   children: (HljsNode | string)[]
 }
 
-// Filename-based and extension-based language detection (approximates bat's
-// SyntaxMapping + syntect's find_syntax_by_extension)
+// 基于文件名和扩展名的语言检测（近似于 bat 的 SyntaxMapping + syntect 的 find_syntax_by_extension）
 const FILENAME_LANGS: Record<string, string> = {
   Dockerfile: 'dockerfile',
   Makefile: 'makefile',
@@ -419,6 +410,7 @@ const FILENAME_LANGS: Record<string, string> = {
   CMakeLists: 'cmake',
 }
 
+/** 检查 detect Language 对应的数据或状态。 */
 function detectLanguage(
   filePath: string,
   firstLine: string | null,
@@ -426,7 +418,7 @@ function detectLanguage(
   const base = basename(filePath)
   const ext = extname(filePath).slice(1)
 
-  // Filename-based lookup (handles Dockerfile, Makefile, CMakeLists.txt, etc.)
+  // 基于文件名的查找（处理 Dockerfile、Makefile、CMakeLists.txt 等）
   const stem = base.split('.')[0] ?? ''
   const byName = FILENAME_LANGS[base] ?? FILENAME_LANGS[stem]
   if (byName && hljs().getLanguage(byName)) return byName
@@ -434,7 +426,7 @@ function detectLanguage(
     const lang = hljs().getLanguage(ext)
     if (lang) return ext
   }
-  // Shebang / first-line detection (strip UTF-8 BOM)
+  // Shebang / 首行检测（去除 UTF-8 BOM）
   if (firstLine) {
     const line = firstLine.startsWith('\ufeff') ? firstLine.slice(1) : firstLine
     if (line.startsWith('#!')) {
@@ -450,6 +442,7 @@ function detectLanguage(
   return null
 }
 
+/** 执行 scope Color 对应的业务处理。 */
 function scopeColor(
   scope: string | undefined,
   text: string,
@@ -466,6 +459,7 @@ function scopeColor(
   )
 }
 
+/** 执行 flatten Hljs 对应的业务处理。 */
 function flattenHljs(
   node: HljsNode | string,
   theme: Theme,
@@ -483,11 +477,8 @@ function flattenHljs(
   }
 }
 
-// highlight.js 11 exposes `_emitter`; older releases exposed `emitter`.
-// rootNode is internal to TokenTreeEmitter. Type guard validates the shape so we
-// fail loudly (via logError) instead of a silent try/catch swallow — the
-// prior `as unknown as` cast hid a version mismatch (_emitter vs emitter,
-// scope vs kind) behind a silent gray fallback.
+// highlight.js 11 暴露 `_emitter`；旧版本暴露 `emitter`。rootNode 是 TokenTreeEmitter 的内部。类型守护验证形状，使我们通过 logError 大声失败，而不是静默的 try/catch 吞没——先前的 `as unknown as` 强制转换将版本不匹配（_emitter vs emitter，scope vs kind）隐藏在静默的灰色回退后面。
+/** 判断是否满足 has Root Node 对应的数据或状态。 */
 function hasRootNode(emitter: unknown): emitter is { rootNode: HljsNode } {
   return (
     typeof emitter === 'object' &&
@@ -501,12 +492,13 @@ function hasRootNode(emitter: unknown): emitter is { rootNode: HljsNode } {
 
 let loggedEmitterShapeError = false
 
+/** 执行 highlight Line 对应的业务处理。 */
 function highlightLine(
   state: { lang: string | null; stack: unknown },
   line: string,
   theme: Theme,
 ): Block[] {
-  // syntect-parity: feed a trailing \n so line comments terminate, then strip
+  // syntect 一致性：添加结尾的 \n 使行注释终止，然后去除
   const code = line + '\n'
   if (!state.lang) {
     return [[defaultStyle(theme), code]]
@@ -518,7 +510,7 @@ function highlightLine(
       ignoreIllegals: true,
     })
   } catch {
-    // hljs throws on unknown language despite ignoreIllegals
+    // 尽管 ignoreIllegals，hljs 对未知语言抛出异常
     return [[defaultStyle(theme), code]]
   }
   const emitterResult = result as unknown as {
@@ -547,15 +539,15 @@ function highlightLine(
 }
 
 // ---------------------------------------------------------------------------
-// Word diff
+// 单词差异
 // ---------------------------------------------------------------------------
 
 type Range = { start: number; end: number }
 
 const CHANGE_THRESHOLD = 0.4
 
-// Tokenize into word runs, whitespace runs, and single punctuation chars —
-// matches the Rust tokenize() which mirrors diffWordsWithSpace's splitting.
+// 分词为单词序列、空白序列和单个标点字符——匹配 Rust 的 tokenize()，它镜像 diffWordsWithSpace 的分割。
+/** 转换 tokenize 对应的数据或状态。 */
 function tokenize(text: string): string[] {
   const tokens: string[] = []
   let i = 0
@@ -572,7 +564,7 @@ function tokenize(text: string): string[] {
       tokens.push(text.slice(i, j))
       i = j
     } else {
-      // advance one codepoint (handle surrogate pairs)
+      // 前进一个码点（处理代理对）
       const cp = text.codePointAt(i)!
       const len = cp > 0xffff ? 2 : 1
       tokens.push(text.slice(i, i + len))
@@ -582,6 +574,7 @@ function tokenize(text: string): string[] {
   return tokens
 }
 
+/** 获取 find Adjacent Pairs 对应的数据或状态。 */
 function findAdjacentPairs(markers: Marker[]): [number, number][] {
   const pairs: [number, number][] = []
   let i = 0
@@ -610,6 +603,7 @@ function findAdjacentPairs(markers: Marker[]): [number, number][] {
   return pairs
 }
 
+/** 执行 word Diff Strings 对应的业务处理。 */
 function wordDiffStrings(oldStr: string, newStr: string): [Range[], Range[]] {
   const oldTokens = tokenize(oldStr)
   const newTokens = tokenize(newStr)
@@ -623,6 +617,7 @@ function wordDiffStrings(oldStr: string, newStr: string): [Range[], Range[]] {
   let newOff = 0
 
   for (const op of ops) {
+    /** 执行 len 对应的业务处理。 */
     const len = op.value.reduce((s, t) => s + t.length, 0)
     if (op.removed) {
       changedLen += len
@@ -645,7 +640,7 @@ function wordDiffStrings(oldStr: string, newStr: string): [Range[], Range[]] {
 }
 
 // ---------------------------------------------------------------------------
-// Highlight (per-line transform pipeline)
+// 高亮（逐行转换管道）
 // ---------------------------------------------------------------------------
 
 type Highlight = {
@@ -654,6 +649,7 @@ type Highlight = {
   lines: Block[][]
 }
 
+/** 删除或清理 remove Newlines 对应的数据或状态。 */
 function removeNewlines(h: Highlight): void {
   h.lines = h.lines.map(line =>
     line.flatMap(([style, text]) =>
@@ -665,10 +661,12 @@ function removeNewlines(h: Highlight): void {
   )
 }
 
+/** 执行 char Width 对应的业务处理。 */
 function charWidth(ch: string): number {
   return stringWidth(ch)
 }
 
+/** 执行 wrap Text 对应的业务处理。 */
 function wrapText(h: Highlight, width: number, theme: Theme): void {
   const newLines: Block[][] = []
   for (const line of h.lines) {
@@ -686,7 +684,7 @@ function wrapText(h: Highlight, width: number, theme: Theme): void {
         const remaining = width - curW
         let bytePos = 0
         let accW = 0
-        // iterate by codepoint
+        // 按码点迭代
         for (const ch of text) {
           const cw = charWidth(ch)
           if (accW + cw > remaining) break
@@ -695,13 +693,11 @@ function wrapText(h: Highlight, width: number, theme: Theme): void {
         }
         if (bytePos === 0) {
           if (curW === 0) {
-            // Fresh line and first char still doesn't fit — force one codepoint
-            // to guarantee forward progress (overflows, but prevents infinite loop)
+            // 新行和第一个字符仍然不适合——强制一个码点以保证前进（溢出，但防止无限循环）
             const firstCp = text.codePointAt(0)!
             bytePos = firstCp > 0xffff ? 2 : 1
           } else {
-            // Line has content and next char doesn't fit — finish this line,
-            // re-queue the whole block for a fresh line
+            // 行有内容且下一个字符不适合——结束此行，将整个块重新排队到新行
             newLines.push(cur)
             queue.unshift([style, text])
             cur = []
@@ -725,11 +721,12 @@ function wrapText(h: Highlight, width: number, theme: Theme): void {
   }
   h.lines = newLines
 
-  // Pad changed lines so background extends to edge
+  // 填充更改的行，使背景延伸到边缘
   if (h.marker && h.marker !== ' ') {
     const bg = lineBackground(h.marker, theme)
     const padStyle: Style = { foreground: theme.foreground, background: bg }
     for (const line of h.lines) {
+      /** 执行 cur W 对应的业务处理。 */
       const curW = line.reduce((s, [, t]) => s + stringWidth(t), 0)
       if (curW < width) {
         line.push([padStyle, ' '.repeat(width - curW)])
@@ -738,6 +735,7 @@ function wrapText(h: Highlight, width: number, theme: Theme): void {
   }
 }
 
+/** 添加或注册 add Line Number 对应的数据或状态。 */
 function addLineNumber(
   h: Highlight,
   theme: Theme,
@@ -759,6 +757,7 @@ function addLineNumber(
   }
 }
 
+/** 添加或注册 add Marker 对应的数据或状态。 */
 function addMarker(h: Highlight, theme: Theme): void {
   if (!h.marker) return
   const style: Style = {
@@ -770,6 +769,7 @@ function addMarker(h: Highlight, theme: Theme): void {
   }
 }
 
+/** 执行 dim Content 对应的业务处理。 */
 function dimContent(h: Highlight): void {
   for (const line of h.lines) {
     if (line.length > 0) {
@@ -780,6 +780,7 @@ function dimContent(h: Highlight): void {
   }
 }
 
+/** 执行 apply Background 对应的业务处理。 */
 function applyBackground(h: Highlight, theme: Theme, ranges: Range[]): void {
   if (!h.marker) return
   const lineBg = lineBackground(h.marker, theme)
@@ -831,6 +832,7 @@ function applyBackground(h: Highlight, theme: Theme, ranges: Range[]): void {
   }
 }
 
+/** 执行 into Lines 对应的业务处理。 */
 function intoLines(
   h: Highlight,
   dim: boolean,
@@ -841,15 +843,17 @@ function intoLines(
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// 公共 API
 // ---------------------------------------------------------------------------
 
+/** 执行 max Line Number 对应的业务处理。 */
 function maxLineNumber(hunk: Hunk): number {
   const oldEnd = Math.max(0, hunk.oldStart + hunk.oldLines - 1)
   const newEnd = Math.max(0, hunk.newStart + hunk.newLines - 1)
   return Math.max(oldEnd, newEnd)
 }
 
+/** 解析 parse Marker 对应的数据或状态。 */
 function parseMarker(s: string): Marker {
   return s === '+' || s === '-' ? s : ' '
 }
@@ -860,6 +864,7 @@ export class ColorDiff {
   private firstLine: string | null
   private prefixContent: string | null
 
+  /** 初始化当前实例及其必要状态。 */
   constructor(
     hunk: Hunk,
     firstLine: string | null,
@@ -872,14 +877,14 @@ export class ColorDiff {
     this.prefixContent = prefixContent ?? null
   }
 
+  /** 渲染当前视图。 */
   render(themeName: string, width: number, dim: boolean): string[] | null {
     const mode = detectColorMode(themeName)
     const theme = buildTheme(themeName, mode)
     const lang = detectLanguage(this.filePath, this.firstLine)
     const hlState = { lang, stack: null }
 
-    // Warm highlighter with prefix lines (highlight.js is stateless per call,
-    // so this is a no-op for now — preserved for API parity)
+    // 用前缀行预热高亮器（highlight.js 每次调用是无状态的，所以目前是空操作——为 API 一致性保留）
     void this.prefixContent
 
     const maxDigits = String(maxLineNumber(this.hunk)).length
@@ -887,8 +892,9 @@ export class ColorDiff {
     let newLine = this.hunk.newStart
     const effectiveWidth = Math.max(1, width - maxDigits - 2 - 1)
 
-    // First pass: assign markers + line numbers
+    // 第一遍：分配标记 + 行号
     type Entry = { lineNumber: number; marker: Marker; code: string }
+    /** 执行 entries 对应的业务处理。 */
     const entries: Entry[] = this.hunk.lines.map(rawLine => {
       const marker = parseMarker(rawLine.slice(0, 1))
       const code = rawLine.slice(1)
@@ -909,9 +915,11 @@ export class ColorDiff {
       return { lineNumber, marker, code }
     })
 
-    // Word-diff ranges (skip when dim — too loud)
+    // 单词差异范围（跳过 dim 时 — 太嘈杂）
+    /** 执行 ranges 对应的业务处理。 */
     const ranges: Range[][] = entries.map(() => [])
     if (!dim) {
+      /** 执行 markers 对应的业务处理。 */
       const markers = entries.map(e => e.marker)
       for (const [delIdx, addIdx] of findAdjacentPairs(markers)) {
         const [delR, addR] = wordDiffStrings(
@@ -923,7 +931,7 @@ export class ColorDiff {
       }
     }
 
-    // Second pass: highlight + transform pipeline
+    // 第二遍：高亮 + 变换流水线
     const out: string[] = []
     for (let i = 0; i < entries.length; i++) {
       const { lineNumber, marker, code } = entries[i]!
@@ -951,16 +959,18 @@ export class ColorFile {
   private code: string
   private filePath: string
 
+  /** 初始化当前实例及其必要状态。 */
   constructor(code: string, filePath: string) {
     this.code = code
     this.filePath = filePath
   }
 
+  /** 渲染当前视图。 */
   render(themeName: string, width: number, dim: boolean): string[] | null {
     const mode = detectColorMode(themeName)
     const theme = buildTheme(themeName, mode)
     const lines = this.code.split('\n')
-    // Rust .lines() drops trailing empty line from trailing \n
+    // Rust 的 .lines() 会去掉尾部 \n 产生的尾部空行
     if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
     const firstLine = lines[0] ?? null
     const lang = detectLanguage(this.filePath, firstLine)
@@ -982,18 +992,19 @@ export class ColorFile {
   }
 }
 
+/** 获取 get Syntax Theme 对应的数据或状态。 */
 export function getSyntaxTheme(themeName: string): SyntaxTheme {
-  // highlight.js has no bat theme set, so env vars can't select alternate
-  // syntect themes. We still report the env var if set, for diagnostics.
+  // highlight.js 没有设置 bat 主题，因此环境变量无法选择替代的 syntect 主题。如果设置了环境变量，我们仍然报告它，用于诊断。
   const envTheme =
     process.env.CLAUDE_CODE_SYNTAX_HIGHLIGHT ?? process.env.BAT_THEME
   void envTheme
   return { theme: defaultSyntaxThemeName(themeName), source: null }
 }
 
-// Lazy loader to match vendor/color-diff-src/index.ts API
+// 延迟加载器以匹配 vendor/color-diff-src/index.ts API
 let cachedModule: NativeModule | null = null
 
+/** 获取 get Native Module 对应的数据或状态。 */
 export function getNativeModule(): NativeModule | null {
   if (cachedModule) return cachedModule
   cachedModule = { ColorDiff, ColorFile, getSyntaxTheme }
@@ -1002,7 +1013,7 @@ export function getNativeModule(): NativeModule | null {
 
 export type { ColorDiff as ColorDiffClass, ColorFile as ColorFileClass }
 
-// Exported for testing
+// 导出用于测试
 export const __test = {
   tokenize,
   findAdjacentPairs,

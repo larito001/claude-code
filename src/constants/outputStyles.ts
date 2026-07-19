@@ -15,9 +15,9 @@ export type OutputStyleConfig = {
   source: SettingSource | 'built-in' | 'plugin'
   keepCodingInstructions?: boolean
   /**
-   * If true, this output style will be automatically applied when the plugin is enabled.
-   * Only applicable to plugin output styles.
-   * When multiple plugins have forced output styles, only one is chosen (logged via debug).
+   * 如果为true，当插件启用时，此输出样式将自动应用。
+   * 仅适用于插件输出样式。
+   * 当多个插件具有强制输出样式时，只会选择一个（通过调试记录）。
    */
   forceForPlugin?: boolean
 }
@@ -26,7 +26,7 @@ export type OutputStyles = {
   readonly [K in OutputStyle]: OutputStyleConfig | null
 }
 
-// Used in both the Explanatory and Learning modes
+// 在解释模式和学习模式中均使用
 const EXPLANATORY_FEATURE_PROMPT = `
 ## Insights
 In order to encourage learning, before and after writing code, always provide brief educational explanations about implementation choices using (with backticks):
@@ -134,28 +134,32 @@ ${EXPLANATORY_FEATURE_PROMPT}`,
   },
 }
 
+/** 获取 get All Output Styles 对应的数据或状态。 */
 export const getAllOutputStyles = memoize(async function getAllOutputStyles(
   cwd: string,
 ): Promise<{ [styleName: string]: OutputStyleConfig | null }> {
   const customStyles = await getOutputStyleDirStyles(cwd)
   const pluginStyles = await loadPluginOutputStyles()
 
-  // Start with built-in modes
+  // 从内置模式开始
   const allStyles = {
     ...OUTPUT_STYLE_CONFIG,
   }
 
+  /** 执行 managed Styles 对应的业务处理。 */
   const managedStyles = customStyles.filter(
     style => style.source === 'policySettings',
   )
+  /** 执行 user Styles 对应的业务处理。 */
   const userStyles = customStyles.filter(
     style => style.source === 'userSettings',
   )
+  /** 执行 project Styles 对应的业务处理。 */
   const projectStyles = customStyles.filter(
     style => style.source === 'projectSettings',
   )
 
-  // Add styles in priority order (lowest to highest): built-in, plugin, managed, user, project
+  // 按优先级顺序（从低到高）添加样式：内置、插件、托管、用户、项目
   const styleGroups = [pluginStyles, userStyles, projectStyles, managedStyles]
 
   for (const styles of styleGroups) {
@@ -174,14 +178,17 @@ export const getAllOutputStyles = memoize(async function getAllOutputStyles(
   return allStyles
 })
 
+/** 删除或清理 clear All Output Styles Cache 对应的数据或状态。 */
 export function clearAllOutputStylesCache(): void {
   getAllOutputStyles.cache?.clear?.()
 }
 
+/** 获取 get Output Style Config 对应的数据或状态。 */
 export async function getOutputStyleConfig(): Promise<OutputStyleConfig | null> {
   const allStyles = await getAllOutputStyles(getCwd())
 
-  // Check for forced plugin output styles
+  // 检查强制插件输出样式
+  /** 执行 forced Styles 对应的业务处理。 */
   const forcedStyles = Object.values(allStyles).filter(
     (style): style is OutputStyleConfig =>
       style !== null &&
@@ -210,6 +217,7 @@ export async function getOutputStyleConfig(): Promise<OutputStyleConfig | null> 
   return allStyles[outputStyle] ?? null
 }
 
+/** 判断是否满足 has Custom Output Style 对应的数据或状态。 */
 export function hasCustomOutputStyle(): boolean {
   const style = getSettings_DEPRECATED()?.outputStyle
   return style !== undefined && style !== DEFAULT_OUTPUT_STYLE_NAME

@@ -21,6 +21,7 @@ const CJK_PATTERN = /[\u3400-\u9fff]/u
 const ENGLISH_WORD_PATTERN = /\b[A-Za-z]{3,}\b/u
 const COMMENT_DIRECTIVE_PATTERN = /^(?:\/\s*)?(?:eslint|biome|prettier|stylelint|istanbul|c8|@ts-|webpack|vite|sourceMappingURL|#(?:end)?region)\b/iu
 const REFERENCE_DIRECTIVE_PATTERN = /^\/\s*<reference\b/iu
+const STANDALONE_JSDOC_TAG_PATTERN = /^@(?:internal|public|private|protected|packageDocumentation|inheritdoc)\s*$/iu
 
 function getScopePrefixes(): string[] {
   const scopeArgument = process.argv.find(argument => argument.startsWith('--scope='))
@@ -195,6 +196,7 @@ function isToolDirective(comment: string): boolean {
   return (
     COMMENT_DIRECTIVE_PATTERN.test(normalized) ||
     REFERENCE_DIRECTIVE_PATTERN.test(normalized) ||
+    STANDALONE_JSDOC_TAG_PATTERN.test(normalized) ||
     /^https?:\/\//iu.test(normalized) ||
     /^(?:SPDX-License-Identifier|Copyright)\b/iu.test(normalized)
   )
@@ -205,20 +207,20 @@ function auditEnglishComments(
   sourceFile: ts.SourceFile,
   sourceText: string,
 ): void {
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    false,
-    sourceFile.languageVariant,
-    sourceText,
-  )
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (
-      token !== ts.SyntaxKind.SingleLineCommentTrivia &&
-      token !== ts.SyntaxKind.MultiLineCommentTrivia
-    ) {
-      continue
+  const ranges = new Map<string, ts.CommentRange>()
+  function collect(node: ts.Node): void {
+    for (const range of ts.getLeadingCommentRanges(sourceText, node.getFullStart()) ?? []) {
+      ranges.set(`${range.pos}:${range.end}`, range)
     }
-    const comment = scanner.getTokenText()
+    for (const range of ts.getTrailingCommentRanges(sourceText, node.getEnd()) ?? []) {
+      ranges.set(`${range.pos}:${range.end}`, range)
+    }
+    ts.forEachChild(node, collect)
+  }
+  collect(sourceFile)
+
+  for (const range of [...ranges.values()].toSorted((left, right) => left.pos - right.pos)) {
+    const comment = sourceText.slice(range.pos, range.end)
     if (
       !ENGLISH_WORD_PATTERN.test(comment) ||
       CJK_PATTERN.test(comment) ||
@@ -228,7 +230,7 @@ function auditEnglishComments(
     }
     result.englishComments.push({
       file: relative(resolve(SOURCE_ROOT, '..'), sourceFile.fileName).replaceAll('\\', '/'),
-      line: lineOf(sourceFile, scanner.getTokenPos()),
+      line: lineOf(sourceFile, range.pos),
       subject: normalizeComment(comment).replace(/\s+/gu, ' ').slice(0, 120),
     })
   }

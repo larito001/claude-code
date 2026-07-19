@@ -1,19 +1,20 @@
 /**
- * SDK Core Schemas - Zod schemas for serializable SDK data types.
+ * SDK Core Schemas - 可序列化 SDK 数据类型的 Zod 模式。
  *
- * These schemas are the single source of truth for SDK data types.
- * TypeScript types are generated from these schemas and committed for IDE support.
+ * 这些模式是 SDK 数据类型的唯一事实来源。
+ * TypeScript 类型基于这些模式生成并提交，以支持 IDE。
  *
- * @see scripts/generate-sdk-types.ts for type generation
+ * @see scripts/generate-sdk-types.ts 类型生成
  */
 
 import { z } from 'zod/v4'
 import { lazySchema } from '../../utils/lazySchema.js'
 
 // ============================================================================
-// Usage & Model Types
+// 使用与模型类型
 // ============================================================================
 
+/** 渲染 Model Usage Schema 组件。 */
 export const ModelUsageSchema = lazySchema(() =>
   z.object({
     inputTokens: z.number(),
@@ -28,17 +29,20 @@ export const ModelUsageSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Output Format Types
+// 输出格式类型
 // ============================================================================
 
+/** 渲染 Output Format Type Schema 组件。 */
 export const OutputFormatTypeSchema = lazySchema(() => z.literal('json_schema'))
 
+/** 渲染 Base Output Format Schema 组件。 */
 export const BaseOutputFormatSchema = lazySchema(() =>
   z.object({
     type: OutputFormatTypeSchema(),
   }),
 )
 
+/** 渲染 Json Schema Output Format Schema 组件。 */
 export const JsonSchemaOutputFormatSchema = lazySchema(() =>
   z.object({
     type: z.literal('json_schema'),
@@ -46,26 +50,31 @@ export const JsonSchemaOutputFormatSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Output Format Schema 组件。 */
 export const OutputFormatSchema = lazySchema(() =>
   JsonSchemaOutputFormatSchema(),
 )
 
 // ============================================================================
-// Config Types
+// 配置类型
 // ============================================================================
 
+/** 渲染 Api Key Source Schema 组件。 */
 export const ApiKeySourceSchema = lazySchema(() =>
   z.enum(['user', 'project', 'org', 'temporary', 'oauth']),
 )
 
+/** 渲染 Config Scope Schema 组件。 */
 export const ConfigScopeSchema = lazySchema(() =>
   z.enum(['local', 'user', 'project']).describe('Config scope for settings.'),
 )
 
+/** 渲染 Sdk Beta Schema 组件。 */
 export const SdkBetaSchema = lazySchema(() =>
   z.literal('context-1m-2025-08-07'),
 )
 
+/** 渲染 Thinking Adaptive Schema 组件。 */
 export const ThinkingAdaptiveSchema = lazySchema(() =>
   z
     .object({
@@ -74,6 +83,7 @@ export const ThinkingAdaptiveSchema = lazySchema(() =>
     .describe('Claude decides when and how much to think (Opus 4.6+).'),
 )
 
+/** 渲染 Thinking Enabled Schema 组件。 */
 export const ThinkingEnabledSchema = lazySchema(() =>
   z
     .object({
@@ -83,6 +93,7 @@ export const ThinkingEnabledSchema = lazySchema(() =>
     .describe('Fixed thinking token budget (older models)'),
 )
 
+/** 渲染 Thinking Disabled Schema 组件。 */
 export const ThinkingDisabledSchema = lazySchema(() =>
   z
     .object({
@@ -91,6 +102,7 @@ export const ThinkingDisabledSchema = lazySchema(() =>
     .describe('No extended thinking'),
 )
 
+/** 渲染 Thinking Config Schema 组件。 */
 export const ThinkingConfigSchema = lazySchema(() =>
   z
     .union([
@@ -104,9 +116,10 @@ export const ThinkingConfigSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// MCP Server Config Types (serializable only)
+// MCP 服务器配置类型（仅可序列化）
 // ============================================================================
 
+/** 渲染 Mcp Stdio Server Config Schema 组件。 */
 export const McpStdioServerConfigSchema = lazySchema(() =>
   z.object({
     type: z.literal('stdio').optional(), // Optional for backwards compatibility
@@ -116,6 +129,7 @@ export const McpStdioServerConfigSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Mcp SSE Server Config Schema 组件。 */
 export const McpSSEServerConfigSchema = lazySchema(() =>
   z.object({
     type: z.literal('sse'),
@@ -124,6 +138,7 @@ export const McpSSEServerConfigSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Mcp Http Server Config Schema 组件。 */
 export const McpHttpServerConfigSchema = lazySchema(() =>
   z.object({
     type: z.literal('http'),
@@ -132,6 +147,7 @@ export const McpHttpServerConfigSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Mcp Sdk Server Config Schema 组件。 */
 export const McpSdkServerConfigSchema = lazySchema(() =>
   z.object({
     type: z.literal('sdk'),
@@ -139,6 +155,7 @@ export const McpSdkServerConfigSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Mcp Server Config For Process Transport Schema 组件。 */
 export const McpServerConfigForProcessTransportSchema = lazySchema(() =>
   z.union([
     McpStdioServerConfigSchema(),
@@ -148,10 +165,12 @@ export const McpServerConfigForProcessTransportSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 Mcp Server Status Config Schema 组件。 */
 export const McpServerStatusConfigSchema = lazySchema(() =>
   McpServerConfigForProcessTransportSchema(),
 )
 
+/** 渲染 Mcp Server Status Schema 组件。 */
 export const McpServerStatusSchema = lazySchema(() =>
   z
     .object({
@@ -207,6 +226,7 @@ export const McpServerStatusSchema = lazySchema(() =>
     .describe('Status information for an MCP server connection.'),
 )
 
+/** 渲染 Mcp Set Servers Result Schema 组件。 */
 export const McpSetServersResultSchema = lazySchema(() =>
   z
     .object({
@@ -224,9 +244,10 @@ export const McpSetServersResultSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Permission Types
+// 权限类型
 // ============================================================================
 
+/** 渲染 Permission Update Destination Schema 组件。 */
 export const PermissionUpdateDestinationSchema = lazySchema(() =>
   z.enum([
     'userSettings',
@@ -237,10 +258,12 @@ export const PermissionUpdateDestinationSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 Permission Behavior Schema 组件。 */
 export const PermissionBehaviorSchema = lazySchema(() =>
   z.enum(['allow', 'deny', 'ask']),
 )
 
+/** 渲染 Permission Rule Value Schema 组件。 */
 export const PermissionRuleValueSchema = lazySchema(() =>
   z.object({
     toolName: z.string(),
@@ -248,6 +271,7 @@ export const PermissionRuleValueSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Permission Update Schema 组件。 */
 export const PermissionUpdateSchema = lazySchema(() =>
   z.discriminatedUnion('type', [
     z.object({
@@ -270,6 +294,7 @@ export const PermissionUpdateSchema = lazySchema(() =>
     }),
     z.object({
       type: z.literal('setMode'),
+      /** 执行 mode 对应的业务处理。 */
       mode: z.lazy(() => PermissionModeSchema()),
       destination: PermissionUpdateDestinationSchema(),
     }),
@@ -286,11 +311,12 @@ export const PermissionUpdateSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 Permission Result Schema 组件。 */
 export const PermissionResultSchema = lazySchema(() =>
   z.union([
     z.object({
       behavior: z.literal('allow'),
-      // Optional - may not be provided if hook sets permission without input modification
+      // 可选——如果 hook 在不修改输入的情况下设置权限，则可能不提供
       updatedInput: z.record(z.string(), z.unknown()).optional(),
       updatedPermissions: z.array(PermissionUpdateSchema()).optional(),
       toolUseID: z.string().optional(),
@@ -304,6 +330,7 @@ export const PermissionResultSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 Permission Mode Schema 组件。 */
 export const PermissionModeSchema = lazySchema(() =>
   z
     .enum(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk'])
@@ -319,7 +346,7 @@ export const PermissionModeSchema = lazySchema(() =>
 
 
 // ============================================================================
-// Hook Types
+// Hook 类型
 // ============================================================================
 
 export const HOOK_EVENTS = [
@@ -352,8 +379,10 @@ export const HOOK_EVENTS = [
   'FileChanged',
 ] as const
 
+/** 渲染 Hook Event Schema 组件。 */
 export const HookEventSchema = lazySchema(() => z.enum(HOOK_EVENTS))
 
+/** 渲染 Base Hook Input Schema 组件。 */
 export const BaseHookInputSchema = lazySchema(() =>
   z.object({
     session_id: z.string(),
@@ -380,7 +409,7 @@ export const BaseHookInputSchema = lazySchema(() =>
   }),
 )
 
-// Use .and() instead of .extend() to preserve BaseHookInput & {...} in generated types
+// 使用 .and() 而非 .extend() 以在生成类型中保留 BaseHookInput & {...}
 export const PreToolUseHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -392,6 +421,7 @@ export const PreToolUseHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Permission Request Hook Input Schema 组件。 */
 export const PermissionRequestHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -403,6 +433,7 @@ export const PermissionRequestHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Post Tool Use Hook Input Schema 组件。 */
 export const PostToolUseHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -415,6 +446,7 @@ export const PostToolUseHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Post Tool Use Failure Hook Input Schema 组件。 */
 export const PostToolUseFailureHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -428,6 +460,7 @@ export const PostToolUseFailureHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Permission Denied Hook Input Schema 组件。 */
 export const PermissionDeniedHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -440,6 +473,7 @@ export const PermissionDeniedHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Notification Hook Input Schema 组件。 */
 export const NotificationHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -451,15 +485,18 @@ export const NotificationHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 User Prompt Submit Hook Input Schema 组件。 */
 export const UserPromptSubmitHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
       hook_event_name: z.literal('UserPromptSubmit'),
       prompt: z.string(),
+      session_title: z.string().optional(),
     }),
   ),
 )
 
+/** 渲染 Session Start Hook Input Schema 组件。 */
 export const SessionStartHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -471,6 +508,7 @@ export const SessionStartHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Setup Hook Input Schema 组件。 */
 export const SetupHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -480,6 +518,7 @@ export const SetupHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Stop Hook Input Schema 组件。 */
 export const StopHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -496,6 +535,7 @@ export const StopHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Stop Failure Hook Input Schema 组件。 */
 export const StopFailureHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -507,6 +547,7 @@ export const StopFailureHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Subagent Start Hook Input Schema 组件。 */
 export const SubagentStartHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -517,6 +558,7 @@ export const SubagentStartHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Subagent Stop Hook Input Schema 组件。 */
 export const SubagentStopHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -536,6 +578,7 @@ export const SubagentStopHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Pre Compact Hook Input Schema 组件。 */
 export const PreCompactHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -546,6 +589,7 @@ export const PreCompactHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Post Compact Hook Input Schema 组件。 */
 export const PostCompactHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -558,6 +602,7 @@ export const PostCompactHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Teammate Idle Hook Input Schema 组件。 */
 export const TeammateIdleHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -568,6 +613,7 @@ export const TeammateIdleHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Task Created Hook Input Schema 组件。 */
 export const TaskCreatedHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -581,6 +627,7 @@ export const TaskCreatedHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Task Completed Hook Input Schema 组件。 */
 export const TaskCompletedHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -594,6 +641,7 @@ export const TaskCompletedHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Elicitation Hook Input Schema 组件。 */
 export const ElicitationHookInputSchema = lazySchema(() =>
   BaseHookInputSchema()
     .and(
@@ -612,6 +660,7 @@ export const ElicitationHookInputSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 Elicitation Result Hook Input Schema 组件。 */
 export const ElicitationResultHookInputSchema = lazySchema(() =>
   BaseHookInputSchema()
     .and(
@@ -637,6 +686,7 @@ export const CONFIG_CHANGE_SOURCES = [
   'skills',
 ] as const
 
+/** 渲染 Config Change Hook Input Schema 组件。 */
 export const ConfigChangeHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -662,6 +712,7 @@ export const INSTRUCTIONS_MEMORY_TYPES = [
   'Managed',
 ] as const
 
+/** 渲染 Instructions Loaded Hook Input Schema 组件。 */
 export const InstructionsLoadedHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -676,6 +727,7 @@ export const InstructionsLoadedHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Worktree Create Hook Input Schema 组件。 */
 export const WorktreeCreateHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -685,6 +737,7 @@ export const WorktreeCreateHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Worktree Remove Hook Input Schema 组件。 */
 export const WorktreeRemoveHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -694,6 +747,7 @@ export const WorktreeRemoveHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Cwd Changed Hook Input Schema 组件。 */
 export const CwdChangedHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -704,6 +758,7 @@ export const CwdChangedHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 File Changed Hook Input Schema 组件。 */
 export const FileChangedHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -722,8 +777,10 @@ export const EXIT_REASONS = [
   'bypass_permissions_disabled',
 ] as const
 
+/** 渲染 Exit Reason Schema 组件。 */
 export const ExitReasonSchema = lazySchema(() => z.enum(EXIT_REASONS))
 
+/** 渲染 Session End Hook Input Schema 组件。 */
 export const SessionEndHookInputSchema = lazySchema(() =>
   BaseHookInputSchema().and(
     z.object({
@@ -733,6 +790,7 @@ export const SessionEndHookInputSchema = lazySchema(() =>
   ),
 )
 
+/** 渲染 Hook Input Schema 组件。 */
 export const HookInputSchema = lazySchema(() =>
   z.union([
     PreToolUseHookInputSchema(),
@@ -765,6 +823,7 @@ export const HookInputSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 Async Hook JSON Output Schema 组件。 */
 export const AsyncHookJSONOutputSchema = lazySchema(() =>
   z.object({
     async: z.literal(true),
@@ -772,23 +831,29 @@ export const AsyncHookJSONOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Pre Tool Use Hook Specific Output Schema 组件。 */
 export const PreToolUseHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('PreToolUse'),
-    permissionDecision: PermissionBehaviorSchema().optional(),
+    permissionDecision: z
+      .enum(['allow', 'deny', 'ask', 'defer'])
+      .optional(),
     permissionDecisionReason: z.string().optional(),
     updatedInput: z.record(z.string(), z.unknown()).optional(),
     additionalContext: z.string().optional(),
   }),
 )
 
+/** 渲染 User Prompt Submit Hook Specific Output Schema 组件。 */
 export const UserPromptSubmitHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('UserPromptSubmit'),
     additionalContext: z.string().optional(),
+    sessionTitle: z.string().optional(),
   }),
 )
 
+/** 渲染 Session Start Hook Specific Output Schema 组件。 */
 export const SessionStartHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('SessionStart'),
@@ -798,6 +863,7 @@ export const SessionStartHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Setup Hook Specific Output Schema 组件。 */
 export const SetupHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('Setup'),
@@ -805,6 +871,7 @@ export const SetupHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Subagent Start Hook Specific Output Schema 组件。 */
 export const SubagentStartHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('SubagentStart'),
@@ -812,6 +879,7 @@ export const SubagentStartHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Post Tool Use Hook Specific Output Schema 组件。 */
 export const PostToolUseHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('PostToolUse'),
@@ -820,6 +888,7 @@ export const PostToolUseHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Post Tool Use Failure Hook Specific Output Schema 组件。 */
 export const PostToolUseFailureHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('PostToolUseFailure'),
@@ -827,6 +896,7 @@ export const PostToolUseFailureHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Permission Denied Hook Specific Output Schema 组件。 */
 export const PermissionDeniedHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('PermissionDenied'),
@@ -834,6 +904,7 @@ export const PermissionDeniedHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Notification Hook Specific Output Schema 组件。 */
 export const NotificationHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('Notification'),
@@ -841,6 +912,7 @@ export const NotificationHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Permission Request Hook Specific Output Schema 组件。 */
 export const PermissionRequestHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('PermissionRequest'),
@@ -859,6 +931,7 @@ export const PermissionRequestHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Cwd Changed Hook Specific Output Schema 组件。 */
 export const CwdChangedHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('CwdChanged'),
@@ -866,6 +939,7 @@ export const CwdChangedHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 File Changed Hook Specific Output Schema 组件。 */
 export const FileChangedHookSpecificOutputSchema = lazySchema(() =>
   z.object({
     hookEventName: z.literal('FileChanged'),
@@ -873,6 +947,7 @@ export const FileChangedHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Sync Hook JSON Output Schema 组件。 */
 export const SyncHookJSONOutputSchema = lazySchema(() =>
   z.object({
     continue: z.boolean().optional(),
@@ -903,6 +978,7 @@ export const SyncHookJSONOutputSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Elicitation Hook Specific Output Schema 组件。 */
 export const ElicitationHookSpecificOutputSchema = lazySchema(() =>
   z
     .object({
@@ -915,6 +991,7 @@ export const ElicitationHookSpecificOutputSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 Elicitation Result Hook Specific Output Schema 组件。 */
 export const ElicitationResultHookSpecificOutputSchema = lazySchema(() =>
   z
     .object({
@@ -927,6 +1004,7 @@ export const ElicitationResultHookSpecificOutputSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 Worktree Create Hook Specific Output Schema 组件。 */
 export const WorktreeCreateHookSpecificOutputSchema = lazySchema(() =>
   z
     .object({
@@ -938,10 +1016,12 @@ export const WorktreeCreateHookSpecificOutputSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 Hook JSON Output Schema 组件。 */
 export const HookJSONOutputSchema = lazySchema(() =>
   z.union([AsyncHookJSONOutputSchema(), SyncHookJSONOutputSchema()]),
 )
 
+/** 渲染 Prompt Request Option Schema 组件。 */
 export const PromptRequestOptionSchema = lazySchema(() =>
   z.object({
     key: z
@@ -955,6 +1035,7 @@ export const PromptRequestOptionSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Prompt Request Schema 组件。 */
 export const PromptRequestSchema = lazySchema(() =>
   z.object({
     prompt: z
@@ -969,6 +1050,7 @@ export const PromptRequestSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 Prompt Response Schema 组件。 */
 export const PromptResponseSchema = lazySchema(() =>
   z.object({
     prompt_response: z
@@ -979,9 +1061,10 @@ export const PromptResponseSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Skill/Command Types
+// 技能/命令类型
 // ============================================================================
 
+/** 渲染 Slash Command Schema 组件。 */
 export const SlashCommandSchema = lazySchema(() =>
   z
     .object({
@@ -996,6 +1079,7 @@ export const SlashCommandSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 Agent Info Schema 组件。 */
 export const AgentInfoSchema = lazySchema(() =>
   z
     .object({
@@ -1013,6 +1097,7 @@ export const AgentInfoSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 Model Info Schema 组件。 */
 export const ModelInfoSchema = lazySchema(() =>
   z
     .object({
@@ -1047,6 +1132,7 @@ export const ModelInfoSchema = lazySchema(() =>
     .describe('Information about an available model.'),
 )
 
+/** 渲染 Api Backend Info Schema 组件。 */
 export const ApiBackendInfoSchema = lazySchema(() =>
   z
     .object({
@@ -1060,9 +1146,10 @@ export const ApiBackendInfoSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Agent Definition Types
+// Agent 定义类型
 // ============================================================================
 
+/** 渲染 Agent Mcp Server Spec Schema 组件。 */
 export const AgentMcpServerSpecSchema = lazySchema(() =>
   z.union([
     z.string(),
@@ -1070,6 +1157,7 @@ export const AgentMcpServerSpecSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 Agent Definition Schema 组件。 */
 export const AgentDefinitionSchema = lazySchema(() =>
   z
     .object({
@@ -1146,9 +1234,10 @@ export const AgentDefinitionSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Settings Types
+// 设置类型
 // ============================================================================
 
+/** 渲染 Setting Source Schema 组件。 */
 export const SettingSourceSchema = lazySchema(() =>
   z
     .enum(['user', 'project', 'local'])
@@ -1160,6 +1249,7 @@ export const SettingSourceSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 Sdk Plugin Config Schema 组件。 */
 export const SdkPluginConfigSchema = lazySchema(() =>
   z
     .object({
@@ -1174,9 +1264,10 @@ export const SdkPluginConfigSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Rewind Types
+// 回放类型
 // ============================================================================
 
+/** 渲染 Rewind Files Result Schema 组件。 */
 export const RewindFilesResultSchema = lazySchema(() =>
   z
     .object({
@@ -1190,33 +1281,34 @@ export const RewindFilesResultSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Opaque External Payload Schemas
+// 不透明外部负载模式
 // ============================================================================
 //
-// These schemas intentionally accept opaque values owned by external packages.
-// The generation script uses TypeOverrideMap to output the correct TS type references.
-// Keeping runtime validation open here preserves forward compatibility while the
-// generated TypeScript surface retains the precise external types.
+// 这些模式有意接受外部包拥有的不透明值。
+// 生成脚本使用 TypeOverrideMap 输出正确的 TS 类型引用。
+// 在此处保持运行时验证开放，以保持向前兼容性，同时
+// 生成的 TypeScript 接口保留精确的外部类型。
 
-/** Placeholder for APIUserMessage from @anthropic-ai/sdk */
+/** 来自 @anthropic-ai/sdk 的 APIUserMessage 占位符 */
 export const APIUserMessagePlaceholder = lazySchema(() => z.unknown())
 
-/** Placeholder for APIAssistantMessage from @anthropic-ai/sdk */
+/** 来自 @anthropic-ai/sdk 的 APIAssistantMessage 占位符 */
 export const APIAssistantMessagePlaceholder = lazySchema(() => z.unknown())
 
-/** Placeholder for RawMessageStreamEvent from @anthropic-ai/sdk */
+/** 来自 @anthropic-ai/sdk 的 RawMessageStreamEvent 占位符 */
 export const RawMessageStreamEventPlaceholder = lazySchema(() => z.unknown())
 
-/** Placeholder for UUID from crypto */
+/** 来自 crypto 的 UUID 占位符 */
 export const UUIDPlaceholder = lazySchema(() => z.string())
 
-/** Placeholder for NonNullableUsage (mapped type over Usage) */
+/** NonNullableUsage 占位符（基于 Usage 的映射类型） */
 export const NonNullableUsagePlaceholder = lazySchema(() => z.unknown())
 
 // ============================================================================
-// SDK Message Types
+// SDK 消息类型
 // ============================================================================
 
+/** 渲染 SDK Assistant Message Error Schema 组件。 */
 export const SDKAssistantMessageErrorSchema = lazySchema(() =>
   z.enum([
     'authentication_failed',
@@ -1229,11 +1321,12 @@ export const SDKAssistantMessageErrorSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 SDK Status Schema 组件。 */
 export const SDKStatusSchema = lazySchema(() =>
   z.union([z.literal('compacting'), z.null()]),
 )
 
-// SDKUserMessage content without uuid/session_id
+// 不带 uuid/session_id 的 SDKUserMessage 内容
 const SDKUserMessageContentSchema = lazySchema(() =>
   z.object({
     type: z.literal('user'),
@@ -1251,6 +1344,7 @@ const SDKUserMessageContentSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK User Message Schema 组件。 */
 export const SDKUserMessageSchema = lazySchema(() =>
   SDKUserMessageContentSchema().extend({
     uuid: UUIDPlaceholder().optional(),
@@ -1258,6 +1352,7 @@ export const SDKUserMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK User Message Replay Schema 组件。 */
 export const SDKUserMessageReplaySchema = lazySchema(() =>
   SDKUserMessageContentSchema().extend({
     uuid: UUIDPlaceholder(),
@@ -1266,6 +1361,7 @@ export const SDKUserMessageReplaySchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Assistant Message Schema 组件。 */
 export const SDKAssistantMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('assistant'),
@@ -1277,6 +1373,7 @@ export const SDKAssistantMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Streamlined Text Message Schema 组件。 */
 export const SDKStreamlinedTextMessageSchema = lazySchema(() =>
   z
     .object({
@@ -1292,6 +1389,7 @@ export const SDKStreamlinedTextMessageSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Streamlined Tool Use Summary Message Schema 组件。 */
 export const SDKStreamlinedToolUseSummaryMessageSchema = lazySchema(() =>
   z
     .object({
@@ -1307,6 +1405,7 @@ export const SDKStreamlinedToolUseSummaryMessageSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Permission Denial Schema 组件。 */
 export const SDKPermissionDenialSchema = lazySchema(() =>
   z.object({
     tool_name: z.string(),
@@ -1315,6 +1414,7 @@ export const SDKPermissionDenialSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Result Success Schema 组件。 */
 export const SDKResultSuccessSchema = lazySchema(() =>
   z.object({
     type: z.literal('result'),
@@ -1336,6 +1436,7 @@ export const SDKResultSuccessSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Result Error Schema 组件。 */
 export const SDKResultErrorSchema = lazySchema(() =>
   z.object({
     type: z.literal('result'),
@@ -1361,10 +1462,12 @@ export const SDKResultErrorSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Result Message Schema 组件。 */
 export const SDKResultMessageSchema = lazySchema(() =>
   z.union([SDKResultSuccessSchema(), SDKResultErrorSchema()]),
 )
 
+/** 渲染 SDK System Message Schema 组件。 */
 export const SDKSystemMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1404,6 +1507,7 @@ export const SDKSystemMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Partial Assistant Message Schema 组件。 */
 export const SDKPartialAssistantMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('stream_event'),
@@ -1414,6 +1518,7 @@ export const SDKPartialAssistantMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Compact Boundary Message Schema 组件。 */
 export const SDKCompactBoundaryMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1441,6 +1546,7 @@ export const SDKCompactBoundaryMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Status Message Schema 组件。 */
 export const SDKStatusMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1452,6 +1558,7 @@ export const SDKStatusMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Post Turn Summary Message Schema 组件。 */
 export const SDKPostTurnSummaryMessageSchema = lazySchema(() =>
   z
     .object({
@@ -1480,6 +1587,7 @@ export const SDKPostTurnSummaryMessageSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDKAPI Retry Message Schema 组件。 */
 export const SDKAPIRetryMessageSchema = lazySchema(() =>
   z
     .object({
@@ -1498,6 +1606,7 @@ export const SDKAPIRetryMessageSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Local Command Output Message Schema 组件。 */
 export const SDKLocalCommandOutputMessageSchema = lazySchema(() =>
   z
     .object({
@@ -1512,6 +1621,7 @@ export const SDKLocalCommandOutputMessageSchema = lazySchema(() =>
     ),
 )
 
+/** 渲染 SDK Hook Started Message Schema 组件。 */
 export const SDKHookStartedMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1524,6 +1634,7 @@ export const SDKHookStartedMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Hook Progress Message Schema 组件。 */
 export const SDKHookProgressMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1539,6 +1650,7 @@ export const SDKHookProgressMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Hook Response Message Schema 组件。 */
 export const SDKHookResponseMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1556,6 +1668,7 @@ export const SDKHookResponseMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Tool Progress Message Schema 组件。 */
 export const SDKToolProgressMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('tool_progress'),
@@ -1569,6 +1682,7 @@ export const SDKToolProgressMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Auth Status Message Schema 组件。 */
 export const SDKAuthStatusMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('auth_status'),
@@ -1580,6 +1694,7 @@ export const SDKAuthStatusMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Files Persisted Event Schema 组件。 */
 export const SDKFilesPersistedEventSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1602,6 +1717,7 @@ export const SDKFilesPersistedEventSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Task Notification Message Schema 组件。 */
 export const SDKTaskNotificationMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1623,6 +1739,7 @@ export const SDKTaskNotificationMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Task Started Message Schema 组件。 */
 export const SDKTaskStartedMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1637,6 +1754,7 @@ export const SDKTaskStartedMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Session State Changed Message Schema 组件。 */
 export const SDKSessionStateChangedMessageSchema = lazySchema(() =>
   z
     .object({
@@ -1652,6 +1770,7 @@ export const SDKSessionStateChangedMessageSchema = lazySchema(() =>
 )
 
 
+/** 渲染 SDK Task Progress Message Schema 组件。 */
 export const SDKTaskProgressMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1671,6 +1790,7 @@ export const SDKTaskProgressMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Tool Use Summary Message Schema 组件。 */
 export const SDKToolUseSummaryMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('tool_use_summary'),
@@ -1681,6 +1801,7 @@ export const SDKToolUseSummaryMessageSchema = lazySchema(() =>
   }),
 )
 
+/** 渲染 SDK Elicitation Complete Message Schema 组件。 */
 export const SDKElicitationCompleteMessageSchema = lazySchema(() =>
   z
     .object({
@@ -1696,7 +1817,9 @@ export const SDKElicitationCompleteMessageSchema = lazySchema(() =>
     ),
 )
 
-/** @internal */
+/** 渲染 SDK Prompt Suggestion Message Schema 组件。
+ * @internal
+ */
 export const SDKPromptSuggestionMessageSchema = lazySchema(() =>
   z
     .object({
@@ -1711,9 +1834,10 @@ export const SDKPromptSuggestionMessageSchema = lazySchema(() =>
 )
 
 // ============================================================================
-// Session Listing Types
+// 会话列表类型
 // ============================================================================
 
+/** 渲染 SDK Session Info Schema 组件。 */
 export const SDKSessionInfoSchema = lazySchema(() =>
   z
     .object({
@@ -1756,6 +1880,7 @@ export const SDKSessionInfoSchema = lazySchema(() =>
     .describe('Session metadata returned by listSessions and getSessionInfo.'),
 )
 
+/** 渲染 SDK Message Schema 组件。 */
 export const SDKMessageSchema = lazySchema(() =>
   z.union([
     SDKAssistantMessageSchema(),
@@ -1784,6 +1909,7 @@ export const SDKMessageSchema = lazySchema(() =>
   ]),
 )
 
+/** 渲染 Fast Mode State Schema 组件。 */
 export const FastModeStateSchema = lazySchema(() =>
   z
     .enum(['off', 'cooldown', 'on'])

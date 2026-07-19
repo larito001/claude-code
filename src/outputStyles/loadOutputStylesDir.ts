@@ -11,17 +11,16 @@ import {
 import { clearPluginOutputStyleCache } from '../utils/plugins/loadPluginOutputStyles.js'
 
 /**
- * Loads markdown files from .claude/output-styles directories throughout the project
- * and from ~/.claude/output-styles directory and converts them to output styles.
+ * 从整个项目的 .claude/output-styles 目录以及 ~/.claude/output-styles 目录加载 markdown 文件，并将其转换为输出样式。
  *
- * Each filename becomes a style name, and the file content becomes the style prompt.
- * The frontmatter provides name and description.
+ * 每个文件名成为一个样式名称，文件内容成为样式提示词。
+ * frontmatter 提供名称和描述。
  *
- * Structure:
- * - Project .claude/output-styles/*.md -> project styles
- * - User ~/.claude/output-styles/*.md -> user styles (overridden by project styles)
+ * 结构：
+ * - 项目 .claude/output-styles/*.md -> 项目样式
+ * - 用户 ~/.claude/output-styles/*.md -> 用户样式（可被项目样式覆盖）
  *
- * @param cwd Current working directory for project directory traversal
+ * @param cwd 当前工作目录，用于项目目录遍历
  */
 export const getOutputStyleDirStyles = memoize(
   async (cwd: string): Promise<OutputStyleConfig[]> => {
@@ -31,13 +30,14 @@ export const getOutputStyleDirStyles = memoize(
         cwd,
       )
 
+      /** 执行 styles 对应的业务处理。 */
       const styles = markdownFiles
         .map(({ filePath, frontmatter, content, source }) => {
           try {
             const fileName = basename(filePath)
             const styleName = fileName.replace(/\.md$/, '')
 
-            // Get style configuration from frontmatter
+            // 从 frontmatter 获取样式配置
             const name = (frontmatter['name'] || styleName) as string
             const description =
               coerceDescriptionToString(
@@ -49,7 +49,7 @@ export const getOutputStyleDirStyles = memoize(
                 `Custom ${styleName} output style`,
               )
 
-            // Parse keep-coding-instructions flag (supports both boolean and string values)
+            // 解析 keep-coding-instructions 标志（支持布尔值和字符串值）
             const keepCodingInstructionsRaw =
               frontmatter['keep-coding-instructions']
             const keepCodingInstructions =
@@ -61,7 +61,7 @@ export const getOutputStyleDirStyles = memoize(
                   ? false
                   : undefined
 
-            // Warn if force-for-plugin is set on non-plugin output style
+            // 如果非插件输出样式设置了 force-for-plugin 则发出警告
             if (frontmatter['force-for-plugin'] !== undefined) {
               logForDebugging(
                 `Output style "${name}" has force-for-plugin set, but this option only applies to plugin output styles. Ignoring.`,
@@ -91,6 +91,7 @@ export const getOutputStyleDirStyles = memoize(
   },
 )
 
+/** 删除或清理 clear Output Style Caches 对应的数据或状态。 */
 export function clearOutputStyleCaches(): void {
   getOutputStyleDirStyles.cache?.clear?.()
   loadMarkdownFilesForSubdir.cache?.clear?.()

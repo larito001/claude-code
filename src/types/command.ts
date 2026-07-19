@@ -20,12 +20,12 @@ export type LocalCommandResult =
       compactionResult: CompactionResult
       displayText?: string
     }
-  | { type: 'skip' } // Skip messages
+  | { type: 'skip' } // 跳过消息
 
 export type PromptCommand = {
   type: 'prompt'
   progressMessage: string
-  contentLength: number // Length of command content in characters (used for token estimation)
+  contentLength: number // 命令内容的字符长度（用于估算 token）
   argNames?: string[]
   allowedTools?: string[]
   model?: string
@@ -35,38 +35,35 @@ export type PromptCommand = {
     repository: string
   }
   disableNonInteractive?: boolean
-  // Hooks to register when this skill is invoked
+  // 调用此技能时注册的钩子
   hooks?: HooksSettings
-  // Base directory for skill resources (used to set CLAUDE_PLUGIN_ROOT environment variable for skill hooks)
+  // 技能资源的基础目录（用于为技能钩子设置 CLAUDE_PLUGIN_ROOT 环境变量）
   skillRoot?: string
-  // Execution context: 'inline' (default) or 'fork' (run as sub-agent)
-  // 'inline' = skill content expands into the current conversation
-  // 'fork' = skill runs in a sub-agent with separate context and token budget
+  // 执行上下文：'inline'（默认）或 'fork'（作为子代理运行）
+  // 'inline' = 技能内容展开到当前对话中
+  // 'fork' = 技能在具有独立上下文和 token 预算的子代理中运行
   context?: 'inline' | 'fork'
-  // Agent type to use when forked (e.g., 'Bash', 'general-purpose')
-  // Only applicable when context is 'fork'
+  // 分叉时使用的代理类型（例如 'Bash'、'general-purpose'）
+  // 仅当上下文为 'fork' 时适用
   agent?: string
   effort?: EffortValue
-  // Glob patterns for file paths this skill applies to
-  // When set, the skill is only visible after the model touches matching files
+  // 此技能适用的文件路径 glob 模式
+  // 设置后，仅当模型触及匹配文件时技能才可见
   paths?: string[]
+  /** 获取 get Prompt For Command 对应的数据或状态。 */
   getPromptForCommand(
     args: string,
     context: ToolUseContext,
   ): Promise<ContentBlockParam[]>
 }
 
-/**
- * The call signature for a local command implementation.
- */
+/** 本地命令实现的调用签名。 */
 export type LocalCommandCall = (
   args: string,
   context: LocalJSXCommandContext,
 ) => Promise<LocalCommandResult>
 
-/**
- * Module shape returned by load() for lazy-loaded local commands.
- */
+/** load() 为惰性加载的本地命令返回的模块形状。 */
 export type LocalCommandModule = {
   call: LocalCommandCall
 }
@@ -74,22 +71,28 @@ export type LocalCommandModule = {
 type LocalCommand = {
   type: 'local'
   supportsNonInteractive: boolean
+  /** 获取 load 对应的数据或状态。 */
   load: () => Promise<LocalCommandModule>
 }
 
 export type LocalJSXCommandContext = ToolUseContext & {
   canUseTool?: CanUseToolFn
+  /** 设置并保存 set Messages 对应的数据或状态。 */
   setMessages: (updater: (prev: Message[]) => Message[]) => void
   options: {
     dynamicMcpConfig?: Record<string, ScopedMcpServerConfig>
     ideInstallationStatus: IDEExtensionInstallationStatus | null
     theme: ThemeName
   }
+  /** 处理 on Change API Key 对应的数据或状态。 */
   onChangeAPIKey: () => void
+  /** 处理 on Change Dynamic Mcp Config 对应的数据或状态。 */
   onChangeDynamicMcpConfig?: (
     config: Record<string, ScopedMcpServerConfig>,
   ) => void
+  /** 处理 on Install IDE Extension 对应的数据或状态。 */
   onInstallIDEExtension?: (ide: IdeType) => void
+  /** 执行 resume 对应的业务处理。 */
   resume?: (
     sessionId: UUID,
     log: LogOption,
@@ -107,12 +110,12 @@ export type ResumeEntrypoint =
 export type CommandResultDisplay = 'skip' | 'system' | 'user'
 
 /**
- * Callback when a command completes.
- * @param result - Optional user-visible message to display
- * @param options - Optional configuration for command completion
- * @param options.display - How to display the result: 'skip' | 'system' | 'user' (default)
- * @param options.shouldQuery - If true, send messages to the model after command completes
- * @param options.metaMessages - Additional messages to insert as isMeta (model-visible but hidden)
+ * 命令完成时的回调。
+ * @param result - 可选的用户可见消息以显示
+ * @param options - 命令完成的可选配置
+ * @param options.display - 如何显示结果：'skip' | 'system' | 'user'（默认）
+ * @param options.shouldQuery - 如果为 true，则在命令完成后向模型发送消息
+ * @param options.metaMessages - 作为 isMeta 插入的附加消息（模型可见但隐藏）
  */
 export type LocalJSXCommandOnDone = (
   result?: string,
@@ -125,18 +128,14 @@ export type LocalJSXCommandOnDone = (
   },
 ) => void
 
-/**
- * The call signature for a local JSX command implementation.
- */
+/** 本地 JSX 命令实现的调用签名。 */
 export type LocalJSXCommandCall = (
   onDone: LocalJSXCommandOnDone,
   context: ToolUseContext & LocalJSXCommandContext,
   args: string,
 ) => Promise<React.ReactNode>
 
-/**
- * Module shape returned by load() for lazy-loaded commands.
- */
+/** load() 为惰性加载的命令返回的模块形状。 */
 export type LocalJSXCommandModule = {
   call: LocalJSXCommandCall
 }
@@ -144,26 +143,26 @@ export type LocalJSXCommandModule = {
 type LocalJSXCommand = {
   type: 'local-jsx'
   /**
-   * Lazy-load the command implementation.
-   * Returns a module with a call() function.
-   * This defers loading heavy dependencies until the command is invoked.
+   * 惰性加载命令实现。
+   * 返回一个具有 call() 函数的模块。
+   * 这会将依赖项的加载推迟到命令被调用时。
    */
   load: () => Promise<LocalJSXCommandModule>
 }
 
 /**
- * Declares which API providers a command supports.
+ * 声明命令支持的 API 提供者。
  *
- * This is separate from `isEnabled()`:
- *   - `availability` = which API backends can use this (static)
- *   - `isEnabled()`  = is this turned on right now (local feature configuration, platform, env vars)
+ * 这与 isEnabled() 不同：
+ *   - availability = 哪些 API 后端可以使用此命令（静态）
+ *   - isEnabled()  = 当前是否启用（本地功能配置、平台、环境变量）
  *
- * Commands without `availability` are available everywhere.
- * Commands with `availability` are only shown if the user matches at least one
- * of the listed auth types. See meetsAvailabilityRequirement() in commands.ts.
+ * 没有 availability 的命令在所有地方都可用。
+ * 有 availability 的命令仅当用户匹配至少一个
+ * 列出的认证类型时才显示。请参见 commands.ts 中的 meetsAvailabilityRequirement()。
  *
- * Example: `availability: ['firstParty', 'bedrock']` restricts a command to
- * Anthropic-compatible APIs and AWS Bedrock.
+ * 示例：`availability: ['firstParty', 'bedrock']` 将命令限制为
+ * 与 Anthropic 兼容的 API 和 AWS Bedrock。
  */
 export type CommandAvailability =
   | 'firstParty'
@@ -175,41 +174,41 @@ export type CommandBase = {
   availability?: CommandAvailability[]
   description: string
   hasUserSpecifiedDescription?: boolean
-  /** Defaults to true. Only set when the command has conditional enablement (feature flags, env checks, etc). */
+  /** 默认为 true。仅在命令有条件启用（功能标志、环境检查等）时设置。 */
   isEnabled?: () => boolean
-  /** Defaults to false. Only set when the command should be hidden from typeahead/help. */
+  /** 默认为 false。仅在命令应隐藏于类型提示/帮助时设置。 */
   isHidden?: boolean
   name: string
   aliases?: string[]
   isMcp?: boolean
-  argumentHint?: string // Hint text for command arguments (displayed in gray after command)
-  whenToUse?: string // From the "Skill" spec. Detailed usage scenarios for when to use this command
-  version?: string // Version of the command/skill
-  disableModelInvocation?: boolean // Whether to disable this command from being invoked by models
-  userInvocable?: boolean // Whether users can invoke this skill by typing /skill-name
+  argumentHint?: string // 命令参数的提示文本（在命令后以灰色显示）
+  whenToUse?: string // 来自“技能”规范。何时使用此命令的详细使用场景
+  version?: string // 命令/技能的版本
+  disableModelInvocation?: boolean // 是否禁止模型调用此命令
+  userInvocable?: boolean // 用户是否可以通过输入 /skill-name 调用此技能
   loadedFrom?:
     | 'commands_DEPRECATED'
     | 'skills'
     | 'plugin'
     | 'managed'
     | 'bundled'
-    | 'mcp' // Where the command was loaded from
-  kind?: 'workflow' // Distinguishes workflow-backed commands (badged in autocomplete)
-  immediate?: boolean // If true, command executes immediately without waiting for a stop point (bypasses queue)
-  isSensitive?: boolean // If true, args are redacted from the conversation history
-  /** Defaults to `name`. Only override when the displayed name differs (e.g. plugin prefix stripping). */
+    | 'mcp' // 命令加载的来源
+  kind?: 'workflow' // 区分工作流支持的命令（在自动补全中带有徽章）
+  immediate?: boolean // 如果为 true，命令立即执行而不等待停止点（绕过队列）
+  isSensitive?: boolean // 如果为 true，则从对话历史中隐藏参数。
+  /** 默认为 `name`。仅在显示名称不同时重写（例如插件前缀剥离）。 */
   userFacingName?: () => string
 }
 
 export type Command = CommandBase &
   (PromptCommand | LocalCommand | LocalJSXCommand)
 
-/** Resolves the user-visible name, falling back to `cmd.name` when not overridden. */
+/** 解析用户可见的名称，当未重写时回退到 `cmd.name`。 */
 export function getCommandName(cmd: CommandBase): string {
   return cmd.userFacingName?.() ?? cmd.name
 }
 
-/** Resolves whether the command is enabled, defaulting to true. */
+/** 解析命令是否启用，默认为 true。 */
 export function isCommandEnabled(cmd: CommandBase): boolean {
   return cmd.isEnabled?.() ?? true
 }

@@ -16,6 +16,7 @@ export type Step = {
   isEnabled: boolean
 }
 
+/** 获取 get Steps 对应的数据或状态。 */
 export function getSteps(): Step[] {
   const hasClaudeMd = getFsImplementation().existsSync(
     join(getCwd(), 'CLAUDE.md'),
@@ -40,15 +41,16 @@ export function getSteps(): Step[] {
   ]
 }
 
+/** 判断是否满足 is Project Onboarding Complete 对应的数据或状态。 */
 export function isProjectOnboardingComplete(): boolean {
   return getSteps()
     .filter(({ isCompletable, isEnabled }) => isCompletable && isEnabled)
     .every(({ isComplete }) => isComplete)
 }
 
+/** 执行 maybe Mark Project Onboarding Complete 对应的业务处理。 */
 export function maybeMarkProjectOnboardingComplete(): void {
-  // Short-circuit on cached config — isProjectOnboardingComplete() hits
-  // the filesystem, and REPL.tsx calls this on every prompt submit.
+  // 在缓存的配置上短路——isProjectOnboardingComplete() 访问文件系统，而 REPL.tsx 每次提交提示时都会调用它。
   if (getCurrentProjectConfig().hasCompletedProjectOnboarding) {
     return
   }
@@ -60,10 +62,10 @@ export function maybeMarkProjectOnboardingComplete(): void {
   }
 }
 
+/** 判断是否满足 should Show Project Onboarding 对应的数据或状态。 */
 export const shouldShowProjectOnboarding = memoize((): boolean => {
   const projectConfig = getCurrentProjectConfig()
-  // Short-circuit on cached config before isProjectOnboardingComplete()
-  // hits the filesystem — this runs during first render.
+  // 在 isProjectOnboardingComplete() 访问文件系统之前，对缓存的配置短路——这会在首次渲染期间运行。
   if (
     projectConfig.hasCompletedProjectOnboarding ||
     projectConfig.projectOnboardingSeenCount >= 4 ||
@@ -75,6 +77,7 @@ export const shouldShowProjectOnboarding = memoize((): boolean => {
   return !isProjectOnboardingComplete()
 })
 
+/** 执行 increment Project Onboarding Seen Count 对应的业务处理。 */
 export function incrementProjectOnboardingSeenCount(): void {
   saveCurrentProjectConfig(current => ({
     ...current,
