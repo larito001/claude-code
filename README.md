@@ -66,13 +66,23 @@ DeepSeek 示例：
 ```dotenv
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 DEEPSEEK_API_KEY=replace-with-your-api-key
-ANTHROPIC_MODEL=deepseek-v4-pro
-ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro
+ANTHROPIC_MODEL=deepseek-v4-flash
+ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-flash
 ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash
 CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash
 ```
 
 其他兼容 Anthropic API 协议的服务可替换 `ANTHROPIC_BASE_URL`、模型名和 API Key。真实 `.env` 已被 Git 忽略，不要把密钥提交到仓库。
+
+## 全新存储命名空间
+
+- 用户数据根目录：`~/.claude-code-core-framework/`
+- 全局配置：`~/.claude-code-core-framework/config.json`，固定从 `schemaVersion: 1` 开始
+- 用户设置：`~/.claude-code-core-framework/settings.json`
+- 项目数据：项目下的 `.claude-code-core-framework/`
+- 自定义根目录：设置 `FRAMEWORK_CONFIG_DIR`
+
+框架不会扫描或迁移旧 `.claude/`、`~/.claude.json`、旧相邻 `.backup` 文件及旧系统钥匙串。配置备份统一写入新命名空间的 `backups/`。自定义提示统一使用 `skills/<name>/SKILL.md`，不再读取旧 `commands/` 目录。
 
 ## IDE 中运行
 
@@ -121,9 +131,9 @@ Feature 配置只会更新 `.env` 中的 `CLAUDE_CODE_FEATURES` 和 `CLAUDE_CODE
 
 | 能力 | 默认位置 | 说明 |
 | --- | --- | --- |
-| Project Skill | `.claude/skills/<name>/SKILL.md` | YAML frontmatter + Markdown |
-| Project Agent | `.claude/agents/<name>.md` | Prompt、工具、模型和权限 |
-| Project Hook | `.claude/settings.json` | 生命周期事件与命令/Prompt Hook |
+| Project Skill | `.claude-code-core-framework/skills/<name>/SKILL.md` | YAML frontmatter + Markdown |
+| Project Agent | `.claude-code-core-framework/agents/<name>.md` | Prompt、工具、模型和权限 |
+| Project Hook | `.claude-code-core-framework/settings.json` | 生命周期事件与命令/Prompt Hook |
 | MCP Server | `.mcp.json` | stdio/http/sse/ws 配置 |
 | Local Plugin | `--plugin-dir <path>` | Command、Skill、Agent、Hook、MCP、LSP 和输出样式组合扩展 |
 | SDK | `src/entrypoints/agentSdkTypes.ts` | 公开 Agent SDK API 和本地协议常量 |
