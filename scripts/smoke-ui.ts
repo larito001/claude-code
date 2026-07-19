@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -14,6 +15,10 @@ try {
   const { clearBundledSkills } = await import('../src/skills/bundledSkills.js')
   const { initBundledSkills } = await import('../src/skills/bundled/index.js')
   const { getCommands } = await import('../src/commands.js')
+  const { createRoot } = await import('../src/ink.js')
+  const { SleepTool } = await import(
+    '../src/tools/SleepTool/SleepTool.js'
+  )
   const { ColorDiff, ColorFile } = await import(
     '../src/native-ts/color-diff/index.js'
   )
@@ -64,6 +69,29 @@ try {
     'smoke.ts',
   ).render('dark', 24, false)
   assert(diff?.length === 2, 'Structured diff did not render')
+
+  const terminal = new PassThrough() as unknown as NodeJS.WriteStream
+  const input = new PassThrough() as unknown as NodeJS.ReadStream
+  Object.assign(terminal, { columns: 80, rows: 24, isTTY: false })
+  Object.assign(input, { isTTY: false })
+  const root = await createRoot({
+    stdin: input,
+    stdout: terminal,
+    stderr: terminal,
+    exitOnCtrlC: false,
+    patchConsole: false,
+  })
+  try {
+    root.render(
+      SleepTool.renderToolResultMessage(
+        { wake_reason: 'notification', elapsed_seconds: 1.25 },
+        [],
+        { theme: 'dark', tools: [SleepTool], verbose: false },
+      ),
+    )
+  } finally {
+    root.unmount()
+  }
 } finally {
   if (previousConfigDir === undefined) delete process.env.FRAMEWORK_CONFIG_DIR
   else process.env.FRAMEWORK_CONFIG_DIR = previousConfigDir
