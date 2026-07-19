@@ -77,7 +77,7 @@ function containsCallableExpression(expression: ts.Expression | undefined): bool
 
 function isFunctionTypedProperty(node: ts.PropertyDeclaration | ts.PropertySignature): boolean {
   return (
-    containsCallableExpression(node.initializer) ||
+    (ts.isPropertyDeclaration(node) && containsCallableExpression(node.initializer)) ||
     node.type?.kind === ts.SyntaxKind.FunctionType
   )
 }

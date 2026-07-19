@@ -23,6 +23,8 @@
     "typecheck": "bun x tsc -p tsconfig.framework.json --noEmit",
     "typecheck:legacy": "bun x tsc --noEmit",
     "audit:comments": "bun run scripts/audit-src-comments.ts",
+    "annotate:methods": "bun run scripts/annotate-src-methods.ts",
+    "localize:comments": "bun --env-file=.env run scripts/localize-src-comments.ts",
     "smoke": "bun run scripts/smoke.ts",
     "smoke:api": "bun --env-file=.env run scripts/smoke-api.ts",
     "smoke:core": "bun run scripts/smoke-core.ts",
