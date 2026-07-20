@@ -154,6 +154,7 @@ profileCheckpoint('main_tsx_imports_loaded');
  * diff.external），因此我们只能在建立信任后或在
  * 信任是隐式的非交互模式。
  */
+// ============ 辅助函数：系统上下文预取 / 设置加载 / 入口点初始化 ============
 function prefetchSystemContextIfSafe(): void {
   const isNonInteractiveSession = getIsNonInteractiveSession();
 
@@ -325,6 +326,7 @@ function initializeEntrypoint(isNonInteractive: boolean): void {
 }
 
 /** 执行当前模块的主流程。 */
+// ============ 程序入口 main()：进程信号处理与交互/非交互模式判定 ============
 export async function main() {
   profileCheckpoint('main_function_start');
 
@@ -426,6 +428,7 @@ async function getInputPrompt(prompt: string, inputFormat: 'text' | 'stream-json
   return prompt;
 }
 /** 执行 run 对应的数据或状态。 */
+// ============ 核心 run()：构建 Commander 命令并驱动启动流程 ============
 async function run(): Promise<CommanderCommand> {
   profileCheckpoint('run_function_start');
 
@@ -473,40 +476,105 @@ async function run(): Promise<CommanderCommand> {
       clearPluginCache('preAction: --plugin-dir inline plugins');
     }
   });
-  program.name('claude').description(`Claude Code - starts an interactive session by default, use -p/--print for non-interactive output`).argument('[prompt]', 'Your prompt', String)
+  program.name('claude')
+      .description(`Claude Code —— 默认启动交互式会话，使用 -p/--print 以非交互方式输出`)
+      .argument('[prompt]', '你的提示词', String)
   // Subcommands inherit helpOption via commander's copyInheritedSettings —
   // setting it once here covers mcp, plugin, auth, and all other subcommands.
-  .helpOption('-h, --help', 'Display help for command').option('-d, --debug [filter]', 'Enable debug mode with optional category filtering (e.g., "api,hooks" or "!1p,!file")', (_value: string | true) => {
+  // ---------- 通用启动、生命周期与诊断选项 ----------
+  .helpOption('-h, --help', '显示命令帮助')
+  .option('-d, --debug [filter]', '启用调试模式，可附带分类过滤（例如 "api,hooks" 或 "!1p,!file"）', (_value: string | true) => {
     // 如果提供了值，它将是过滤字符串；如果未提供但标志存在，值将为true。实际过滤由debug.ts通过解析process.argv处理。
     return true;
-  }).addOption(new Option('--debug-to-stderr', 'Enable debug mode (to stderr)').argParser(Boolean).hideHelp()).option('--debug-file <path>', 'Write debug logs to a specific file path (implicitly enables debug mode)', () => true).option('--verbose', 'Override verbose mode setting from config', () => true).option('-p, --print', 'Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag in directories you trust.', () => true).option('--bare', 'Minimal mode: skip hooks, LSP, plugin sync, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. API requests use ANTHROPIC_API_KEY or the configured apiKeyHelper. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.', () => true).addOption(new Option('--init', 'Run Setup hooks with init trigger, then continue').hideHelp()).addOption(new Option('--init-only', 'Run Setup and SessionStart:startup hooks, then exit').hideHelp()).addOption(new Option('--maintenance', 'Run Setup hooks with maintenance trigger, then continue').hideHelp()).addOption(new Option('--output-format <format>', 'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming)').choices(['text', 'json', 'stream-json'])).addOption(new Option('--json-schema <schema>', 'JSON Schema for structured output validation. ' + 'Example: {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}').argParser(String)).option('--include-hook-events', 'Include all hook lifecycle events in the output stream (only works with --output-format=stream-json)', () => true).option('--include-partial-messages', 'Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)', () => true).addOption(new Option('--input-format <format>', 'Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input)').choices(['text', 'stream-json'])).option('--dangerously-skip-permissions', 'Bypass all permission checks. Recommended only for sandboxes with no internet access.', () => true).option('--allow-dangerously-skip-permissions', 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.', () => true).addOption(new Option('--thinking <mode>', 'Thinking mode: enabled (equivalent to adaptive), disabled').choices(['enabled', 'adaptive', 'disabled']).hideHelp()).addOption(new Option('--max-turns <turns>', 'Maximum number of agentic turns in non-interactive mode. This will early exit the conversation after the specified number of turns. (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-budget-usd <amount>', 'Maximum dollar amount to spend on API calls (only works with --print)').argParser(value => {
+  })
+  .addOption(new Option('--debug-to-stderr', '启用调试模式（输出到 stderr）').argParser(Boolean).hideHelp())
+  .option('--debug-file <path>', '将调试日志写入指定文件路径（隐式启用调试模式）', () => true)
+  .option('--verbose', '覆盖配置中的 verbose 模式设置', () => true)
+  .option('-p, --print', '打印响应并退出（适合管道使用）。注意：以 -p 模式运行 Claude 时会跳过工作区信任对话框。请仅在可信目录中使用此标志。', () => true)
+  .option('--bare', '极简模式：跳过 hooks、LSP、插件同步、自动记忆、后台预取、钥匙串读取以及 CLAUDE.md 自动发现。会设置 CLAUDE_CODE_SIMPLE=1。API 请求使用 ANTHROPIC_API_KEY 或配置的 apiKeyHelper。技能仍可通过 /skill-name 解析。通过以下方式显式提供上下文：--system-prompt[-file]、--append-system-prompt[-file]、--add-dir（CLAUDE.md 目录）、--mcp-config、--settings、--agents、--plugin-dir。', () => true)
+  .addOption(new Option('--init', '运行带 init 触发器的 Setup hooks，然后继续').hideHelp())
+  .addOption(new Option('--init-only', '运行 Setup 与 SessionStart:startup hooks，然后退出').hideHelp())
+  .addOption(new Option('--maintenance', '运行带 maintenance 触发器的 Setup hooks，然后继续').hideHelp())
+  // ---------- 非交互输入输出选项 ----------
+  .addOption(new Option('--output-format <format>', '输出格式（仅与 --print 配合生效）："text"（默认）、"json"（单个结果）或 "stream-json"（实时流式）').choices(['text', 'json', 'stream-json']))
+  .addOption(new Option('--json-schema <schema>', '用于结构化输出校验的 JSON Schema。' + '示例：{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}').argParser(String))
+  .option('--include-hook-events', '在输出流中包含全部 hook 生命周期事件（仅与 --output-format=stream-json 配合生效）', () => true)
+  .option('--include-partial-messages', '随消息到达包含部分消息分块（仅与 --print 及 --output-format=stream-json 配合生效）', () => true)
+  .addOption(new Option('--input-format <format>', '输入格式（仅与 --print 配合生效）："text"（默认）或 "stream-json"（实时流式输入）').choices(['text', 'stream-json']))
+  .option('--replay-user-messages', '将来自 stdin 的用户消息重新输出到 stdout 以示确认（仅与 --input-format=stream-json 及 --output-format=stream-json 配合生效）', () => true)
+  // ---------- 执行安全与预算限制 ----------
+  .option('--dangerously-skip-permissions', '绕过全部权限检查。仅推荐用于无网络访问的沙箱环境。', () => true)
+  .option('--allow-dangerously-skip-permissions', '作为可选项启用绕过全部权限检查（默认不启用）。仅推荐用于无网络访问的沙箱环境。', () => true)
+  .addOption(new Option('--thinking <mode>', '思考模式：enabled（等效于 adaptive）、disabled').choices(['enabled', 'adaptive', 'disabled']).hideHelp())
+  .addOption(new Option('--max-turns <turns>', '非交互模式下的最大自主回合次数。达到指定回合数后将提前结束对话。（仅与 --print 配合生效）').argParser(Number).hideHelp())
+  .addOption(new Option('--max-budget-usd <amount>', 'API 调用的最大花费金额（美元）（仅与 --print 配合生效）').argParser(value => {
     const amount = Number(value);
     if (isNaN(amount) || amount <= 0) {
       throw new Error('--max-budget-usd must be a positive number greater than 0');
     }
     return amount;
-  })).addOption(new Option('--task-budget <tokens>', 'API-side task budget in tokens (output_config.task_budget)').argParser(value => {
+  }))
+  .addOption(new Option('--task-budget <tokens>', 'API 侧的 task budget（以 token 计，即 output_config.task_budget）').argParser(value => {
     const tokens = Number(value);
     if (isNaN(tokens) || tokens <= 0 || !Number.isInteger(tokens)) {
       throw new Error('--task-budget must be a positive integer');
     }
     return tokens;
-  }).hideHelp()).option('--replay-user-messages', 'Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)', () => true).option('--allowedTools, --allowed-tools <tools...>', 'Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")').option('--tools <tools...>', 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").').option('--disallowedTools, --disallowed-tools <tools...>', 'Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")').option('--mcp-config <configs...>', 'Load MCP servers from JSON files or strings (space-separated)').addOption(new Option('--permission-prompt-tool <tool>', 'MCP tool to use for permission prompts (only works with --print)').argParser(String).hideHelp()).addOption(new Option('--system-prompt <prompt>', 'System prompt to use for the session').argParser(String)).addOption(new Option('--system-prompt-file <file>', 'Read system prompt from a file').argParser(String).hideHelp()).addOption(new Option('--append-system-prompt <prompt>', 'Append a system prompt to the default system prompt').argParser(String)).addOption(new Option('--append-system-prompt-file <file>', 'Read system prompt from a file and append to the default system prompt').argParser(String).hideHelp()).addOption(new Option('--permission-mode <mode>', 'Permission mode to use for the session').argParser(String).choices(PERMISSION_MODES)).option('-c, --continue', 'Continue the most recent conversation in the current directory', () => true).option('-r, --resume [value]', 'Resume a conversation by session ID, or open interactive picker with optional search term', value => value || true).option('--fork-session', 'When resuming, create a new session ID instead of reusing the original (use with --resume or --continue)', () => true).addOption(new Option('--prefill <text>', 'Pre-fill the prompt input with text without submitting it').hideHelp()).option('--from-pr [value]', 'Resume a session linked to a PR by PR number/URL, or open interactive picker with optional search term', value => value || true).option('--no-session-persistence', 'Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)').addOption(new Option('--resume-session-at <message id>', 'When resuming, only messages up to and including the assistant message with <message.id> (use with --resume in print mode)').argParser(String).hideHelp()).addOption(new Option('--rewind-files <user-message-id>', 'Restore files to state at the specified user message and exit (requires --resume)').hideHelp())
+  }).hideHelp())
+  // ---------- 工具、MCP 与权限选项 ----------
+  .option('--allowedTools, --allowed-tools <tools...>', '允许的工具名称列表，以逗号或空格分隔（例如 "Bash(git:*) Edit"）')
+  .option('--tools <tools...>', '指定内置可用工具列表。使用 "" 禁用全部工具，使用 "default" 启用全部工具，或直接指定工具名称（例如 "Bash,Edit,Read"）。')
+  .option('--disallowedTools, --disallowed-tools <tools...>', '拒绝的工具名称列表，以逗号或空格分隔（例如 "Bash(git:*) Edit"）')
+  .option('--mcp-config <configs...>', '从 JSON 文件或字符串加载 MCP 服务器（以空格分隔）')
+  .addOption(new Option('--permission-prompt-tool <tool>', '用于权限提示的 MCP 工具（仅与 --print 配合生效）').argParser(String).hideHelp())
+  // ---------- 提示词与会话权限模式选项 ----------
+  .addOption(new Option('--system-prompt <prompt>', '本次会话使用的系统提示').argParser(String))
+  .addOption(new Option('--system-prompt-file <file>', '从文件读取系统提示').argParser(String).hideHelp())
+  .addOption(new Option('--append-system-prompt <prompt>', '向默认系统提示追加一段系统提示').argParser(String))
+  .addOption(new Option('--append-system-prompt-file <file>', '从文件读取系统提示并追加到默认系统提示').argParser(String).hideHelp())
+  .addOption(new Option('--permission-mode <mode>', '本次会话使用的权限模式').argParser(String).choices(PERMISSION_MODES))
+  // ---------- 会话创建与恢复选项 ----------
+  .option('-c, --continue', '继续当前目录下最近的会话', () => true)
+  .option('-r, --resume [value]', '按会话 ID 恢复会话，或打开交互式选择器（可附带搜索词）', value => value || true)
+  .option('--fork-session', '恢复时创建新的会话 ID，而非复用原始会话（与 --resume 或 --continue 配合使用）', () => true)
+  .addOption(new Option('--prefill <text>', '用文本预填提示输入框，但不提交').hideHelp())
+  .option('--from-pr [value]', '按 PR 编号/URL 恢复与 PR 关联的会话，或打开交互式选择器（可附带搜索词）', value => value || true)
+  .option('--no-session-persistence', '禁用会话持久化 —— 会话将不会保存到磁盘且无法恢复（仅与 --print 配合生效）')
+  .addOption(new Option('--resume-session-at <message id>', '恢复时，仅保留到包含 <message.id> 的助手消息为止（在 print 模式下与 --resume 配合使用）').argParser(String).hideHelp())
+  .addOption(new Option('--rewind-files <user-message-id>', '将文件恢复到指定用户消息时的状态并退出（需要 --resume）').hideHelp())
+  // ---------- 模型、Agent 与 API 请求选项 ----------
   // @[MODEL LAUNCH]: Update the example model ID in the --model help text.
-  .option('--model <model>', `Model for the current session. Provide an alias for the latest model (e.g. 'sonnet' or 'opus') or a model's full name (e.g. 'claude-sonnet-4-6').`).addOption(new Option('--effort <level>', `Effort level for the current session (low, medium, high, max)`).argParser((rawValue: string) => {
+  .option('--model <model>', `当前会话使用的模型。提供最新模型的别名（例如 'sonnet' 或 'opus'），或模型的完整名称（例如 'claude-sonnet-4-6'）。`)
+  .addOption(new Option('--effort <level>', `当前会话的 effort 等级（low、medium、high、max）`).argParser((rawValue: string) => {
     const value = rawValue.toLowerCase();
     const allowed = ['low', 'medium', 'high', 'max'];
     if (!allowed.includes(value)) {
       throw new InvalidArgumentError(`It must be one of: ${allowed.join(', ')}`);
     }
     return value;
-  })).option('--agent <agent>', `Agent for the current session. Overrides the 'agent' setting.`).option('--betas <betas...>', 'Beta headers to include in API requests (API key users only)').option('--fallback-model <model>', 'Enable automatic fallback to specified model when default model is overloaded (only works with --print)').addOption(new Option('--workload <tag>', 'Workload tag for request classification. Process-scoped; set by SDK daemon callers that spawn subprocesses for cron work. (only works with --print)').hideHelp()).option('--settings <file-or-json>', 'Path to a settings JSON file or a JSON string to load additional settings from').option('--add-dir <directories...>', 'Additional directories to allow tool access to').option('--ide', 'Automatically connect to IDE on startup if exactly one valid IDE is available', () => true).option('--strict-mcp-config', 'Only use MCP servers from --mcp-config, ignoring all other MCP configurations', () => true).option('--session-id <uuid>', 'Use a specific session ID for the conversation (must be a valid UUID)').option('-n, --name <name>', 'Set a display name for this session (shown in /resume and terminal title)').option('--agents <json>', 'JSON object defining custom agents (e.g. \'{"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}\')').option('--setting-sources <sources>', 'Comma-separated list of setting sources to load (user, project, local).')
+  }))
+  .option('--agent <agent>', `当前会话使用的 Agent。覆盖 'agent' 设置。`)
+  .option('--betas <betas...>', '在 API 请求中包含的 Beta 头（仅限 API key 用户）')
+  .option('--fallback-model <model>', '当默认模型过载时，自动回退到指定模型（仅与 --print 配合生效）')
+  .addOption(new Option('--workload <tag>', '用于请求分类的 workload 标签。进程级作用域；由启动子进程执行 cron 任务的 SDK daemon 调用方设置。（仅与 --print 配合生效）').hideHelp())
+  // ---------- 设置、会话标识、集成与扩展选项 ----------
+  .option('--settings <file-or-json>', '用于加载额外设置的 settings JSON 文件路径或 JSON 字符串')
+  .option('--add-dir <directories...>', '允许工具访问的额外目录')
+  .option('--ide', '若恰好存在一个有效 IDE，则在启动时自动连接', () => true)
+  .option('--strict-mcp-config', '仅使用来自 --mcp-config 的 MCP 服务器，忽略所有其他 MCP 配置', () => true)
+  .option('--session-id <uuid>', '为会话指定特定的会话 ID（必须是有效的 UUID）')
+  .option('-n, --name <name>', '为本会话设置显示名称（显示于 /resume 与终端标题）')
+  .option('--agents <json>', '定义自定义 agents 的 JSON 对象（例如 \'{"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}\'）')
+  .option('--setting-sources <sources>', '以逗号分隔的设置来源列表，用于加载（user, project, local）。')
   // gh-33508: <paths...> (variadic) consumed everything until the next
   // --flag. `claude --plugin-dir /path mcp add --transport http` swallowed
   // `mcp` and `add` as paths, then choked on --transport as an unknown
   // top-level option. Single-value + collect accumulator means each
   // --plugin-dir takes exactly one arg; repeat the flag for multiple dirs.
-  .option('--plugin-dir <path>', 'Load plugins from a directory for this session only (repeatable: --plugin-dir A --plugin-dir B)', (val: string, prev: string[]) => [...prev, val], [] as string[]).option('--disable-slash-commands', 'Disable all skills', () => true).action(async (prompt, options) => {
+  .option('--plugin-dir <path>', '仅本会话从目录加载插件（可重复：--plugin-dir A --plugin-dir B）', (val: string, prev: string[]) => [...prev, val], [] as string[])
+  .option('--disable-slash-commands', '禁用全部技能', () => true)
+  // ============ .action() 主处理器：参数解构 → 校验 → 启动会话 ============
+      .action(async (prompt, options) => {
     profileCheckpoint('action_handler_start');
 
     // --bare = 单开关极简模式。设置SIMPLE以便所有现有门控触发（CLAUDE.md、技能、executeHooks内部的钩子、agent dir-walk）。必须在setup()/任何门控工作运行之前设置。
@@ -671,6 +739,7 @@ async function run(): Promise<CommanderCommand> {
       }
     }
 
+    // ---------- 阶段1：凭据 / 模型 / MCP 配置校验 ----------
     // 从状态获取isNonInteractiveSession（在init()之前设置）。
     const isNonInteractiveSession = getIsNonInteractiveSession();
 
@@ -957,6 +1026,7 @@ async function run(): Promise<CommanderCommand> {
       }
     }
 
+    // ---------- 阶段2：setup() 与命令/agent 并行加载 ----------
     // 重要：setup() 必须在任何依赖于 cwd 或工作树设置的代码之前调用
     profileCheckpoint('action_before_setup');
     logForDebugging('[STARTUP] Running setup()...');
@@ -1068,6 +1138,7 @@ async function run(): Promise<CommanderCommand> {
       }
     }
 
+    // ---------- 阶段3：模型 / agent / 系统提示拼装 ----------
     // 尽早计算有效模型，以便 hooks 可以与 MCP 并行运行。如果用户未指定模型但 agent 有模型，则使用 agent 的模型
     let effectiveModel = userSpecifiedModel;
     if (!effectiveModel && mainThreadAgentDefinition?.model && mainThreadAgentDefinition.model !== 'inherit') {
@@ -1110,6 +1181,7 @@ async function run(): Promise<CommanderCommand> {
       const proactivePrompt = `\n# Proactive Mode\n\nYou are in proactive mode. Take initiative — explore, act, and make progress without waiting for instructions.\n\nStart by briefly greeting the user.\n\nYou will receive periodic <tick> prompts. These are check-ins. Do whatever seems most useful, or call Sleep if there's nothing to do. The user will see any text you output.`;
       appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${proactivePrompt}` : proactivePrompt;
     }
+    // ---------- 阶段4：交互式 setup 界面与信任后初始化 ----------
     // 仅交互式会话需要 Ink root——Ink 构造函数中的 patchConsole 会在无头模式下吞掉 console 输出。
     let root!: Root;
     let getFpsMetrics!: () => FpsMetrics | undefined;
@@ -1190,6 +1262,7 @@ async function run(): Promise<CommanderCommand> {
       void refreshExampleCommands(); // 预取示例命令（执行 git log，无 API 调用）
     }
 
+    // ---------- 阶段5：MCP 配置解析与会话启动钩子派发 ----------
     // 解析 MCP 配置（提前启动，与设置/信任对话框工作重叠）
     const {
       servers: existingMcpConfigs
@@ -1287,6 +1360,7 @@ async function run(): Promise<CommanderCommand> {
     // --bare / SIMPLE：跳过插件版本同步 + 孤儿清理。这些
     // 是安装/升级记账操作，脚本调用不需要——
     const setupTrigger = initOnly || init ? 'init' : maintenance ? 'maintenance' : null;
+    // ---------- 阶段6：--init-only 早退路径 ----------
     if (initOnly) {
       applyConfigEnvironmentVariables();
       await processSetupHooks('init', {
@@ -1299,6 +1373,7 @@ async function run(): Promise<CommanderCommand> {
       return;
     }
 
+    // ---------- 阶段7：--print 无头模式（runHeadless） ----------
     // --print 模式
     if (isNonInteractiveSession) {
       if (outputFormat === 'stream-json' || outputFormat === 'json') {
@@ -1483,6 +1558,7 @@ async function run(): Promise<CommanderCommand> {
       ...toolPermissionContext,
       mode: isAgentSwarmsEnabled() && getTeammateUtils().isPlanModeRequired() ? 'plan' as const : toolPermissionContext.mode
     };
+    // ---------- 阶段8：交互式 initialState 构建 ----------
     const initialState: AppState = {
       settings: getInitialSettings(),
       tasks: {},
@@ -1596,6 +1672,7 @@ async function run(): Promise<CommanderCommand> {
       cliAgents,
       initialState
     };
+    // ---------- 阶段9：会话恢复/续接（--continue / --resume） ----------
     if (options.continue) {
       // 直接继续最近的对话
       try {
@@ -1802,9 +1879,10 @@ async function run(): Promise<CommanderCommand> {
         pendingHookMessages
       }, renderAndRun);
     }
+  // ============ 版本号、额外选项与子命令注册 ============
   }).version(`${MACRO.VERSION} (Claude Code)`, '-v, --version', 'Output the version number');
 
-  // 工作树标志
+  // ---------- 工作树、自动化与实验性选项 ----------
   program.option('-w, --worktree [name]', 'Create a new git worktree for this session (optionally specify a name)');
   program.option('--tmux', 'Create a tmux session for the worktree (requires --worktree). Uses iTerm2 native panes when available; use --tmux=classic for traditional tmux.');
   program.addOption(new Option('--tasks [id]', 'Watch a task list and automatically process available tasks.').argParser(String));
@@ -1815,7 +1893,7 @@ async function run(): Promise<CommanderCommand> {
   if (feature('PROACTIVE')) {
     program.addOption(new Option('--proactive', 'Start in proactive autonomous mode'));
   }
-
+  // ---------- 多 Agent 队友选项 ----------
   // 队友身份选项（由leader在生成tmux队友时设置）
   // 这些会替换CLAUDE_CODE_*环境变量
   program.addOption(new Option('--agent-id <id>', 'Teammate agent ID').hideHelp());
@@ -1826,12 +1904,13 @@ async function run(): Promise<CommanderCommand> {
   program.addOption(new Option('--parent-session-id <id>', 'Parent session ID for agent coordination').hideHelp());
   program.addOption(new Option('--teammate-mode <mode>', 'How to spawn teammates: "tmux", "in-process", or "auto"').choices(['auto', 'tmux', 'in-process']).hideHelp());
   program.addOption(new Option('--agent-type <type>', 'Custom agent type for this teammate').hideHelp());
-
+  // ---------- 调试容错选项 ----------
   if (feature('HARD_FAIL')) {
     program.addOption(new Option('--hard-fail', 'Crash on logError calls instead of silently logging').hideHelp());
   }
   profileCheckpoint('run_main_options_built');
 
+  // ---------- print 模式：提前 parse 并 return ----------
   // -p/--print模式跳过子命令注册，因为Commander直接将提示路由到默认动作。
   const isPrintMode = process.argv.includes('-p') || process.argv.includes('--print');
   if (isPrintMode) {
@@ -1841,10 +1920,11 @@ async function run(): Promise<CommanderCommand> {
     return program;
   }
 
+  // ---------- 注册子命令：mcp / plugin / agents / auto-mode / doctor ----------
   // MCP 子命令
 
-  const mcp = program.command('mcp').description('Configure and manage MCP servers').configureHelp(createSortedHelpConfig()).enablePositionalOptions();
-  mcp.command('serve').description(`Start the Claude Code MCP server`).option('-d, --debug', 'Enable debug mode', () => true).option('--verbose', 'Override verbose mode setting from config', () => true).action(async ({
+  const mcp = program.command('mcp').description('配置与管理 MCP 服务器').configureHelp(createSortedHelpConfig()).enablePositionalOptions();
+  mcp.command('serve').description(`启动 Claude Code MCP 服务器`).option('-d, --debug', '启用调试模式', () => true).option('--verbose', '覆盖配置中的 verbose 模式设置', () => true).action(async ({
     debug,
     verbose
   }: {
@@ -1862,7 +1942,7 @@ async function run(): Promise<CommanderCommand> {
 
   // 注册mcp add子命令（提取以便测试）
   registerMcpAddCommand(mcp);
-  mcp.command('remove <name>').description('Remove an MCP server').option('-s, --scope <scope>', 'Configuration scope (local, user, or project) - if not specified, removes from whichever scope it exists in').action(async (name: string, options: {
+  mcp.command('remove <name>').description('移除一个 MCP 服务器').option('-s, --scope <scope>', '配置作用域（local, user, or project）—— 若未指定，则从它所在的任意作用域中移除').action(async (name: string, options: {
     scope?: string;
   }) => {
     const {
@@ -1870,19 +1950,19 @@ async function run(): Promise<CommanderCommand> {
     } = await import('./cli/handlers/mcp.js');
     await mcpRemoveHandler(name, options);
   });
-  mcp.command('list').description('List configured MCP servers. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.').action(async () => {
+  mcp.command('list').description('列出已配置的 MCP 服务器。注意：将跳过工作区信任对话框，并会启动来自 .mcp.json 的 stdio 服务器进行健康检查。请仅在可信目录中使用此命令。').action(async () => {
     const {
       mcpListHandler
     } = await import('./cli/handlers/mcp.js');
     await mcpListHandler();
   });
-  mcp.command('get <name>').description('Get details about an MCP server. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.').action(async (name: string) => {
+  mcp.command('get <name>').description('获取某个 MCP 服务器的详细信息。注意：将跳过工作区信任对话框，并会启动来自 .mcp.json 的 stdio 服务器进行健康检查。请仅在可信目录中使用此命令。').action(async (name: string) => {
     const {
       mcpGetHandler
     } = await import('./cli/handlers/mcp.js');
     await mcpGetHandler(name);
   });
-  mcp.command('add-json <name> <json>').description('Add an MCP server (stdio or SSE) with a JSON string').option('-s, --scope <scope>', 'Configuration scope (local, user, or project)', 'local').option('--client-secret', 'Prompt for OAuth client secret (or set MCP_CLIENT_SECRET env var)').action(async (name: string, json: string, options: {
+  mcp.command('add-json <name> <json>').description('通过 JSON 字符串添加一个 MCP 服务器（stdio 或 SSE）').option('-s, --scope <scope>', '配置作用域（local, user, or project）', 'local').option('--client-secret', '提示输入 OAuth 客户端密钥（或设置 MCP_CLIENT_SECRET 环境变量）').action(async (name: string, json: string, options: {
     scope?: string;
     clientSecret?: true;
   }) => {
@@ -1891,7 +1971,7 @@ async function run(): Promise<CommanderCommand> {
     } = await import('./cli/handlers/mcp.js');
     await mcpAddJsonHandler(name, json, options);
   });
-  mcp.command('reset-project-choices').description('Reset all approved and rejected project-scoped (.mcp.json) servers within this project').action(async () => {
+  mcp.command('reset-project-choices').description('重置本项目内所有已批准和已拒绝的项目级（.mcp.json）服务器').action(async () => {
     const {
       mcpResetChoicesHandler
     } = await import('./cli/handlers/mcp.js');
@@ -1899,8 +1979,8 @@ async function run(): Promise<CommanderCommand> {
   });
 
   // 插件验证命令
-  const pluginCmd = program.command('plugin').alias('plugins').description('Validate local plugins').configureHelp(createSortedHelpConfig());
-  pluginCmd.command('validate <path>').description('Validate a local plugin directory or plugin.json').action(async (manifestPath: string) => {
+  const pluginCmd = program.command('plugin').alias('plugins').description('校验本地插件').configureHelp(createSortedHelpConfig());
+  pluginCmd.command('validate <path>').description('校验本地插件目录或 plugin.json').action(async (manifestPath: string) => {
     const {
       pluginValidateHandler
     } = await import('./cli/handlers/plugins.js');
@@ -1908,7 +1988,7 @@ async function run(): Promise<CommanderCommand> {
   });
 
   // Agents命令 — 列出已配置的agents
-  program.command('agents').description('List configured agents').option('--setting-sources <sources>', 'Comma-separated list of setting sources to load (user, project, local).').action(async () => {
+  program.command('agents').description('列出已配置的 agents').option('--setting-sources <sources>', '以逗号分隔的设置来源列表，用于加载（user, project, local）。').action(async () => {
     const {
       agentsHandler
     } = await import('./cli/handlers/agents.js');
@@ -1919,22 +1999,22 @@ async function run(): Promise<CommanderCommand> {
     // 当tengu_auto_mode_config.enabled === 'disabled'时跳过（断路器）。
     // 从磁盘缓存读取 — 注册时本地功能配置未初始化。
     if (getAutoModeEnabledStateIfCached() !== 'disabled') {
-      const autoModeCmd = program.command('auto-mode').description('Inspect auto mode classifier configuration');
-      autoModeCmd.command('defaults').description('Print the default auto mode environment, allow, and deny rules as JSON').action(async () => {
+      const autoModeCmd = program.command('auto-mode').description('检查 auto mode 分类器配置');
+      autoModeCmd.command('defaults').description('以 JSON 形式打印默认 auto mode 环境、allow 与 deny 规则').action(async () => {
         const {
           autoModeDefaultsHandler
         } = await import('./cli/handlers/autoMode.js');
         autoModeDefaultsHandler();
         process.exit(0);
       });
-      autoModeCmd.command('config').description('Print the effective auto mode config as JSON: your settings where set, defaults otherwise').action(async () => {
+      autoModeCmd.command('config').description('以 JSON 形式打印生效的 auto mode 配置：已设置的采用你的设置，否则采用默认值').action(async () => {
         const {
           autoModeConfigHandler
         } = await import('./cli/handlers/autoMode.js');
         autoModeConfigHandler();
         process.exit(0);
       });
-      autoModeCmd.command('critique').description('Get AI feedback on your custom auto mode rules').option('--model <model>', 'Override which model is used').action(async options => {
+      autoModeCmd.command('critique').description('获取 AI 对你自定义 auto mode 规则的反馈').option('--model <model>', '覆盖所使用的模型').action(async options => {
         const {
           autoModeCritiqueHandler
         } = await import('./cli/handlers/autoMode.js');
@@ -1954,6 +2034,7 @@ async function run(): Promise<CommanderCommand> {
     await doctorHandler(root);
   });
 
+  // ---------- 默认模式：统一 parse 并收尾 ----------
   profileCheckpoint('run_before_parse');
   await program.parseAsync(process.argv);
   profileCheckpoint('run_after_parse');
@@ -1966,6 +2047,7 @@ async function run(): Promise<CommanderCommand> {
   return program;
 }
 /** 执行 maybe Activate Proactive 对应的业务处理。 */
+// ============ 尾部辅助函数 ============
 function maybeActivateProactive(options: unknown): void {
   if ((feature('PROACTIVE')) && ((options as {
     proactive?: boolean;

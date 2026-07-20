@@ -4,17 +4,10 @@ import { feature } from 'src/utils/features.js';
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 process.env.COREPACK_ENABLE_AUTO_PIN = '0';
 
-// DeepSeek exposes an Anthropic-compatible API, so the SDK still reads its
-// conventional variable internally. The user-facing development config keeps
-// the provider-specific name and takes precedence over inherited shell values.
-if (process.env.DEEPSEEK_API_KEY) {
-  process.env.ANTHROPIC_API_KEY = process.env.DEEPSEEK_API_KEY;
-}
-
-// Harness-science L0 ablation baseline. Inlined here (not init.ts) because
-// BashTool/AgentTool/PowerShellTool capture DISABLE_BACKGROUND_TASKS into
-// module-level consts at import time — init() runs too late. Keep this before
-// the dynamic CLI import so explicit harness settings take effect.
+// Harness-science L0 消融实验基线。之所以内联写在这里（而不是 init.ts 中），
+// 是因为 BashTool、AgentTool 和 PowerShellTool 会在模块导入时，
+// 将 DISABLE_BACKGROUND_TASKS 保存到模块级常量中——等到 init() 执行时已经太晚。
+// 必须将这段代码放在动态导入 CLI 之前，确保显式配置的 harness 参数能够生效。
 // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level
 /**
  * 引导入口：加载完整 CLI 前先检查特殊参数。
@@ -90,11 +83,6 @@ async function main(): Promise<void> {
         exitWithError(result.error);
       }
     }
-  }
-
-  // Redirect common update flag mistakes to the update subcommand
-  if (args.length === 1 && (args[0] === '--update' || args[0] === '--upgrade')) {
-    process.argv = [process.argv[0]!, process.argv[1]!, 'update'];
   }
 
   // --bare: set SIMPLE early so gates fire during module eval / commander
