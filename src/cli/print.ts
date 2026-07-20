@@ -204,6 +204,7 @@ import { getMcpPrefix } from 'src/services/mcp/mcpStringUtils.js'
 import {
   commandBelongsToServer,
   filterToolsByServer,
+  replaceToolsForServer,
 } from 'src/services/mcp/utils.js'
 import { setupVscodeSdkMcp } from 'src/services/mcp/vscodeSdkMcp.js'
 import { getAllMcpConfigs } from 'src/services/mcp/config.js'
@@ -2554,7 +2555,6 @@ function runHeadlessStreaming(
           } else {
             const result = await reconnectMcpServerImpl(serverName, config)
             // 使用新的客户端、工具、命令和资源更新appState.mcp
-            const prefix = getMcpPrefix(serverName)
             setAppState(prev => ({
               ...prev,
               mcp: {
@@ -2563,10 +2563,11 @@ function runHeadlessStreaming(
                 clients: prev.mcp.clients.map(c =>
                   c.name === serverName ? result.client : c,
                 ),
-                tools: [
-                  ...reject(prev.mcp.tools, t => t.name?.startsWith(prefix)),
-                  ...result.tools,
-                ],
+                tools: replaceToolsForServer(
+                  prev.mcp.tools,
+                  serverName,
+                  result.tools,
+                ),
                 commands: [
                   ...reject(prev.mcp.commands, c =>
                     commandBelongsToServer(c, serverName),
@@ -2586,12 +2587,11 @@ function runHeadlessStreaming(
                 ...dynamicMcpState.clients.filter(c => c.name !== serverName),
                 result.client,
               ],
-              tools: [
-                ...dynamicMcpState.tools.filter(
-                  t => !t.name?.startsWith(prefix),
-                ),
-                ...result.tools,
-              ],
+              tools: replaceToolsForServer(
+                dynamicMcpState.tools,
+                serverName,
+                result.tools,
+              ),
             }
             if (result.client.type === 'connected') {
               registerElicitationHandlers([result.client])
@@ -2634,7 +2634,6 @@ function runHeadlessStreaming(
               await clearServerCache(serverName, config)
             }
             // 更新appState.mcp以反映禁用状态并移除工具/命令/资源
-            const prefix = getMcpPrefix(serverName)
             setAppState(prev => ({
               ...prev,
               mcp: {
@@ -2646,7 +2645,7 @@ function runHeadlessStreaming(
                     : c,
                 ),
                 /** 转换 tools 对应的数据或状态。 */
-                tools: reject(prev.mcp.tools, t => t.name?.startsWith(prefix)),
+                tools: replaceToolsForServer(prev.mcp.tools, serverName, []),
                 /** 执行 commands 对应的业务处理。 */
                 commands: reject(prev.mcp.commands, c =>
                   commandBelongsToServer(c, serverName),
@@ -2661,7 +2660,6 @@ function runHeadlessStreaming(
             const result = await reconnectMcpServerImpl(serverName, config)
             // 使用新的客户端、工具、命令和资源更新appState.mcp
             // 这确保LLM在启用服务器后看到更新的工具
-            const prefix = getMcpPrefix(serverName)
             setAppState(prev => ({
               ...prev,
               mcp: {
@@ -2670,10 +2668,11 @@ function runHeadlessStreaming(
                 clients: prev.mcp.clients.map(c =>
                   c.name === serverName ? result.client : c,
                 ),
-                tools: [
-                  ...reject(prev.mcp.tools, t => t.name?.startsWith(prefix)),
-                  ...result.tools,
-                ],
+                tools: replaceToolsForServer(
+                  prev.mcp.tools,
+                  serverName,
+                  result.tools,
+                ),
                 commands: [
                   ...reject(prev.mcp.commands, c =>
                     commandBelongsToServer(c, serverName),
@@ -2779,7 +2778,6 @@ function runHeadlessStreaming(
                     serverName,
                     config,
                   )
-                  const prefix = getMcpPrefix(serverName)
                   setAppState(prev => ({
                     ...prev,
                     mcp: {
@@ -2788,12 +2786,11 @@ function runHeadlessStreaming(
                       clients: prev.mcp.clients.map(c =>
                         c.name === serverName ? result.client : c,
                       ),
-                      tools: [
-                        ...reject(prev.mcp.tools, t =>
-                          t.name?.startsWith(prefix),
-                        ),
-                        ...result.tools,
-                      ],
+                      tools: replaceToolsForServer(
+                        prev.mcp.tools,
+                        serverName,
+                        result.tools,
+                      ),
                       commands: [
                         ...reject(prev.mcp.commands, c =>
                           commandBelongsToServer(c, serverName),
@@ -2818,12 +2815,11 @@ function runHeadlessStreaming(
                       ),
                       result.client,
                     ],
-                    tools: [
-                      ...dynamicMcpState.tools.filter(
-                        t => !t.name?.startsWith(prefix),
-                      ),
-                      ...result.tools,
-                    ],
+                    tools: replaceToolsForServer(
+                      dynamicMcpState.tools,
+                      serverName,
+                      result.tools,
+                    ),
                   }
                 })
                 .catch(error => {
@@ -2911,7 +2907,6 @@ function runHeadlessStreaming(
           } else {
             await revokeServerTokens(serverName, config)
             const result = await reconnectMcpServerImpl(serverName, config)
-            const prefix = getMcpPrefix(serverName)
             setAppState(prev => ({
               ...prev,
               mcp: {
@@ -2920,10 +2915,11 @@ function runHeadlessStreaming(
                 clients: prev.mcp.clients.map(c =>
                   c.name === serverName ? result.client : c,
                 ),
-                tools: [
-                  ...reject(prev.mcp.tools, t => t.name?.startsWith(prefix)),
-                  ...result.tools,
-                ],
+                tools: replaceToolsForServer(
+                  prev.mcp.tools,
+                  serverName,
+                  result.tools,
+                ),
                 commands: [
                   ...reject(prev.mcp.commands, c =>
                     commandBelongsToServer(c, serverName),

@@ -2,11 +2,14 @@ import {
   ContinuousEventPriority,
   DefaultEventPriority,
   DiscreteEventPriority,
-  NoEventPriority,
 } from 'react-reconciler/constants.js'
 import { logError } from '../../utils/log.js'
 import { HANDLER_FOR_EVENT } from './event-handlers.js'
 import type { EventTarget, TerminalEvent } from './terminal-event.js'
+
+// React 使用 0 表示当前没有显式更新优先级；运行时导出了该常量，
+// 但当前 @types/react-reconciler 没有声明它。
+const NO_EVENT_PRIORITY = 0
 
 // --
 
@@ -169,7 +172,7 @@ export class Dispatcher {
    * when no explicit priority has been set.
    */
   resolveEventPriority(): number {
-    if (this.currentUpdatePriority !== (NoEventPriority as number)) {
+    if (this.currentUpdatePriority !== NO_EVENT_PRIORITY) {
       return this.currentUpdatePriority
     }
     if (this.currentEvent) {

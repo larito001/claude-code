@@ -54,14 +54,12 @@ import { isSettingSourceEnabled } from '../utils/settings/constants.js'
 import { getManagedFilePath } from '../utils/settings/managedPath.js'
 import { HooksSchema, type HooksSettings } from '../utils/settings/types.js'
 import { createSignal } from '../utils/signal.js'
-import { registerMCPSkillBuilders } from './mcpSkillBuilders.js'
 
 export type LoadedFrom =
   | 'skills'
   | 'plugin'
   | 'managed'
   | 'bundled'
-  | 'mcp'
 
 /**
  * Returns the Skills directory path for a given source.
@@ -166,11 +164,9 @@ function parseSkillPaths(frontmatter: FrontmatterData): string[] | undefined {
 }
 
 /**
- * Parses all skill frontmatter fields that are shared between file-based and
- * MCP skill loading. Caller supplies the resolved skill name and the
- * source/loadedFrom/baseDir/paths fields separately.
+ * 解析文件型技能共享的 frontmatter 字段；调用方另行提供已解析的技能名称。
  */
-export function parseSkillFrontmatterFields(
+function parseSkillFrontmatterFields(
   frontmatter: FrontmatterData,
   markdownContent: string,
   resolvedName: string,
@@ -356,32 +352,27 @@ export function createSkillCommand({
         getSessionId(),
       )
 
-      // Security: MCP skills are remote and untrusted — never execute inline
-      // shell commands (!`…` / ```! … ```) from their markdown body.
-      // ${CLAUDE_SKILL_DIR} is meaningless for MCP skills anyway.
-      if (loadedFrom !== 'mcp') {
-        finalContent = await executeShellCommandsInPrompt(
-          finalContent,
-          {
-            ...toolUseContext,
-            getAppState() {
-              const appState = toolUseContext.getAppState()
-              return {
-                ...appState,
-                toolPermissionContext: {
-                  ...appState.toolPermissionContext,
-                  alwaysAllowRules: {
-                    ...appState.toolPermissionContext.alwaysAllowRules,
-                    command: allowedTools,
-                  },
+      finalContent = await executeShellCommandsInPrompt(
+        finalContent,
+        {
+          ...toolUseContext,
+          getAppState() {
+            const appState = toolUseContext.getAppState()
+            return {
+              ...appState,
+              toolPermissionContext: {
+                ...appState.toolPermissionContext,
+                alwaysAllowRules: {
+                  ...appState.toolPermissionContext.alwaysAllowRules,
+                  command: allowedTools,
                 },
-              }
-            },
+              },
+            }
           },
-          `/${skillName}`,
-          shell,
-        )
-      }
+        },
+        `/${skillName}`,
+        shell,
+      )
 
       return [{ type: 'text', text: finalContent }]
     },
@@ -865,14 +856,3 @@ export function clearDynamicSkills(): void {
   conditionalSkills.clear()
   activatedConditionalSkillNames.clear()
 }
-
-// Expose createSkillCommand + parseSkillFrontmatterFields to MCP skill
-// discovery via a leaf registry module. See mcpSkillBuilders.ts for why this
-// indirection exists (a literal dynamic import from mcpSkills.ts fans a single
-// edge out into many cycle violations; a variable-specifier dynamic import
-// passes dep-cruiser but fails to resolve in Bun-bundled binaries at runtime).
-// eslint-disable-next-line custom-rules/no-top-level-side-effects -- write-once registration, idempotent
-registerMCPSkillBuilders({
-  createSkillCommand,
-  parseSkillFrontmatterFields,
-})

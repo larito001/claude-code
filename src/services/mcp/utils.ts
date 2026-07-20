@@ -38,16 +38,16 @@ import {
  */
 export function filterToolsByServer(tools: Tool[], serverName: string): Tool[] {
   const prefix = `mcp__${normalizeNameForMCP(serverName)}__`
-  return tools.filter(tool => tool.name?.startsWith(prefix))
+  return tools.filter(
+    tool =>
+      tool.mcpInfo?.serverName === serverName || tool.name?.startsWith(prefix),
+  )
 }
 
 /**
  * True when a command belongs to the given MCP server.
  *
- * MCP **prompts** are named `mcp__<server>__<prompt>` (wire-format constraint);
- * MCP **skills** are named `<server>:<skill>` (matching plugin/nested-dir skill
- * naming). Both live in `mcp.commands`, so cleanup and filtering must match
- * either shape.
+ * MCP Prompt 使用 `mcp__<server>__<prompt>` 命名。
  */
 export function commandBelongsToServer(
   command: Command,
@@ -56,9 +56,7 @@ export function commandBelongsToServer(
   const normalized = normalizeNameForMCP(serverName)
   const name = command.name
   if (!name) return false
-  return (
-    name.startsWith(`mcp__${normalized}__`) || name.startsWith(`${normalized}:`)
-  )
+  return name.startsWith(`mcp__${normalized}__`)
 }
 
 /**
@@ -74,23 +72,12 @@ export function filterCommandsByServer(
   return commands.filter(c => commandBelongsToServer(c, serverName))
 }
 
-/**
- * Filters MCP **prompts** (not skills) by server. Used by the `/mcp` menu
- * capabilities display — skills are a separate feature shown in `/skills`,
- * so they mustn't inflate the "prompts" capability badge.
- *
- * The distinguisher is `loadedFrom === 'mcp'`: MCP skills set it, MCP
- * prompts don't (they use `isMcp: true` instead).
- */
+/** 按服务器筛选标准 MCP Prompt，供 `/mcp` 能力列表展示。 */
 export function filterMcpPromptsByServer(
   commands: Command[],
   serverName: string,
 ): Command[] {
-  return commands.filter(
-    c =>
-      commandBelongsToServer(c, serverName) &&
-      !(c.type === 'prompt' && c.loadedFrom === 'mcp'),
-  )
+  return commands.filter(c => commandBelongsToServer(c, serverName))
 }
 
 /**
@@ -117,7 +104,26 @@ export function excludeToolsByServer(
   serverName: string,
 ): Tool[] {
   const prefix = `mcp__${normalizeNameForMCP(serverName)}__`
-  return tools.filter(tool => !tool.name?.startsWith(prefix))
+  return tools.filter(
+    tool =>
+      tool.mcpInfo?.serverName !== serverName && !tool.name?.startsWith(prefix),
+  )
+}
+
+/** 替换单个 MCP 服务器的工具，并按名称消除通用资源工具等重复项。 */
+export function replaceToolsForServer(
+  tools: Tool[],
+  serverName: string,
+  replacements: Tool[],
+): Tool[] {
+  const seen = new Set<string>()
+  return [...excludeToolsByServer(tools, serverName), ...replacements].filter(
+    tool => {
+      if (seen.has(tool.name)) return false
+      seen.add(tool.name)
+      return true
+    },
+  )
 }
 
 /**

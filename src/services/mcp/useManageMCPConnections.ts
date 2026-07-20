@@ -40,8 +40,11 @@ import { errorMessage } from '../../utils/errors.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { logMCPDebug, logMCPError } from '../../utils/log.js'
 import { registerElicitationHandler } from './elicitationHandler.js'
-import { getMcpPrefix } from './mcpStringUtils.js'
-import { commandBelongsToServer, excludeStalePluginClients } from './utils.js'
+import {
+  commandBelongsToServer,
+  excludeStalePluginClients,
+  replaceToolsForServer,
+} from './utils.js'
 
 // Constants for reconnection with exponential backoff
 const MAX_RECONNECT_ATTEMPTS = 5
@@ -157,7 +160,6 @@ export function useManageMCPConnections(
             ? (rawRes ?? [])
             : rawRes
 
-        const prefix = getMcpPrefix(client.name)
         const existingClientIndex = mcp.clients.findIndex(
           c => c.name === client.name,
         )
@@ -170,7 +172,7 @@ export function useManageMCPConnections(
         const updatedTools =
           tools === undefined
             ? mcp.tools
-            : [...reject(mcp.tools, t => t.name?.startsWith(prefix)), ...tools]
+            : replaceToolsForServer(mcp.tools, client.name, tools)
 
         const updatedCommands =
           commands === undefined
@@ -415,16 +417,12 @@ export function useManageMCPConnections(
                   `Received prompts/list_changed notification, refreshing prompts`,
                 )
                 try {
-                  // Skills come from resources, not prompts — don't invalidate their
-                  // cache here. fetchMcpSkillsForClient returns the cached result.
                   fetchCommandsForClient.cache.delete(client.name)
                   const mcpPrompts = await fetchCommandsForClient(client)
                   updateServer({
                     ...client,
                     commands: mcpPrompts,
                   })
-                  // MCP skills changed — invalidate skill-search index so
-                  // next discovery rebuilds with the new set.
                 } catch (error) {
                   logMCPError(
                     client.name,

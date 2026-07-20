@@ -169,8 +169,7 @@ export type CommandBase = {
     | 'skills'
     | 'plugin'
     | 'managed'
-    | 'bundled'
-    | 'mcp' // 命令加载的来源
+    | 'bundled' // 命令加载的来源
   kind?: 'workflow' // 区分工作流支持的命令（在自动补全中带有徽章）
   immediate?: boolean // 如果为 true，命令立即执行而不等待停止点（绕过队列）
   isSensitive?: boolean // 如果为 true，则从对话历史中隐藏参数。

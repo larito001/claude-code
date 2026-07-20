@@ -5,10 +5,7 @@ import {
   clearMcpAuthCache,
   reconnectMcpServerImpl,
 } from '../../services/mcp/client.js'
-import {
-  buildMcpToolName,
-  getMcpPrefix,
-} from '../../services/mcp/mcpStringUtils.js'
+import { buildMcpToolName } from '../../services/mcp/mcpStringUtils.js'
 import type {
   McpHTTPServerConfig,
   McpSSEServerConfig,
@@ -19,6 +16,10 @@ import { errorMessage } from '../../utils/errors.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { logMCPDebug, logMCPError } from '../../utils/log.js'
 import type { PermissionDecision } from '../../utils/permissions/PermissionResult.js'
+import {
+  commandBelongsToServer,
+  replaceToolsForServer,
+} from '../../services/mcp/utils.js'
 
 const inputSchema = lazySchema(() => z.object({}))
 type InputSchema = ReturnType<typeof inputSchema>
@@ -126,7 +127,6 @@ export function createMcpAuthTool(
         .then(async () => {
           clearMcpAuthCache()
           const result = await reconnectMcpServerImpl(serverName, config)
-          const prefix = getMcpPrefix(serverName)
           setAppState(prev => ({
             ...prev,
             mcp: {
@@ -134,12 +134,15 @@ export function createMcpAuthTool(
               clients: prev.mcp.clients.map(c =>
                 c.name === serverName ? result.client : c,
               ),
-              tools: [
-                ...reject(prev.mcp.tools, t => t.name?.startsWith(prefix)),
-                ...result.tools,
-              ],
+              tools: replaceToolsForServer(
+                prev.mcp.tools,
+                serverName,
+                result.tools,
+              ),
               commands: [
-                ...reject(prev.mcp.commands, c => c.name?.startsWith(prefix)),
+                ...reject(prev.mcp.commands, c =>
+                  commandBelongsToServer(c, serverName),
+                ),
                 ...result.commands,
               ],
               resources: result.resources

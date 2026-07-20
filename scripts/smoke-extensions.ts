@@ -188,8 +188,12 @@ try {
     { clearPluginOutputStyleCache, loadPluginOutputStyles },
     { clearCommandsCache, getCommands },
     { SkillTool },
+    { ListMcpResourcesTool },
+    { ReadMcpResourceTool },
     { enableConfigs },
     { normalizeMcpServerForPlatform },
+    { replaceToolsForServer },
+    { createMcpAuthTool },
   ] = await Promise.all([
     import('../src/bootstrap/state.js'),
     import('../src/state/AppStateStore.js'),
@@ -204,8 +208,12 @@ try {
     import('../src/utils/plugins/loadPluginOutputStyles.js'),
     import('../src/commands.js'),
     import('../src/tools/SkillTool/SkillTool.js'),
+    import('../src/tools/ListMcpResourcesTool/ListMcpResourcesTool.js'),
+    import('../src/tools/ReadMcpResourceTool/ReadMcpResourceTool.js'),
     import('../src/utils/config.js'),
     import('../src/services/mcp/config.js'),
+    import('../src/services/mcp/utils.js'),
+    import('../src/tools/McpAuthTool/McpAuthTool.js'),
   ])
 
   enableConfigs()
@@ -269,7 +277,11 @@ try {
     fetchCommandsForClient(connection),
   ])
   const echoTool = mcpTools.find(tool => tool.name === 'mcp__core-smoke__echo')
+  const uppercaseTool = mcpTools.find(
+    tool => tool.name === 'mcp__core-smoke__uppercase',
+  )
   assert(echoTool, 'MCP tool discovery lost the echo tool')
+  assert(uppercaseTool, 'MCP tool pagination lost the second page')
   assert(echoTool.isReadOnly(), 'MCP read-only annotation was not preserved')
   assert(
     mcpResources.some(
@@ -279,10 +291,21 @@ try {
     ),
     'MCP resource discovery lost server ownership',
   )
+  assert(
+    mcpResources.some(resource => resource.uri === 'smoke://page-two'),
+    'MCP resource pagination lost the second page',
+  )
   const mcpPrompt = mcpCommands.find(
     command => command.name === 'mcp__core-smoke__core-review',
   )
   assert(mcpPrompt?.type === 'prompt', 'MCP prompt discovery failed')
+  const pagedMcpPrompt = mcpCommands.find(
+    command => command.name === 'mcp__core-smoke__core-plan',
+  )
+  assert(
+    pagedMcpPrompt?.type === 'prompt',
+    'MCP prompt pagination lost the second page',
+  )
 
   let appState = getDefaultAppState()
   appState = {
@@ -298,7 +321,13 @@ try {
       commands: [],
       debug: false,
       mainLoopModel: 'smoke-model',
-      tools: [echoTool, SkillTool],
+      tools: [
+        echoTool,
+        uppercaseTool,
+        ListMcpResourcesTool,
+        ReadMcpResourceTool,
+        SkillTool,
+      ],
       verbose: false,
       thinkingConfig: { type: 'disabled' as const },
       mcpClients: [connection],
@@ -346,6 +375,16 @@ try {
     includesMarker(echoResult.mcpMeta, 'framework'),
     'MCP structured content metadata was not preserved',
   )
+  const uppercaseResult = await uppercaseTool.call(
+    { value: 'framework' },
+    context,
+    undefined,
+    parentMessage,
+  )
+  assert(
+    includesMarker(uppercaseResult.data, 'MCP_UPPERCASE:FRAMEWORK'),
+    'MCP second-page tool did not execute',
+  )
   let invalidCallRejected = false
   try {
     await echoTool.call({}, context, undefined, parentMessage)
@@ -363,10 +402,84 @@ try {
     includesMarker(resourceResult, 'MCP_RESOURCE_OK'),
     'MCP resource read did not reach the server',
   )
+  const listedResources = await ListMcpResourcesTool.call(
+    { server: 'core-smoke' },
+    context,
+    undefined,
+    parentMessage,
+  )
+  assert(
+    listedResources.data.length === 2 &&
+      listedResources.data.some(resource => resource.uri === 'smoke://page-two'),
+    'ListMcpResourcesTool did not expose every resource page',
+  )
+  const readResource = await ReadMcpResourceTool.call(
+    { server: 'core-smoke', uri: 'smoke://page-two' },
+    context,
+    undefined,
+    parentMessage,
+  )
+  assert(
+    includesMarker(readResource.data, 'MCP_RESOURCE_PAGE_TWO_OK'),
+    'ReadMcpResourceTool did not execute a real resource read',
+  )
   const promptResult = await mcpPrompt.getPromptForCommand('repository', context)
   assert(
     includesMarker(promptResult, 'MCP_PROMPT_OK:repository'),
     'MCP prompt execution did not reach the server',
+  )
+  const pagedPromptResult = await pagedMcpPrompt.getPromptForCommand(
+    'release',
+    context,
+  )
+  assert(
+    includesMarker(pagedPromptResult, 'MCP_PROMPT_PAGE_TWO_OK:release'),
+    'MCP second-page prompt did not execute',
+  )
+
+  const replacedTools = replaceToolsForServer(
+    [echoTool, ListMcpResourcesTool, ReadMcpResourceTool],
+    'core-smoke',
+    [uppercaseTool, ListMcpResourcesTool, ReadMcpResourceTool],
+  )
+  assert(
+    !replacedTools.some(tool => tool.name === echoTool.name) &&
+      replacedTools.some(tool => tool.name === uppercaseTool.name) &&
+      replacedTools.filter(tool => tool.name === ListMcpResourcesTool.name)
+        .length === 1 &&
+      replacedTools.filter(tool => tool.name === ReadMcpResourceTool.name)
+        .length === 1,
+    'MCP reconnect replacement left stale or duplicate resource tools',
+  )
+  const unprefixedMcpTool = { ...echoTool, name: 'sdk-echo' }
+  assert(
+    replaceToolsForServer([unprefixedMcpTool], 'core-smoke', []).length === 0,
+    'MCP reconnect did not remove an SDK no-prefix tool by ownership metadata',
+  )
+
+  const stdioAuthResult = await createMcpAuthTool(
+    'stdio-auth-smoke',
+    mcpConfig,
+  ).call({}, context, undefined, parentMessage)
+  assert(
+    stdioAuthResult.data.status === 'unsupported',
+    'MCP auth tool did not reject a transport that cannot use OAuth',
+  )
+
+  let missingResourceServerRejected = false
+  try {
+    await ListMcpResourcesTool.call(
+      { server: 'missing-resource-server' },
+      context,
+      undefined,
+      parentMessage,
+    )
+  } catch (error) {
+    missingResourceServerRejected = String(error).includes('not found')
+  }
+  assert(
+    missingResourceServerRejected,
+    'MCP resource listing accepted an unknown server',
   )
 
   const pluginResult = await loadAllPluginsCacheOnly()
@@ -527,9 +640,27 @@ try {
     'MCP missing-command failure was not contained as a failed connection',
   )
 
+  const loopingConfig = {
+    ...mcpConfig,
+    args: ['run', mcpFixture, '--repeat-pagination-cursor'],
+  }
+  const loopingConnection = await connectToServer(
+    'looping-pagination-smoke',
+    loopingConfig,
+  )
+  assert(
+    loopingConnection.type === 'connected',
+    'MCP looping-pagination fixture did not connect',
+  )
+  assert(
+    (await fetchResourcesForClient(loopingConnection)).length === 0,
+    'MCP repeated pagination cursor was not rejected safely',
+  )
+
   await Promise.all([
     clearServerCache('core-smoke', mcpConfig),
     clearServerCache('missing-smoke', failedConfig),
+    clearServerCache('looping-pagination-smoke', loopingConfig),
   ])
   console.log('Extension smoke passed: MCP + plugins + skills')
 } finally {

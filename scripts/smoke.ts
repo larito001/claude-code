@@ -35,8 +35,6 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-assert(feature('MCP_SKILLS'), 'MCP skills must be enabled in the core profile')
-assert(feature('HOOK_PROMPTS'), 'Hook prompts must be enabled in the core profile')
 assert(!feature('KAIROS'), 'Unsupported product features must remain disabled')
 
 assert(
@@ -139,6 +137,14 @@ const agentTypes = new Set(getBuiltInAgents().map(agent => agent.agentType))
 for (const agentType of ['general-purpose', 'Explore', 'Plan']) {
   assert(agentTypes.has(agentType), `Core agent is missing: ${agentType}`)
 }
+const guideAgent = getBuiltInAgents().find(
+  agent => agent.agentType === 'claude-code-guide',
+)
+assert(guideAgent, 'Claude Code guide agent is missing')
+assert(
+  guideAgent.tools?.includes('WebSearch'),
+  'Claude Code guide agent cannot use WebSearch',
+)
 
 clearBundledSkills()
 initBundledSkills()

@@ -14,7 +14,7 @@ import { Dialog } from '../design-system/Dialog.js';
 
 // Skills are always PromptCommands with CommandBase properties
 type SkillCommand = CommandBase & PromptCommand;
-type SkillSource = SettingSource | 'plugin' | 'mcp';
+type SkillSource = SettingSource | 'plugin';
 type Props = {
   onExit: (result?: string, options?: {
     display?: CommandResultDisplay;
@@ -25,21 +25,9 @@ function getSourceTitle(source: SkillSource): string {
   if (source === 'plugin') {
     return 'Plugin skills';
   }
-  if (source === 'mcp') {
-    return 'MCP skills';
-  }
   return `${capitalize(getSettingSourceName(source))} skills`;
 }
 function getSourceSubtitle(source: SkillSource, skills: SkillCommand[]): string | undefined {
-  // MCP skills show server names; file-based skills show filesystem paths.
-  // Skill names are `<server>:<skill>`, not `mcp__<server>__…`.
-  if (source === 'mcp') {
-    const servers = [...new Set(skills.map(s => {
-      const idx = s.name.indexOf(':');
-      return idx > 0 ? s.name.slice(0, idx) : null;
-    }).filter((n): n is string => n != null))];
-    return servers.length > 0 ? servers.join(', ') : undefined;
-  }
   return getDisplayPath(getSkillsPath(source));
 }
 export function SkillsMenu(t0) {
@@ -65,8 +53,7 @@ export function SkillsMenu(t0) {
       projectSettings: [],
       localSettings: [],
       flagSettings: [],
-      plugin: [],
-      mcp: []
+      plugin: []
     };
     for (const skill of skills) {
       const source = skill.source as SkillSource;
@@ -181,19 +168,10 @@ export function SkillsMenu(t0) {
   } else {
     t10 = $[21];
   }
-  let t11;
-  if ($[22] !== renderSkillGroup) {
-    t11 = renderSkillGroup("mcp");
-    $[22] = renderSkillGroup;
-    $[23] = t11;
-  } else {
-    t11 = $[23];
-  }
   let t12;
-  if ($[24] !== t10 || $[25] !== t11 || $[26] !== t7 || $[27] !== t8 || $[28] !== t9) {
-    t12 = <Box flexDirection="column" gap={1}>{t7}{t8}{t9}{t10}{t11}</Box>;
+  if ($[24] !== t10 || $[26] !== t7 || $[27] !== t8 || $[28] !== t9) {
+    t12 = <Box flexDirection="column" gap={1}>{t7}{t8}{t9}{t10}</Box>;
     $[24] = t10;
-    $[25] = t11;
     $[26] = t7;
     $[27] = t8;
     $[28] = t9;
@@ -230,5 +208,5 @@ function _temp2(a, b) {
   return getCommandName(a).localeCompare(getCommandName(b));
 }
 function _temp(cmd) {
-  return cmd.type === "prompt" && (cmd.loadedFrom === "skills" || cmd.loadedFrom === "plugin" || cmd.loadedFrom === "mcp");
+  return cmd.type === "prompt" && (cmd.loadedFrom === "skills" || cmd.loadedFrom === "plugin");
 }

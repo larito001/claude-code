@@ -1,5 +1,4 @@
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from 'src/bootstrap/state.js'
 import {
   findCommand,
@@ -54,23 +53,9 @@ import {
   renderToolUseRejectedMessage,
 } from './UI.js'
 
-/**
- * Gets all commands including MCP skills/prompts from AppState.
- * SkillTool needs this because getCommands() only returns local/bundled skills.
- */
-async function getAllCommands(context: ToolUseContext): Promise<Command[]> {
-  // Only include MCP skills (loadedFrom === 'mcp'), not plain MCP prompts.
-  // Before this filter, the model could invoke MCP prompts via SkillTool
-  // if it guessed the mcp__server__prompt name — they weren't discoverable
-  // but were technically reachable.
-  const mcpSkills = context
-    .getAppState()
-    .mcp.commands.filter(
-      cmd => cmd.type === 'prompt' && cmd.loadedFrom === 'mcp',
-    )
-  if (mcpSkills.length === 0) return getCommands(getProjectRoot())
-  const localCommands = await getCommands(getProjectRoot())
-  return uniqBy([...localCommands, ...mcpSkills], 'name')
+/** 获取本地、插件和内置命令，供 Skill 工具查找技能。 */
+async function getAllCommands(): Promise<Command[]> {
+  return getCommands(getProjectRoot())
 }
 // Re-export Progress from centralized types to break import cycles
 export type { SkillToolProgress as Progress } from '../../types/tools.js'
@@ -257,8 +242,8 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
       ? trimmed.substring(1)
       : trimmed
 
-    // Get available commands (including MCP skills)
-    const commands = await getAllCommands(context)
+    // 获取当前可用的文件型和插件型技能。
+    const commands = await getAllCommands()
 
     // Check if command exists
     const foundCommand = findCommand(normalizedCommandName, commands)
@@ -305,7 +290,7 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
     const permissionContext = appState.toolPermissionContext
 
     // Look up the command object to pass as metadata
-    const commands = await getAllCommands(context)
+    const commands = await getAllCommands()
     const commandObj = findCommand(commandName, commands)
 
     // Helper function to check if a rule matches the skill
@@ -441,7 +426,7 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
     // Remove leading slash if present (for compatibility)
     const commandName = trimmed.startsWith('/') ? trimmed.substring(1) : trimmed
 
-    const commands = await getAllCommands(context)
+    const commands = await getAllCommands()
     const command = findCommand(commandName, commands)
 
     // Track skill usage for ranking

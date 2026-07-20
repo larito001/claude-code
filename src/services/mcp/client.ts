@@ -26,12 +26,7 @@ import {
   type ElicitResult,
   ErrorCode,
   type JSONRPCMessage,
-  type ListPromptsResult,
-  ListPromptsResultSchema,
-  ListResourcesResultSchema,
   ListRootsRequestSchema,
-  type ListToolsResult,
-  ListToolsResultSchema,
   McpError,
   type PromptMessage,
   type ResourceLink,
@@ -1443,6 +1438,36 @@ export function areMcpConfigsEqual(
 // Max cache size for fetch* caches. Keyed by server name (stable across
 // reconnects), bounded to prevent unbounded growth with many MCP servers.
 const MCP_FETCH_CACHE_SIZE = 20
+const MCP_MAX_LIST_PAGES = 100
+
+/** 读取 MCP 分页列表，并拒绝重复游标和异常长的分页链。 */
+async function fetchAllMcpPages<T>(
+  capability: string,
+  fetchPage: (
+    cursor: string | undefined,
+  ) => Promise<{ items: T[]; nextCursor?: string }>,
+): Promise<T[]> {
+  const items: T[] = []
+  const seenCursors = new Set<string>()
+  let cursor: string | undefined
+
+  for (let page = 0; page < MCP_MAX_LIST_PAGES; page++) {
+    const result = await fetchPage(cursor)
+    items.push(...result.items)
+    if (!result.nextCursor) return items
+    if (seenCursors.has(result.nextCursor)) {
+      throw new Error(
+        `MCP ${capability} pagination repeated cursor "${result.nextCursor}"`,
+      )
+    }
+    seenCursors.add(result.nextCursor)
+    cursor = result.nextCursor
+  }
+
+  throw new Error(
+    `MCP ${capability} pagination exceeded ${MCP_MAX_LIST_PAGES} pages`,
+  )
+}
 
 /**
  * Encode MCP tool input for the auto-mode security classifier.
@@ -1468,13 +1493,15 @@ export const fetchToolsForClient = memoizeWithLRU(
         return []
       }
 
-      const result = (await client.client.request(
-        { method: 'tools/list' },
-        ListToolsResultSchema,
-      )) as ListToolsResult
+      const tools = await fetchAllMcpPages('tools', async cursor => {
+        const result = await client.client.listTools(
+          cursor ? { cursor } : undefined,
+        )
+        return { items: result.tools, nextCursor: result.nextCursor }
+      })
 
       // Sanitize tool data from MCP server
-      const toolsToProcess = recursivelySanitizeUnicode(result.tools)
+      const toolsToProcess = recursivelySanitizeUnicode(tools)
 
       // Check if we should skip the mcp__ prefix for SDK MCP servers
       const skipPrefix =
@@ -1704,15 +1731,15 @@ export const fetchResourcesForClient = memoizeWithLRU(
         return []
       }
 
-      const result = await client.client.request(
-        { method: 'resources/list' },
-        ListResourcesResultSchema,
-      )
-
-      if (!result.resources) return []
+      const resources = await fetchAllMcpPages('resources', async cursor => {
+        const result = await client.client.listResources(
+          cursor ? { cursor } : undefined,
+        )
+        return { items: result.resources, nextCursor: result.nextCursor }
+      })
 
       // Add server name to each resource
-      return result.resources.map(resource => ({
+      return resources.map(resource => ({
         ...resource,
         server: client.name,
       }))
@@ -1737,16 +1764,15 @@ export const fetchCommandsForClient = memoizeWithLRU(
         return []
       }
 
-      // Request prompts list from client
-      const result = (await client.client.request(
-        { method: 'prompts/list' },
-        ListPromptsResultSchema,
-      )) as ListPromptsResult
-
-      if (!result.prompts) return []
+      const prompts = await fetchAllMcpPages('prompts', async cursor => {
+        const result = await client.client.listPrompts(
+          cursor ? { cursor } : undefined,
+        )
+        return { items: result.prompts, nextCursor: result.nextCursor }
+      })
 
       // Sanitize prompt data from MCP server
-      const promptsToProcess = recursivelySanitizeUnicode(result.prompts)
+      const promptsToProcess = recursivelySanitizeUnicode(prompts)
 
       // Convert MCP prompts to our Command format
       return promptsToProcess.map(prompt => {
